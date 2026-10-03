@@ -10,14 +10,27 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiPolicyRouteImport } from './routes/api/policy'
+import { Route as ApiTtsRouteImport } from './routes/api/tts'
 import { Route as ProjectsIndexRouteImport } from './routes/projects.index'
 import { Route as ProjectsProjectIdRouteImport } from './routes/projects.$projectId'
+import { Route as ApiElevenlabsSignedUrlRouteImport } from './routes/api/elevenlabs/signed-url'
 import { Route as ApiGuardrailsCompileRouteImport } from './routes/api/guardrails/compile'
 import { Route as ProjectsProjectIdTasksTaskIdRouteImport } from './routes/projects.$projectId_.tasks.$taskId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPolicyRoute = ApiPolicyRouteImport.update({
+  id: '/api/policy',
+  path: '/api/policy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiTtsRoute = ApiTtsRouteImport.update({
+  id: '/api/tts',
+  path: '/api/tts',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProjectsIndexRoute = ProjectsIndexRouteImport.update({
@@ -28,6 +41,11 @@ const ProjectsIndexRoute = ProjectsIndexRouteImport.update({
 const ProjectsProjectIdRoute = ProjectsProjectIdRouteImport.update({
   id: '/projects/$projectId',
   path: '/projects/$projectId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiElevenlabsSignedUrlRoute = ApiElevenlabsSignedUrlRouteImport.update({
+  id: '/api/elevenlabs/signed-url',
+  path: '/api/elevenlabs/signed-url',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiGuardrailsCompileRoute = ApiGuardrailsCompileRouteImport.update({
@@ -44,23 +62,32 @@ const ProjectsProjectIdTasksTaskIdRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api/policy': typeof ApiPolicyRoute
+  '/api/tts': typeof ApiTtsRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
   '/projects/': typeof ProjectsIndexRoute
+  '/api/elevenlabs/signed-url': typeof ApiElevenlabsSignedUrlRoute
   '/api/guardrails/compile': typeof ApiGuardrailsCompileRoute
   '/projects/$projectId/tasks/$taskId': typeof ProjectsProjectIdTasksTaskIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/policy': typeof ApiPolicyRoute
+  '/api/tts': typeof ApiTtsRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
   '/projects': typeof ProjectsIndexRoute
+  '/api/elevenlabs/signed-url': typeof ApiElevenlabsSignedUrlRoute
   '/api/guardrails/compile': typeof ApiGuardrailsCompileRoute
   '/projects/$projectId/tasks/$taskId': typeof ProjectsProjectIdTasksTaskIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api/policy': typeof ApiPolicyRoute
+  '/api/tts': typeof ApiTtsRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
   '/projects/': typeof ProjectsIndexRoute
+  '/api/elevenlabs/signed-url': typeof ApiElevenlabsSignedUrlRoute
   '/api/guardrails/compile': typeof ApiGuardrailsCompileRoute
   '/projects/$projectId_/tasks/$taskId': typeof ProjectsProjectIdTasksTaskIdRoute
 }
@@ -68,30 +95,42 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/api/policy'
+    | '/api/tts'
     | '/projects/$projectId'
     | '/projects/'
+    | '/api/elevenlabs/signed-url'
     | '/api/guardrails/compile'
     | '/projects/$projectId/tasks/$taskId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/api/policy'
+    | '/api/tts'
     | '/projects/$projectId'
     | '/projects'
+    | '/api/elevenlabs/signed-url'
     | '/api/guardrails/compile'
     | '/projects/$projectId/tasks/$taskId'
   id:
     | '__root__'
     | '/'
+    | '/api/policy'
+    | '/api/tts'
     | '/projects/$projectId'
     | '/projects/'
+    | '/api/elevenlabs/signed-url'
     | '/api/guardrails/compile'
     | '/projects/$projectId_/tasks/$taskId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiPolicyRoute: typeof ApiPolicyRoute
+  ApiTtsRoute: typeof ApiTtsRoute
   ProjectsProjectIdRoute: typeof ProjectsProjectIdRoute
   ProjectsIndexRoute: typeof ProjectsIndexRoute
+  ApiElevenlabsSignedUrlRoute: typeof ApiElevenlabsSignedUrlRoute
   ApiGuardrailsCompileRoute: typeof ApiGuardrailsCompileRoute
   ProjectsProjectIdTasksTaskIdRoute: typeof ProjectsProjectIdTasksTaskIdRoute
 }
@@ -103,6 +142,20 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/policy': {
+      id: '/api/policy'
+      path: '/api/policy'
+      fullPath: '/api/policy'
+      preLoaderRoute: typeof ApiPolicyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/tts': {
+      id: '/api/tts'
+      path: '/api/tts'
+      fullPath: '/api/tts'
+      preLoaderRoute: typeof ApiTtsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/projects/': {
@@ -117,6 +170,13 @@ declare module '@tanstack/react-router' {
       path: '/projects/$projectId'
       fullPath: '/projects/$projectId'
       preLoaderRoute: typeof ProjectsProjectIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/elevenlabs/signed-url': {
+      id: '/api/elevenlabs/signed-url'
+      path: '/api/elevenlabs/signed-url'
+      fullPath: '/api/elevenlabs/signed-url'
+      preLoaderRoute: typeof ApiElevenlabsSignedUrlRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/guardrails/compile': {
@@ -138,8 +198,11 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiPolicyRoute: ApiPolicyRoute,
+  ApiTtsRoute: ApiTtsRoute,
   ProjectsProjectIdRoute: ProjectsProjectIdRoute,
   ProjectsIndexRoute: ProjectsIndexRoute,
+  ApiElevenlabsSignedUrlRoute: ApiElevenlabsSignedUrlRoute,
   ApiGuardrailsCompileRoute: ApiGuardrailsCompileRoute,
   ProjectsProjectIdTasksTaskIdRoute: ProjectsProjectIdTasksTaskIdRoute,
 }

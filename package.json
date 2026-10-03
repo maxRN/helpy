@@ -23,21 +23,22 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
+    "@convex-dev/react-query": "^0.1.0",
+    "@elevenlabs/client": "^1.26.0",
     "@huggingface/transformers": "^4.3.0",
     "@tailwindcss/vite": "^4.3.3",
+    "@tanstack/react-query": "^5.104.1",
     "@tanstack/react-router": "1.170.41",
+    "@tanstack/react-router-ssr-query": "^1.167.3",
     "@tanstack/react-start": "1.168.60",
+    "convex": "^1.46.0",
     "mitt": "^3.0.1",
     "nitro": "^3.0.260903-beta",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "tailwindcss": "^4.3.3",
     "zod": "^4.6.5",
-    "zustand": "^5.0.15",
-    "@convex-dev/react-query": "^0.1.0",
-    "@tanstack/react-query": "^5.104.1",
-    "@tanstack/react-router-ssr-query": "^1.167.3",
-    "convex": "^1.46.0"
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@tanstack/router-cli": "^1.132.0",
