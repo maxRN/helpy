@@ -48,7 +48,7 @@ Hand-offs between roles:
 
 - **Work Map prompt (P3):** put `catalogForPrompt()` from `src/erp/catalog.ts` into the prompt, so steps use real `targetId`s (`field-costCenter`, `action-hold`, …) and guardrails use real fields and supplier ids. `TARGETS` lists the same ids for the tutor's `point_to` tool (P2).
 - **Work Map → Teach:** call `startTeach(workMap)` from `src/erp/teach.ts`. It recompiles the guardrails from Sabine's words via `POST /api/guardrails/compile` (Opus), downgrades any rule that Sabine's own finished invoices break to "ask", stores the Work Map and switches to Teach mode.
-- **Teach cases:** 5102 ($7,200 equipment, must become capex), 5103 (Kramer in December, must be held), 5104 (Brno intercompany, needs a second approval), 5105 ($1,900 equipment, opex is fine and must not be stopped).
+- **Teach cases:** 5102 ($7,200 equipment, must become capex), 5103 (Kramer in December, must be held), 5104 (Brno intercompany, needs a second approval), 5105 ($1,900 equipment, opex is fine and must not be stopped), 5106 (supplier not in the vendor master, must be held; the rule comes from the debrief, not the live task).
 - Mode and Work Map survive a page reload (localStorage). **Reset demo** in the ERP header resets the invoices only.
 
 In dev, the event panel (bottom left) shows every `AppEvent` live. Its **Teach (fixture)** button loads a hand-written Work Map from `src/erp/fixtures.ts`, so the guardrails can be tested before the real pipeline exists.
