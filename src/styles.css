@@ -1,5 +1,7 @@
+@import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;1,6..72,400;1,6..72,500&display=swap');
 @import 'tailwindcss';
 @import './styles/projects.css';
+@import './styles/helpy.css';
 
 body {
   margin: 0;

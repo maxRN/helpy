@@ -18,7 +18,8 @@ type RecordingState =
   | { kind: 'idle' }
   | { kind: 'starting'; project: Project }
   | { kind: 'recording' | 'saving' | 'save-failed'; task: Task }
-type ActiveTask = { task: Task; recording: ScreenRecording; saving: boolean }
+/** `stay`: after finishing, keep the user where they are instead of opening the task summary (Helpy). */
+type ActiveTask = { task: Task; recording: ScreenRecording; saving: boolean; stay: boolean }
 const TaskRecordingContext = createContext<ReturnType<typeof useRecordingController> | null>(null)
 
 export function TaskRecordingProvider({ children }: { children: ReactNode }) {
@@ -65,7 +66,7 @@ function useRecordingController() {
       emitEvent({ source: 'system', kind: 'task_finished', t: result.durationMs, meta: { taskId: task.task.taskId } })
       active.current = null
       setState({ kind: 'idle' })
-      await navigate({ to: '/projects/$projectId/tasks/$taskId', params: { projectId: task.task.project._id, taskId: task.task.taskId } })
+      if (!task.stay) await navigate({ to: '/projects/$projectId/tasks/$taskId', params: { projectId: task.task.project._id, taskId: task.task.taskId } })
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Could not save the task.')
       setState(active.current ? { kind: 'save-failed', task: task.task } : { kind: 'idle' })
@@ -89,7 +90,7 @@ function useRecordingController() {
     }
   }, [finishTask])
 
-  async function start(project: Project) {
+  async function start(project: Project, { stay = false }: { stay?: boolean } = {}) {
     if (busy) return
     if (useOcrModel.getState().kind !== 'ready') {
       setError('Wait for the local text recognition model to finish loading before starting a task.')
@@ -115,6 +116,8 @@ function useRecordingController() {
       }
       const recording = capture.start({
         onScreenshot: async ({ blob, ...timestamps }) => {
+          // Off the record: the frame is dropped and never leaves the browser.
+          if (useSession.getState().offRecord) return
           const url = await generateUploadUrl({ taskId: createdTaskId })
           const response = await fetch(url, {
             method: 'POST',
@@ -141,7 +144,7 @@ function useRecordingController() {
         onStopped: () => { void finish() },
       })
       const task = { project, taskId, startedAt: capture.startedAt }
-      active.current = { task, recording, saving: false }
+      active.current = { task, recording, saving: false, stay }
       useSession.getState().newSession(taskId)
       useSession.getState().setMode('capture')
       useSession.getState().setT0(capture.startedAt)

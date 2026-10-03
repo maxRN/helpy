@@ -8,10 +8,12 @@
  * @module
  */
 
+import type * as clips from "../clips.js";
 import type * as events from "../events.js";
 import type * as invoiceValidators from "../invoiceValidators.js";
 import type * as invoices from "../invoices.js";
 import type * as ocrValidators from "../ocrValidators.js";
+import type * as processes from "../processes.js";
 import type * as projects from "../projects.js";
 import type * as taskCleanup from "../taskCleanup.js";
 import type * as tasks from "../tasks.js";
@@ -24,10 +26,12 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  clips: typeof clips;
   events: typeof events;
   invoiceValidators: typeof invoiceValidators;
   invoices: typeof invoices;
   ocrValidators: typeof ocrValidators;
+  processes: typeof processes;
   projects: typeof projects;
   taskCleanup: typeof taskCleanup;
   tasks: typeof tasks;

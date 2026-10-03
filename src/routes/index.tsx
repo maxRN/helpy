@@ -1,20 +1,19 @@
-import { createFileRoute, Link } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
+import { Helpy } from '../app'
 import { DebugPanel } from '../erp/DebugPanel'
 import { ErpApp } from '../erp/ErpApp'
-import { VoicePanel } from '../integration/VoicePanel'
 
-export const Route = createFileRoute('/')({ component: Home })
+// Browser-only: the session store, screen capture and Helpy need window and localStorage.
+export const Route = createFileRoute('/')({ ssr: false, component: Home })
 
-// Temporary page until P4's app shell lands: the ERP plus the dev event log.
+// The ERP with Helpy on top. Max's fake desktop will wrap this; Helpy stays the same.
 function Home() {
   return (
     <div className="min-h-screen">
-      <nav className="border-b border-slate-200 bg-white px-6 py-3 text-sm">
-        <Link to="/projects" className="font-medium text-indigo-700 hover:underline">Projects</Link>
-      </nav>
       <ErpApp />
-      <VoicePanel />
-      {import.meta.env.DEV ? <DebugPanel /> : null}
+      <Helpy />
+      {/* P1's event log and Teach shortcuts: add ?debug to the URL (dev only). */}
+      {import.meta.env.DEV && new URLSearchParams(window.location.search).has('debug') ? <DebugPanel /> : null}
     </div>
   )
 }

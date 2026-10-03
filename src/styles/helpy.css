@@ -1,0 +1,270 @@
+/* Helpy brand layer (P4): everything that belongs to the apprentice, not to the customer's ERP. */
+@theme {
+  /* One accent. Everything else is warm gray, like Max's workspace. */
+  --color-helpy: #107864;
+  --color-helpy-dark: #0b5c4c;
+  --color-helpy-mint: #5fe6c6;
+  --color-helpy-soft: #e9f4f0;
+  --color-helpy-line: #e4e9e6;
+  --color-helpy-paper: #fbfbfa;
+  --color-helpy-ink: #0f1a17;
+  --color-ink: #1f2a26;
+  --color-muted: #66746c;
+  --color-faint: #9aa6a0;
+  --color-guard: #9f2f2d;
+  --color-guard-soft: #fdebec;
+  --color-ask: #956400;
+  --color-ask-soft: #fbf3db;
+  --color-rule-soft: #f1f3f2;
+  --font-helpy: system-ui, -apple-system, 'SF Pro Text', 'Segoe UI', sans-serif;
+  --font-quote: 'Newsreader', 'Iowan Old Style', Georgia, serif;
+  --shadow-float: 0 1px 2px rgb(15 40 32 / 0.06), 0 10px 28px -8px rgb(15 40 32 / 0.18);
+  --shadow-soft: 0 1px 2px rgb(15 40 32 / 0.04), 0 4px 12px -4px rgb(15 40 32 / 0.08);
+}
+
+/* Helpy shows the recording controls itself, so the global task bar is hidden where Helpy is on screen. */
+body:has([data-helpy]) .recording-bar {
+  display: none;
+}
+
+/* Privacy shield: personal data is blurred on screen, so it never reaches a screenshot. */
+html[data-privacy-shield] [data-pii] {
+  filter: blur(5px);
+  transition: filter 150ms;
+}
+
+/* ---------- Mascot ---------- */
+
+.helpy-robot {
+  overflow: visible;
+}
+
+.helpy-robot .r-float {
+  animation: helpy-float 3.2s ease-in-out infinite;
+  transform-origin: 60px 140px;
+}
+
+.helpy-robot .r-eyes {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: helpy-blink 5s infinite;
+  transition: transform 300ms ease;
+}
+
+.helpy-robot .r-eye {
+  fill: var(--color-helpy-mint);
+  transition: fill 200ms;
+}
+
+.helpy-robot .r-arm-raise {
+  transform-box: view-box;
+  transform-origin: 86px 93px;
+  transform: rotate(0deg);
+  transition: transform 450ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.helpy-robot .r-bar {
+  fill: var(--color-helpy-mint);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.helpy-robot .r-dots,
+.helpy-robot .r-ears-ring,
+.helpy-robot .r-alert-mark,
+.helpy-robot .r-zz,
+.helpy-robot .r-eyes-closed {
+  opacity: 0;
+  transition: opacity 200ms;
+}
+
+/* listening: eyes glance toward the work, ear rings pulse */
+.helpy-robot[data-state='listening'] .r-eyes {
+  transform: translateX(-3px);
+}
+.helpy-robot[data-state='listening'] .r-ears-ring {
+  opacity: 1;
+  animation: helpy-pulse 1.6s ease-out infinite;
+}
+
+/* thinking: eyes look up, dots above the head */
+.helpy-robot[data-state='thinking'] .r-eyes {
+  transform: translate(2px, -3px) scaleY(0.7);
+  animation: none;
+}
+.helpy-robot[data-state='thinking'] .r-dots {
+  opacity: 1;
+}
+.helpy-robot[data-state='thinking'] .r-dot {
+  animation: helpy-dot 1.2s ease-in-out infinite;
+}
+.helpy-robot[data-state='thinking'] .r-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.helpy-robot[data-state='thinking'] .r-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+/* speaking: the sound wave on the chest moves */
+.helpy-robot[data-state='speaking'] .r-bar {
+  animation: helpy-wave 0.7s ease-in-out infinite;
+}
+.helpy-robot[data-state='speaking'] .r-bar:nth-child(2) {
+  animation-delay: 0.12s;
+}
+.helpy-robot[data-state='speaking'] .r-bar:nth-child(3) {
+  animation-delay: 0.24s;
+}
+
+/* alert: red eyes, a hop and an exclamation mark */
+.helpy-robot[data-state='alert'] .r-eye,
+.helpy-robot[data-state='alert'] .r-bar {
+  fill: #ff6b5e;
+}
+.helpy-robot[data-state='alert'] .r-float {
+  animation: helpy-hop 0.9s ease-in-out infinite;
+}
+.helpy-robot[data-state='alert'] .r-alert-mark {
+  opacity: 1;
+}
+
+/* pointing: the raised arm swings toward the target */
+.helpy-robot[data-pointing] .r-arm-raise {
+  transform: rotate(-100deg);
+}
+
+/* off the record: eyes closed, nothing goes in */
+.helpy-robot[data-off] .r-eyes {
+  opacity: 0;
+}
+.helpy-robot[data-off] .r-eyes-closed,
+.helpy-robot[data-off] .r-zz {
+  opacity: 1;
+}
+.helpy-robot[data-off] .r-zz {
+  animation: helpy-zz 2.4s ease-in-out infinite;
+}
+
+.helpy-ring {
+  pointer-events: none;
+  border-radius: 10px;
+  border: 2px solid var(--color-helpy-mint);
+  box-shadow: 0 0 0 0 rgb(95 230 198 / 0.55);
+  animation: helpy-ring 1.6s ease-out infinite;
+}
+.helpy-ring[data-tone='alert'] {
+  border-color: #f04438;
+  box-shadow: 0 0 0 0 rgb(240 68 56 / 0.5);
+  animation-name: helpy-ring-alert;
+}
+
+@keyframes helpy-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+@keyframes helpy-hop {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-9px);
+  }
+  55% {
+    transform: translateY(0);
+  }
+}
+@keyframes helpy-blink {
+  0%,
+  92%,
+  100% {
+    scale: 1 1;
+  }
+  95% {
+    scale: 1 0.1;
+  }
+}
+@keyframes helpy-pulse {
+  0% {
+    opacity: 0.9;
+    scale: 0.9;
+  }
+  100% {
+    opacity: 0;
+    scale: 1.25;
+  }
+}
+@keyframes helpy-dot {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+@keyframes helpy-wave {
+  0%,
+  100% {
+    transform: scaleY(0.45);
+  }
+  50% {
+    transform: scaleY(1.25);
+  }
+}
+@keyframes helpy-zz {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  50% {
+    transform: translateY(-5px);
+    opacity: 1;
+  }
+}
+@keyframes helpy-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgb(95 230 198 / 0.55);
+  }
+  100% {
+    box-shadow: 0 0 0 12px rgb(95 230 198 / 0);
+  }
+}
+@keyframes helpy-ring-alert {
+  0% {
+    box-shadow: 0 0 0 0 rgb(240 68 56 / 0.5);
+  }
+  100% {
+    box-shadow: 0 0 0 12px rgb(240 68 56 / 0);
+  }
+}
+@keyframes helpy-pop {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.helpy-pop {
+  animation: helpy-pop 180ms ease-out;
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+  .helpy-robot *,
+  .helpy-ring {
+    animation: none !important;
+  }
+}
