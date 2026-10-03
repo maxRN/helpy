@@ -19,6 +19,15 @@ export interface AppEvent {
     | 'off_record_end'
     | 'guardrail_violation'
     | 'sequence_deviation'
+    // Recording lifecycle (P3), source 'system'
+    | 'task_started'
+    | 'task_finished'
+    | 'screenshot_saved'
+    | 'screenshot_analyzed'
+    // Voice layer (P2), source 'voice'
+    | 'teachback_given'
+    | 'teachback_result'
+    | 'tutor_intervention'
   invoiceId?: string
   targetId?: string // data-target of the ERP element
   from?: string

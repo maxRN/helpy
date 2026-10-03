@@ -62,7 +62,7 @@ function useRecordingController() {
       const result = await task.recording.finish()
       await finishTask({ taskId: task.task.taskId, ...result })
       useSession.getState().setT0(null)
-      emitEvent({ source: 'system', kind: 'action', t: result.durationMs, meta: { action: 'task_finished', taskId: task.task.taskId } })
+      emitEvent({ source: 'system', kind: 'task_finished', t: result.durationMs, meta: { taskId: task.task.taskId } })
       active.current = null
       setState({ kind: 'idle' })
       await navigate({ to: '/projects/$projectId/tasks/$taskId', params: { projectId: task.task.project._id, taskId: task.task.taskId } })
@@ -127,11 +127,11 @@ function useRecordingController() {
           const { storageId } = uploadResponse.parse(data)
           const screenshotId = await addScreenshot({ taskId: createdTaskId, storageId, ...timestamps })
           if (mounted.current) setSavedCount((count) => count + 1)
-          emitEvent({ source: 'vision', kind: 'action', t: timestamps.offsetMs, meta: { action: 'screenshot_saved', taskId: createdTaskId, storageId } })
+          emitEvent({ source: 'system', kind: 'screenshot_saved', t: timestamps.offsetMs, meta: { taskId: createdTaskId, storageId } })
           try {
             const result = await analyzeScreenshot(blob)
             await annotateScreenshot({ screenshotId, ocr: { kind: 'completed', result } })
-            emitEvent({ source: 'vision', kind: 'action', t: timestamps.offsetMs, meta: { action: 'screenshot_analyzed', taskId: createdTaskId, screenshotId, regions: result.regions.length } })
+            emitEvent({ source: 'system', kind: 'screenshot_analyzed', t: timestamps.offsetMs, meta: { taskId: createdTaskId, screenshotId, regions: result.regions.length } })
           } catch (failure) {
             const message = failure instanceof Error ? failure.message : 'Could not recognize screenshot text.'
             await annotateScreenshot({ screenshotId, ocr: { kind: 'failed', error: message } })
@@ -142,11 +142,11 @@ function useRecordingController() {
       })
       const task = { project, taskId, startedAt: capture.startedAt }
       active.current = { task, recording, saving: false }
-      useSession.getState().newSession()
+      useSession.getState().newSession(taskId)
       useSession.getState().setMode('capture')
       useSession.getState().setT0(capture.startedAt)
       clearEventLog()
-      emitEvent({ source: 'system', kind: 'action', meta: { action: 'task_started', taskId } })
+      emitEvent({ source: 'system', kind: 'task_started', meta: { taskId } })
       setState({ kind: 'recording', task })
     } catch (failure) {
       pendingCapture.current?.close()

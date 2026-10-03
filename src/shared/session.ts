@@ -12,7 +12,8 @@ interface SessionState {
   setT0: (t0: number | null) => void
   setOffRecord: (offRecord: boolean) => void
   setWorkMap: (workMap: WorkMap | null) => void
-  newSession: () => void
+  /** Starts a new session. Pass the capture task id so events and screenshots share one id. */
+  newSession: (id?: string) => void
 }
 
 const makeSessionId = () => `s-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}`
@@ -29,7 +30,7 @@ export const useSession = create<SessionState>()(
       setT0: (t0) => set({ t0 }),
       setOffRecord: (offRecord) => set({ offRecord }),
       setWorkMap: (workMap) => set({ workMap }),
-      newSession: () => set({ sessionId: makeSessionId(), t0: null, offRecord: false, workMap: null }),
+      newSession: (id) => set({ sessionId: id ?? makeSessionId(), t0: null, offRecord: false, workMap: null }),
     }),
     {
       // A reload mid-demo keeps the mode and the Work Map. t0 and offRecord belong to a live recording, so they reset.
