@@ -5,6 +5,7 @@ import { api } from '../../convex/_generated/api'
 import { formatDuration } from '../capture/screen'
 import { RecordedTime } from '../capture/RecordedTime'
 import { TaskRecorder, useTaskRecording } from '../capture/TaskRecorder'
+import { ScreenshotNote } from '../capture/ScreenshotNote'
 
 export const Route = createFileRoute('/projects/$projectId_/tasks/$taskId')({ component: TaskSummary })
 
@@ -74,6 +75,7 @@ function TaskSummary() {
                         <span className="duration">+{formatDuration(screenshot.offsetMs)}</span>
                         <RecordedTime timestamp={screenshot.capturedAt} timeOnly />
                       </figcaption>
+                      <ScreenshotNote ocr={screenshot.ocr} />
                     </figure>
                   </li>
                 ))}

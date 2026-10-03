@@ -9,6 +9,7 @@ import { clearEventLog, emitEvent } from '../shared/bus'
 import { useSession } from '../shared/session'
 import { formatDuration, openScreenCapture } from './screen'
 import type { ScreenRecording } from './screen'
+import { analyzeScreenshot, loadOcrModel, useOcrModel } from './ocr'
 
 const uploadResponse = z.object({ storageId: z.string() })
 type Project = Pick<Doc<'projects'>, '_id' | 'name'>
@@ -35,6 +36,7 @@ function useRecordingController() {
   const createTask = useMutation(api.tasks.create)
   const generateUploadUrl = useMutation(api.tasks.generateUploadUrl)
   const addScreenshot = useMutation(api.tasks.addScreenshot)
+  const annotateScreenshot = useMutation(api.tasks.annotateScreenshot)
   const finishTask = useMutation(api.tasks.finish)
   const navigate = useNavigate()
   const [state, setState] = useState<RecordingState>({ kind: 'idle' })
@@ -74,6 +76,7 @@ function useRecordingController() {
 
   useEffect(() => {
     mounted.current = true
+    loadOcrModel()
     return () => {
       mounted.current = false
       pendingCapture.current?.close()
@@ -88,6 +91,10 @@ function useRecordingController() {
 
   async function start(project: Project) {
     if (busy) return
+    if (useOcrModel.getState().kind !== 'ready') {
+      setError('Wait for the local text recognition model to finish loading before starting a task.')
+      return
+    }
     setState({ kind: 'starting', project })
     setError('')
     setSavedCount(0)
@@ -118,9 +125,18 @@ function useRecordingController() {
           if (!response.ok) throw new Error(`Screenshot upload failed (${response.status}).`)
           const data: unknown = await response.json()
           const { storageId } = uploadResponse.parse(data)
-          await addScreenshot({ taskId: createdTaskId, storageId, ...timestamps })
+          const screenshotId = await addScreenshot({ taskId: createdTaskId, storageId, ...timestamps })
           if (mounted.current) setSavedCount((count) => count + 1)
           emitEvent({ source: 'vision', kind: 'action', t: timestamps.offsetMs, meta: { action: 'screenshot_saved', taskId: createdTaskId, storageId } })
+          try {
+            const result = await analyzeScreenshot(blob)
+            await annotateScreenshot({ screenshotId, ocr: { kind: 'completed', result } })
+            emitEvent({ source: 'vision', kind: 'action', t: timestamps.offsetMs, meta: { action: 'screenshot_analyzed', taskId: createdTaskId, screenshotId, regions: result.regions.length } })
+          } catch (failure) {
+            const message = failure instanceof Error ? failure.message : 'Could not recognize screenshot text.'
+            await annotateScreenshot({ screenshotId, ocr: { kind: 'failed', error: message } })
+            throw failure
+          }
         },
         onStopped: () => { void finish() },
       })
@@ -154,6 +170,7 @@ function useRecordingController() {
 
 export function TaskRecorder({ project }: { project: Project }) {
   const { state, error, savedCount, start } = useTaskRecording()
+  const model = useOcrModel()
   const busy = state.kind !== 'idle'
   const owner = state.kind === 'idle' ? null : state.kind === 'starting' ? state.project : state.task.project
 
@@ -177,17 +194,20 @@ export function TaskRecorder({ project }: { project: Project }) {
         </div>
       ) : (
         <p className="muted">
-          {state.kind === 'saving' ? 'Screen capture stopped. Finishing screenshot uploads and saving your task…'
+          {state.kind === 'saving' ? 'Screen capture stopped. Finishing text recognition and screenshot uploads…'
             : state.kind === 'save-failed' ? 'Screen capture stopped. Retry saving to open your summary.'
               : 'Share an entire screen to save a screenshot every 2 seconds. Click Done when you finish.'}
         </p>
       )}
       {busy && <p className="muted">{savedCount} screenshots saved</p>}
       <div className="task-actions">
-        {busy ? <FinishTaskButton /> : <button onClick={() => { void start(project) }}>New task</button>}
+        {busy ? <FinishTaskButton /> : <button disabled={model.kind !== 'ready'} onClick={() => { void start(project) }}>
+          {model.kind === 'ready' ? 'New task' : 'Preparing text recognition…'}
+        </button>}
         <Link to="/" className="task-link">Example ERP</Link>
       </div>
       {error && <p className="error" role="alert">{error}</p>}
+      {!busy && model.kind === 'ready' && <p className="muted model-ready">Florence-2 is ready on this device. Text and positions will be saved with every screenshot.</p>}
     </section>
   )
 }

@@ -11,6 +11,7 @@
 import type * as events from "../events.js";
 import type * as invoiceValidators from "../invoiceValidators.js";
 import type * as invoices from "../invoices.js";
+import type * as ocrValidators from "../ocrValidators.js";
 import type * as projects from "../projects.js";
 import type * as taskCleanup from "../taskCleanup.js";
 import type * as tasks from "../tasks.js";
@@ -26,6 +27,7 @@ declare const fullApi: ApiFromModules<{
   events: typeof events;
   invoiceValidators: typeof invoiceValidators;
   invoices: typeof invoices;
+  ocrValidators: typeof ocrValidators;
   projects: typeof projects;
   taskCleanup: typeof taskCleanup;
   tasks: typeof tasks;

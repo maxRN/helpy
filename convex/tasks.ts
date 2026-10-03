@@ -1,6 +1,8 @@
 import { ConvexError, v } from 'convex/values'
 import { mutation, query } from './_generated/server'
 import { deleteTask } from './taskCleanup'
+import { screenshotAnnotation } from './ocrValidators'
+import { ocrResultSchema } from '../src/capture/ocr-contract'
 
 export const list = query({
   args: { projectId: v.string() },
@@ -72,7 +74,7 @@ export const addScreenshot = mutation({
     capturedAt: v.number(),
     offsetMs: v.number(),
   },
-  returns: v.null(),
+  returns: v.id('screenshots'),
   handler: async (ctx, { taskId, storageId: rawStorageId, capturedAt, offsetMs }) => {
     const task = await ctx.db.get('tasks', taskId)
     if (!task || task.completion) throw new ConvexError('This task is not recording.')
@@ -84,7 +86,21 @@ export const addScreenshot = mutation({
     if (!storageId || !file || file.contentType !== 'image/jpeg') {
       throw new ConvexError('A JPEG screenshot is required.')
     }
-    await ctx.db.insert('screenshots', { taskId, storageId, capturedAt, offsetMs })
+    return ctx.db.insert('screenshots', { taskId, storageId, capturedAt, offsetMs, ocr: { kind: 'pending' } })
+  },
+})
+
+export const annotateScreenshot = mutation({
+  args: { screenshotId: v.id('screenshots'), ocr: screenshotAnnotation },
+  returns: v.null(),
+  handler: async (ctx, { screenshotId, ocr }) => {
+    const screenshot = await ctx.db.get('screenshots', screenshotId)
+    if (!screenshot) throw new ConvexError('Screenshot not found.')
+    if (ocr.kind === 'completed') {
+      const parsed = ocrResultSchema.safeParse(ocr.result)
+      if (!parsed.success) throw new ConvexError('Invalid screenshot text or positions.')
+    }
+    await ctx.db.patch('screenshots', screenshotId, { ocr })
     return null
   },
 })
