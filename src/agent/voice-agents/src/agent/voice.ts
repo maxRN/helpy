@@ -1,0 +1,336 @@
+// agent/voice.ts: the public API of the voice layer.
+//   start(mode), stop(), ask(q): Promise<Quote>, say(text)
+// Extras: teachBack(text), setOffRecord(on), getPauseLog()
+//
+// Uses the framework-agnostic client from @elevenlabs/client (re-exported by @elevenlabs/react),
+// so this is a plain module, not a React hook. Call setDeps() once before start().
+
+import { emit, getDeps, mmss } from './deps';
+import { MOCK_WORK_MAP } from './mockWorkMap';
+import { startPauseLoop, type PauseInputs } from './pause';
+import { createQuestionPolicy, type QuestionPolicy } from './policy';
+import { buildClientTools } from './tools';
+import { createTranscript, type TranscriptHandle } from './transcript';
+import { SCREEN_EVENT_TYPES, type AppEvent, type Deps, type Mode, type Quote } from './types';
+
+export { getPauseLog } from './pause';
+
+type ElevenClient = typeof import('@elevenlabs/client');
+type Session = Awaited<ReturnType<ElevenClient['Conversation']['startSession']>>;
+
+// ---- module state (one conversation at a time) ----
+let conv: Session | null = null;
+let mode: Mode | null = null;
+let agentSpeaking = false;
+let offRecord = false;
+let lastUserSpeechAt = 0;
+let speechStartAt: number | null = null;
+let transcript: TranscriptHandle | null = null;
+let policy: QuestionPolicy | null = null;
+let cleanup: Array<() => void> = [];
+let sayWaiters: Array<{ resolve: () => void; spoke: boolean }> = [];
+let teachback: {
+  resolve: (r: { confirmed: boolean; correction?: string }) => void;
+  timer: ReturnType<typeof setTimeout>;
+} | null = null;
+
+export const isConnected = (): boolean => conv !== null;
+
+function requireConn(): Session {
+  if (!conv) throw new Error('[voice] not connected: call start(mode) first');
+  return conv;
+}
+
+// ---------------------------------------------------------------- start / stop
+
+export async function start(m: Mode, opts: { workMapMarkdown?: string } = {}): Promise<void> {
+  if (conv) await stop();
+  const deps = getDeps();
+
+  mode = m;
+  agentSpeaking = false;
+  offRecord = false;
+  lastUserSpeechAt = 0;
+  speechStartAt = null;
+
+  const agent = m === 'teach' ? 'tutor' : 'interviewer';
+  const res = await fetch(`/api/elevenlabs/signed-url?agent=${agent}`);
+  if (!res.ok) throw new Error(`[voice] signed-url failed (${res.status})`);
+  const { signedUrl } = (await res.json()) as { signedUrl: string };
+
+  transcript = createTranscript({
+    mode: m,
+    isOffRecord: () => offRecord,
+    onUserSpeech: () => {
+      lastUserSpeechAt = Date.now();
+    },
+    takeSpeechStart: () => {
+      const s = speechStartAt;
+      speechStartAt = null;
+      return s;
+    },
+    onAnswer: (q) => {
+      deps.mascot.bubble(null);
+      policy?.recordAnswer(q);
+    },
+  });
+
+  const tools = buildClientTools({
+    setOffRecord: (on) => setOffRecord(on, 'voice'),
+    resolveTeachback: settleTeachback,
+  });
+
+  const workMap = opts.workMapMarkdown ?? deps.getWorkMapMarkdown?.() ?? MOCK_WORK_MAP;
+
+  // Loaded lazily so TanStack Start's server render never touches browser-only SDK code.
+  const { Conversation } = await import('@elevenlabs/client');
+
+  conv = await Conversation.startSession({
+    signedUrl,
+    connectionType: 'websocket',
+    clientTools: tools,
+    ...(m === 'teach' ? { dynamicVariables: { work_map: workMap } } : {}),
+
+    onMessage: (msg) => transcript?.ingest(msg),
+
+    onModeChange: ({ mode: agentMode }) => {
+      if (agentMode === 'speaking') {
+        agentSpeaking = true;
+        transcript?.agentStarted();
+        sayWaiters.forEach((w) => (w.spoke = true));
+        deps.mascot.setState('speaking');
+      } else if (agentSpeaking) {
+        agentSpeaking = false;
+        transcript?.agentFinished();
+        deps.mascot.setState('listening');
+        const done = sayWaiters.filter((w) => w.spoke);
+        sayWaiters = sayWaiters.filter((w) => !w.spoke);
+        done.forEach((w) => w.resolve());
+      }
+    },
+
+    // Voice activity: real-time "the expert is talking" signal (needs the vad_score client event enabled).
+    onVadScore: (p: unknown) => {
+      const score = typeof p === 'number' ? p : ((p as { vadScore?: number })?.vadScore ?? 0);
+      if (score < 0.5 || agentSpeaking) return; // ignore our own voice leaking into the mic
+      const now = Date.now();
+      if (now - lastUserSpeechAt > 1200) speechStartAt = now;
+      lastUserSpeechAt = now;
+    },
+
+    onError: (e: unknown) => console.error('[voice] error', e),
+    onDisconnect: () => {
+      if (conv) void stop();
+    },
+  });
+
+  deps.mascot.setState('listening');
+  cleanup.push(startScreenFeed(deps));
+
+  if (m === 'capture') startCapture(deps);
+  if (m === 'teach') cleanup.push(wireTutor(deps));
+}
+
+export async function stop(): Promise<void> {
+  cleanup.forEach((fn) => {
+    try {
+      fn();
+    } catch {
+      /* ignore */
+    }
+  });
+  cleanup = [];
+  transcript?.dispose();
+  transcript = null;
+  policy?.dispose();
+  policy = null;
+  settleTeachback({ confirmed: false, correction: '(session ended)' });
+  sayWaiters.splice(0).forEach((w) => w.resolve());
+
+  const c = conv;
+  conv = null;
+  mode = null;
+  agentSpeaking = false;
+  try {
+    await c?.endSession();
+  } catch (e) {
+    console.warn('[voice] endSession failed', e);
+  }
+}
+
+// ---------------------------------------------------------------- ask / say / teach-back
+
+/** Debrief: speak a question, resolve with the expert's answer when their turn ends. */
+export async function ask(question: string): Promise<Quote> {
+  const c = requireConn();
+  const deps = getDeps();
+  const qe = emit({ type: 'question_asked', speaker: 'agent', text: question, meta: { phase: mode } });
+  const answer = transcript!.expect({ questionId: qe.id, timeoutMs: 120_000 });
+  deps.mascot.setState('speaking');
+  deps.mascot.bubble(question);
+  c.sendUserMessage(`[ASK] ${question}`);
+  return answer;
+}
+
+/** Speak text verbatim. Resolves when the agent has finished speaking (or after 30 s). */
+export function say(text: string): Promise<void> {
+  const c = requireConn();
+  return new Promise<void>((resolve) => {
+    const waiter = { resolve, spoke: false };
+    sayWaiters.push(waiter);
+    setTimeout(() => {
+      if (sayWaiters.includes(waiter)) {
+        sayWaiters = sayWaiters.filter((w) => w !== waiter);
+        resolve();
+      }
+    }, 30_000);
+    c.sendUserMessage(`[SAY] ${text}`);
+  });
+}
+
+/**
+ * Debrief: read the process back (text from P3), then the agent asks "Is that how it works?"
+ * and calls the confirm_teachback tool. Resolves with the expert's verdict.
+ */
+export function teachBack(text: string): Promise<{ confirmed: boolean; correction?: string }> {
+  const c = requireConn();
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => settleTeachback({ confirmed: false, correction: '(no response)' }), 180_000);
+    teachback = { resolve, timer };
+    emit({ type: 'teachback_given', speaker: 'agent', text });
+    c.sendUserMessage(`[TEACHBACK] ${text}`);
+  });
+}
+
+function settleTeachback(r: { confirmed: boolean; correction?: string }): void {
+  if (!teachback) return;
+  const t = teachback;
+  teachback = null;
+  clearTimeout(t.timer);
+  emit({ type: 'teachback_result', speaker: 'expert', text: r.correction, meta: { confirmed: r.confirmed } });
+  t.resolve(r);
+}
+
+// ---------------------------------------------------------------- off the record
+
+/** source 'voice' = the agent's tool call (agent already confirmed aloud); 'ui' = P4's button. */
+export function setOffRecord(on: boolean, source: 'voice' | 'ui' = 'ui'): void {
+  if (offRecord === on) return;
+  offRecord = on;
+  emit({ type: on ? 'off_record_start' : 'off_record_end', meta: { source } });
+  if (source === 'ui' && conv) {
+    conv.sendUserMessage(`[SAY] ${on ? 'Okay, off the record.' : 'Back on the record.'}`);
+  }
+}
+
+// ---------------------------------------------------------------- capture mode
+
+function startCapture(deps: Deps): void {
+  const getInputs = (): PauseInputs => {
+    const now = Date.now();
+    return {
+      now,
+      lastInputAt: deps.activity.lastInputAt(),
+      lastFrameChangeAt: deps.capture.lastFrameChangeAt(),
+      userSilentForMs: now - lastUserSpeechAt,
+      agentSpeaking,
+      offRecord,
+    };
+  };
+
+  policy = createQuestionPolicy({
+    getInputs,
+    tail: (n) => transcript?.tail(n) ?? [],
+    deliver: (q) => conv?.sendUserMessage(`[ASK] ${q}`),
+    noteQuestion: ({ questionEventId, eventId }) => {
+      // Live answers are only logged, nobody awaits them.
+      transcript?.expect({ questionId: questionEventId, eventId, timeoutMs: 45_000 }).catch(() => undefined);
+    },
+  });
+
+  cleanup.push(startPauseLoop({ getInputs, onPause: (r) => policy?.onPause(r) }));
+
+  // While the expert types, tell the agent so it never talks over them (it holds ~2 s per signal).
+  const keepQuiet = setInterval(() => {
+    if (conv && Date.now() - deps.activity.lastInputAt() < 1500) conv.sendUserActivity();
+  }, 1000);
+  cleanup.push(() => clearInterval(keepQuiet));
+}
+
+// ---------------------------------------------------------------- screen events -> agent context
+
+/** Merge screen events that arrive within 500 ms into one contextual update. */
+function startScreenFeed(deps: Deps): () => void {
+  let batch: AppEvent[] = [];
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const flush = () => {
+    timer = null;
+    const events = batch;
+    batch = [];
+    if (!conv || offRecord || !events.length) return;
+    const body = events.map((e) => e.text).filter(Boolean).join('; ');
+    if (body) conv.sendContextualUpdate(`[SCREEN ${mmss(events[0].t)}] ${body}`);
+  };
+
+  const off = deps.bus.on('*', (e) => {
+    if (!SCREEN_EVENT_TYPES.has(e.type) || offRecord) return;
+    batch.push(e);
+    if (!timer) timer = setTimeout(flush, 500);
+  });
+
+  return () => {
+    off();
+    if (timer) clearTimeout(timer);
+  };
+}
+
+// ---------------------------------------------------------------- tutor interventions
+
+/**
+ * Expected event shapes from P1 (adjust the meta keys here if theirs differ):
+ *  guardrail_violation: meta { guardrailId, rule, quote, stepId, invoiceId }
+ *  sequence_deviation:  meta { stepName, stepId }
+ *  invoice_opened:      meta { invoiceId, fields }
+ */
+function wireTutor(deps: Deps): () => void {
+  const lastSent = new Map<string, number>();
+  const allow = (key: string, ms: number): boolean => {
+    const now = Date.now();
+    if ((lastSent.get(key) ?? 0) + ms > now) return false;
+    lastSent.set(key, now);
+    return true;
+  };
+
+  return deps.bus.on('*', (e) => {
+    if (!conv) return;
+    const m = e.meta ?? {};
+
+    switch (e.type) {
+      case 'guardrail_violation': {
+        if (!allow(`g:${m.guardrailId}`, 15_000)) return;
+        conv.sendUserMessage(
+          `[INTERVENE] guardrail ${m.guardrailId ?? '?'}: ${m.rule ?? e.text ?? ''}. ` +
+            `Expert quote: "${m.quote ?? ''}". Step: ${m.stepId ?? '?'}. Invoice: ${m.invoiceId ?? '?'}.`,
+        );
+        emit({ type: 'tutor_intervention', speaker: 'agent', meta: { kind: 'guardrail', ...m } });
+        break;
+      }
+      case 'sequence_deviation': {
+        if (!allow(`s:${m.stepId}`, 20_000)) return;
+        conv.sendUserMessage(`[NUDGE] The trainee skipped step "${m.stepName ?? m.stepId ?? '?'}". Ask softly if it was on purpose.`);
+        emit({ type: 'tutor_intervention', speaker: 'agent', meta: { kind: 'sequence', ...m } });
+        break;
+      }
+      case 'invoice_opened': {
+        const hits = deps.matchGuardrails?.((m.fields as Record<string, unknown>) ?? {}) ?? [];
+        if (!hits.length || !allow(`p:${m.invoiceId}`, 60_000)) return;
+        conv.sendUserMessage(
+          `[PREDICT] Invoice ${m.invoiceId ?? '?'} matches guardrail ${hits.map((h) => h.id).join(', ')}. ` +
+            `Ask "What would you do with this one?" and do not hint at the answer.`,
+        );
+        break;
+      }
+    }
+  });
+}
