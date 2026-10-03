@@ -4,7 +4,7 @@
     "buildCommand": "if [ \"$RAILWAY_ENVIRONMENT_NAME\" = \"production\" ]; then npm run deploy:prod; else npm run build; fi"
   },
   "deploy": {
-    "startCommand": "npm start",
+    "startCommand": "node .output/server/index.mjs",
     "healthcheckPath": "/"
   }
 }

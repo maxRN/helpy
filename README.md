@@ -104,6 +104,8 @@ Edit `src/routes/index.tsx` for the home page and `src/routes/__root.tsx` for th
 
 Railway reads `railway.json`. Production builds run `npm run deploy:prod`: Convex supplies the production URL to the frontend build and deploys the schema and functions to `good-marlin-283`. This keeps the backend and frontend on the same version. Nitro serves `.output/server/index.mjs` using Railway’s `PORT`.
 
+`railpack.json` limits the runtime image to Node and Nitro’s self-contained `.output` bundle. Source files, build caches, and root `node_modules` stay in the build stages. The bundle includes the browser OCR worker and its WASM runtime; Florence model weights download separately to the user’s browser.
+
 The production Railway service has a sealed `CONVEX_DEPLOY_KEY`, scoped to the production deployment. It also has the development `VITE_CONVEX_URL` for preview builds; `convex deploy --cmd` overrides that URL for the production build. Sealed keys are excluded from Railway PR environments. Preview builds run `npm run build` and share the development database (`combative-snail-974`); they never deploy backend changes to production. For preview backend schema changes, sync compatible functions to that development deployment first.
 
 To deploy manually, provide `CONVEX_DEPLOY_KEY` through the deployment environment and run `npm run deploy:prod`, then `npm start`. Keep the key out of Git and browser-prefixed variables. Development and production data are separate; deployment does not copy development records.
