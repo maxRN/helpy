@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { api } from '../../convex/_generated/api'
 import type { Doc, Id } from '../../convex/_generated/dataModel'
 import { clearEventLog, emitEvent } from '../shared/bus'
+import { processFrame, resetFrameEvents } from './frameEvents'
 import { useSession } from '../shared/session'
 import { formatDuration, openScreenCapture } from './screen'
 import type { ScreenRecording } from './screen'
@@ -115,6 +116,8 @@ function useRecordingController() {
       }
       const recording = capture.start({
         onScreenshot: async ({ blob, ...timestamps }) => {
+          // Screen events for the voice agent (thumbnail diff + Haiku), in parallel with the upload.
+          void processFrame(blob, timestamps.capturedAt, timestamps.offsetMs).catch((failure: unknown) => console.warn('[frame]', failure))
           const url = await generateUploadUrl({ taskId: createdTaskId })
           const response = await fetch(url, {
             method: 'POST',
@@ -146,6 +149,7 @@ function useRecordingController() {
       useSession.getState().setMode('capture')
       useSession.getState().setT0(capture.startedAt)
       clearEventLog()
+      resetFrameEvents()
       emitEvent({ source: 'system', kind: 'task_started', meta: { taskId } })
       setState({ kind: 'recording', task })
     } catch (failure) {

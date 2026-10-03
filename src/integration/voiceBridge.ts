@@ -33,6 +33,7 @@ const targetLabel = (targetId?: string) => TARGETS.find((t) => t.id === targetId
 
 /** One line of plain English per screen event, as the agent should hear it. */
 export function describeScreenEvent(e: AppEvent): string | undefined {
+  if (e.source === 'vision') return e.text // the vision model already wrote the sentence
   const inv = e.invoiceId ? erp().invoices[e.invoiceId] : undefined
   switch (e.kind) {
     case 'invoice_opened':
@@ -56,11 +57,14 @@ export function toAgentEvents(e: AppEvent): AgentEvent[] {
     return [{ id: String(meta.agentId ?? e.id), t: e.t, type: meta.agentType, speaker: e.speaker, text: e.text, meta: (meta.agentMeta as Record<string, unknown>) ?? {} }]
   }
 
+  // A vision event that repeats an ERP click: the agent already heard about it.
+  if (e.source === 'vision' && meta.confirms) return []
+
   if ((e.source === 'dom' || e.source === 'vision') && SCREEN_KINDS.has(e.kind)) {
     const out: AgentEvent[] = [
       { id: e.id, t: e.t, type: e.source, text: describeScreenEvent(e), meta: { ...meta, kind: e.kind, invoiceId: e.invoiceId, targetId: e.targetId } },
     ]
-    if (e.kind === 'invoice_opened' && e.invoiceId) {
+    if (e.kind === 'invoice_opened' && e.invoiceId && e.source === 'dom') {
       out.push({ id: `${e.id}-open`, t: e.t, type: 'invoice_opened', meta: { invoiceId: e.invoiceId, fields: erp().invoices[e.invoiceId] } })
     }
     return out
