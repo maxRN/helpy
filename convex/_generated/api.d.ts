@@ -8,7 +8,11 @@
  * @module
  */
 
+import type * as events from "../events.js";
+import type * as invoiceValidators from "../invoiceValidators.js";
+import type * as invoices from "../invoices.js";
 import type * as projects from "../projects.js";
+import type * as workMaps from "../workMaps.js";
 
 import type {
   ApiFromModules,
@@ -17,7 +21,11 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  events: typeof events;
+  invoiceValidators: typeof invoiceValidators;
+  invoices: typeof invoices;
   projects: typeof projects;
+  workMaps: typeof workMaps;
 }>;
 
 /**

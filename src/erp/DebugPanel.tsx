@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { bus, clearEventLog, getEventLog } from '../shared/bus'
 import { useSession } from '../shared/session'
-import type { AppEvent } from '../shared/types'
+import type { AppEvent, WorkMap } from '../shared/types'
+import { useLatestWorkMap } from './ConvexSync'
 import { FIXTURE_WORKMAP } from './fixtures'
 import { resetStepTracker } from './stepTracker'
 import { useErp } from './store'
@@ -33,6 +34,7 @@ export function DebugPanel() {
   const setMode = useSession((s) => s.setMode)
   const setWorkMap = useSession((s) => s.setWorkMap)
   const reset = useErp((s) => s.reset)
+  const latest = useLatestWorkMap()
 
   useEffect(() => {
     setEvents(getEventLog().slice(-30))
@@ -78,6 +80,15 @@ export function DebugPanel() {
             onClick={() => void startTeach(FIXTURE_WORKMAP).then((r) => console.info('[startTeach]', r))}
           >
             Teach (compile)
+          </button>
+          <button
+            type="button"
+            className={btn}
+            disabled={!latest}
+            title={latest ? `Saved ${new Date(latest.savedAt).toLocaleTimeString()} (session ${latest.sessionId})` : 'No Work Map saved yet'}
+            onClick={() => latest && void startTeach(latest.workMap as WorkMap)}
+          >
+            Teach (latest saved)
           </button>
           <button type="button" className={btn} onClick={resetDemo}>
             Reset demo

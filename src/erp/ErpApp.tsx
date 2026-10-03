@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { installActivityTracker } from '../shared/activity'
 import { useSession } from '../shared/session'
+import { ConvexSync } from './ConvexSync'
 import { InvoiceDetail } from './InvoiceDetail'
 import { InvoiceInbox } from './InvoiceInbox'
 import { COMPANY_NAME } from './seed'
@@ -40,7 +41,6 @@ export function ErpApp() {
   const user = useSession((s) => (s.mode === 'teach' ? 'L. Hoffmann (new hire)' : 'S. Brandt'))
 
   useEffect(() => {
-    void useErp.persist.rehydrate()
     void useSession.persist.rehydrate()
     installActivityTracker()
     installStepTracker()
@@ -48,6 +48,7 @@ export function ErpApp() {
 
   return (
     <div className="flex min-h-full min-w-0 flex-col bg-[#f2f4f6] text-slate-900">
+      <ConvexSync />
       <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 bg-[#2f3e4f] px-4 py-2 text-white">
         <div className="flex items-baseline gap-3">
           <span className="text-[15px] font-semibold tracking-tight">ProcureFlow</span>

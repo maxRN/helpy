@@ -5,6 +5,7 @@ import { evaluateGuardrails } from './guardrails'
 import { ALL_INVOICES } from './seed'
 import { resetStepTracker } from './stepTracker'
 import { erp } from './store'
+import { erpSync } from './sync'
 
 const SEED_STATUS = new Map(ALL_INVOICES.map((i) => [i.id, i.status]))
 
@@ -65,6 +66,7 @@ export async function startTeach(workMap: WorkMap): Promise<TeachStart> {
 
   const ready: WorkMap = { ...workMap, guardrails: checked.guardrails }
   session().setWorkMap(ready)
+  erpSync()?.saveWorkMap(ready.sessionId, ready) // other devices load it via workMaps.latest
   session().setMode('teach')
   erp().open(null)
   resetStepTracker()
