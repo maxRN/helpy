@@ -23,7 +23,7 @@ export const ocrResultSchema = z.object({
 export type OcrResult = z.infer<typeof ocrResultSchema>
 
 export const modelStateSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('loading'), message: z.string(), downloadedBytes: z.number().nonnegative() }),
+  z.object({ kind: z.literal('loading'), message: z.string(), progress: z.number().min(0).max(100) }),
   z.object({ kind: z.literal('ready') }),
   z.object({ kind: z.literal('failed'), error: z.string() }),
 ])

@@ -23,13 +23,11 @@ async function loadModel() {
     },
   }
 
-  const downloads = new Map<string, number>()
   const progress_callback: ProgressCallback = (progress) => {
-    if (progress.status !== 'progress') return
-    downloads.set(progress.file, progress.loaded)
+    if (progress.status !== 'progress_total') return
     send({ kind: 'state', state: {
       kind: 'loading', message: 'Loading Florence-2-base-ft on this device…',
-      downloadedBytes: [...downloads.values()].reduce((sum, bytes) => sum + bytes, 0),
+      progress: progress.progress,
     } })
   }
   const options = { revision: OCR_REVISION, progress_callback }
@@ -43,7 +41,7 @@ async function loadModel() {
   if (cacheError) throw new Error(`Could not cache the model on this device: ${errorMessage(cacheError)}`)
   if (!(processor instanceof Florence2Processor)) throw new Error('The downloaded model has an unexpected processor.')
   if (!processor.tokenizer) throw new Error('The downloaded model is missing its tokenizer.')
-  send({ kind: 'state', state: { kind: 'loading', message: 'Preparing local text recognition…', downloadedBytes: 0 } })
+  send({ kind: 'state', state: { kind: 'loading', message: 'Download complete. Preparing local text recognition…', progress: 100 } })
   const text = processor.tokenizer(processor.construct_prompts(OCR_TASK))
   const warmupTimeout = setTimeout(() => send({ kind: 'state', state: { kind: 'failed', error: 'The local model took too long to start. Retry loading the cached model.' } }), 120_000)
   try {

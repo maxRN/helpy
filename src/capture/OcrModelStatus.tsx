@@ -6,11 +6,13 @@ export function OcrModelStatus() {
   return (
     <aside className="model-status" aria-label="Local text recognition">
       {state.kind === 'loading' ? (
-        <p role="status">
-          {state.message}
-          {state.downloadedBytes > 0 && ` ${Math.round(state.downloadedBytes / 1_000_000)} MB loaded.`}
-          {' '}You can start a task when the model is ready. Downloaded files are cached on this device.
-        </p>
+        <>
+          <p role="status">
+            {state.message} {Math.floor(state.progress)}%.
+            {' '}You can start a task when the model is ready. Downloaded files are cached on this device.
+          </p>
+          <progress aria-label="Model download progress" max={100} value={state.progress} />
+        </>
       ) : (
         <>
           <p className="error" role="alert">Text recognition could not start: {state.error}</p>

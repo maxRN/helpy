@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { ocrResponseSchema } from './ocr-contract'
 import type { ModelState, OcrRequest, OcrResult } from './ocr-contract'
 
-export const useOcrModel = create<ModelState>(() => ({ kind: 'loading', message: 'Loading local text recognition model…', downloadedBytes: 0 }))
+export const useOcrModel = create<ModelState>(() => ({ kind: 'loading', message: 'Loading local text recognition model…', progress: 0 }))
 let worker: Worker | undefined
 let nextId = 0
 const pending = new Map<number, { resolve: (result: OcrResult) => void; reject: (error: Error) => void }>()
@@ -17,7 +17,7 @@ function fail(error: string) {
 
 export function loadOcrModel() {
   if (worker) return
-  useOcrModel.setState({ kind: 'loading', message: 'Loading local text recognition model…', downloadedBytes: 0 }, true)
+  useOcrModel.setState({ kind: 'loading', message: 'Loading local text recognition model…', progress: 0 }, true)
   try {
     worker = new Worker(new URL('./ocr.worker.ts', import.meta.url), { type: 'module' })
     worker.onmessage = ({ data }: MessageEvent<unknown>) => {
