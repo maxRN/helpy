@@ -82,7 +82,7 @@ export function VoicePanel() {
   const btn = 'rounded-sm border px-2 py-1 text-[12px] font-medium disabled:cursor-not-allowed disabled:opacity-40'
 
   return (
-    <aside className="fixed right-3 bottom-3 z-40 flex w-[min(22rem,calc(100vw-1.5rem))] flex-col gap-2 rounded-md border border-slate-300 bg-white p-3 text-[13px] text-slate-900 shadow-lg">
+    <aside className="fixed right-3 bottom-15 z-40 flex w-[min(22rem,calc(100vw-1.5rem))] flex-col gap-2 rounded-md border border-slate-300 bg-white p-3 text-[13px] text-slate-900 shadow-lg">
       <div className="flex items-center gap-2">
         <span className={`h-2.5 w-2.5 rounded-full ${active ? 'bg-emerald-500' : 'bg-slate-300'}`} aria-hidden />
         <span className="font-semibold">Apprentice voice</span>

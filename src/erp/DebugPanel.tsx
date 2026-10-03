@@ -53,7 +53,7 @@ export function DebugPanel() {
   const btn = 'rounded-sm border border-slate-600 px-2 py-0.5 hover:bg-slate-700'
 
   return (
-    <aside className="fixed bottom-3 left-3 z-40 w-[min(26rem,calc(100vw-1.5rem))] rounded-md bg-slate-900/95 font-mono text-[11px] text-slate-100 shadow-lg">
+    <aside className="fixed bottom-15 left-3 z-40 w-[min(26rem,calc(100vw-1.5rem))] rounded-md bg-slate-900/95 font-mono text-[11px] text-slate-100 shadow-lg">
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-700 px-2 py-1.5">
         <button type="button" className="font-semibold" onClick={() => setCollapsed((c) => !c)}>
           {collapsed ? '▸' : '▾'} Events ({events.length})
