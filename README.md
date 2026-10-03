@@ -22,3 +22,5 @@ npm run preview
 The build runs TypeScript checks before bundling. Preview serves the production build locally.
 
 Edit `src/routes/index.tsx` for the home page and `src/routes/__root.tsx` for the shared document layout. Add routes under `src/routes`; TanStack Router generates `src/routeTree.gen.ts` automatically.
+
+For production, run `npm run build` followed by `npm start`. Nitro serves the app from `.output/server/index.mjs` and uses the `PORT` environment variable supplied by Railway.
