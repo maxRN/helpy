@@ -14,3 +14,5 @@ todos.json
 
 # Session data written by the server routes
 data/
+
+.convex

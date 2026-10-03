@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
 import { DebugPanel } from '../erp/DebugPanel'
 import { ErpApp } from '../erp/ErpApp'
 
@@ -8,6 +8,9 @@ export const Route = createFileRoute('/')({ component: Home })
 function Home() {
   return (
     <div className="min-h-screen">
+      <nav className="border-b border-slate-200 bg-white px-6 py-3 text-sm">
+        <Link to="/projects" className="font-medium text-indigo-700 hover:underline">Projects</Link>
+      </nav>
       <ErpApp />
       {import.meta.env.DEV ? <DebugPanel /> : null}
     </div>

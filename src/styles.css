@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import './styles/projects.css';
 
 body {
   margin: 0;

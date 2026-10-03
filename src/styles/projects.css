@@ -1,0 +1,39 @@
+.projects-page { font-family: system-ui, sans-serif; color: #202a25; }
+.projects-page * { box-sizing: border-box; }
+.projects-page { width: min(44rem, calc(100% - 2rem)); margin: 4rem auto; }
+.projects-page header { margin-bottom: 2rem; }
+.projects-page h1 { font-size: 2.5rem; letter-spacing: -0.04em; overflow-wrap: anywhere; }
+.projects-page h1, .projects-page h2, .projects-page h3, .projects-page p { margin: 0 0 0.75rem; }
+.projects-page h2 { font-size: 1.125rem; }
+.projects-page h3 { font-size: 1rem; }
+.projects-page a { color: inherit; }
+.projects-page button, .projects-page input { font: inherit; }
+.projects-page :focus-visible { outline: 3px solid #70a88c; outline-offset: 3px; }
+
+.projects-page .eyebrow { color: #476856; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+.projects-page .muted { color: #66746c; line-height: 1.6; }
+.projects-page .panel { background: white; border: 1px solid #dce4de; border-radius: 0.75rem; padding: 1.5rem; }
+.projects-page form { margin-bottom: 2rem; }
+.projects-page label { display: block; margin-bottom: 0.6rem; font-size: 0.9rem; font-weight: 600; }
+.projects-page .form-row { display: flex; gap: 0.75rem; }
+.projects-page input { min-width: 0; width: 100%; padding: 0.75rem; border: 1px solid #bac8be; border-radius: 0.4rem; }
+.projects-page button { border: 0; border-radius: 0.4rem; padding: 0.75rem 1rem; background: #285b40; color: white; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.projects-page button:hover { background: #1b432e; }
+.projects-page button:disabled { opacity: 0.55; cursor: default; }
+.projects-page .count { margin-left: 0.4rem; color: #66746c; font-weight: 400; }
+.projects-page .empty-state { padding: 2.5rem 1.5rem; text-align: center; }
+.projects-page .empty-state p { margin-bottom: 0; }
+.projects-page .project-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.75rem; }
+.projects-page .project-list a { display: flex; justify-content: space-between; gap: 1rem; padding: 1.25rem 1.5rem; border: 1px solid #dce4de; border-radius: 0.75rem; background: white; text-decoration: none; font-weight: 600; overflow-wrap: anywhere; }
+.projects-page .project-list a:hover { border-color: #70a88c; }
+.projects-page .back-link { display: inline-block; margin-bottom: 2rem; color: #476856; text-decoration: none; }
+.projects-page dt { color: #66746c; font-size: 0.85rem; }
+.projects-page dd { margin: 0.4rem 0 2rem; overflow-wrap: anywhere; }
+.projects-page .danger { background: #a13333; }
+.projects-page .danger:hover { background: #812828; }
+.projects-page .error { margin: 1rem 0 0; color: #a13333; overflow-wrap: anywhere; }
+
+@media (max-width: 480px) {
+  .projects-page { margin: 2rem auto; }
+  .projects-page .form-row { flex-direction: column; }
+}
