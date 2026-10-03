@@ -4,7 +4,34 @@ This is a helpful AI agent that watches you work and records your workflows.
 
 Built with [TanStack Start](https://tanstack.com/start/latest), React, TypeScript, Vite, and [Convex](https://convex.dev).
 
-Run locally with Node.js 22.12 or newer:
+Use Node.js 22.12 or newer.
+
+## Local development without a Convex account
+
+From a fresh clone, run:
+
+```sh
+npm ci
+npm run dev:convex
+```
+
+When prompted, choose to develop locally without an account. You do not need a Convex login or a team invitation. The first setup needs internet to install dependencies and download the local backend; afterward, the backend can run offline.
+
+Keep that terminal running. Convex applies changes to `convex/schema.ts` and backend functions automatically. In a second terminal, start the app:
+
+```sh
+npm run dev
+```
+
+Open [localhost:3000](http://localhost:3000). Convex writes the local deployment URL to `.env.local` and keeps the database in `.convex/`. Local data survives restarts and is separate from the cloud databases. These paths are ignored by Git.
+
+For subsequent sessions, run `npm run dev:convex` and `npm run dev` in separate terminals.
+
+See the [Convex local development documentation](https://docs.convex.dev/cli/local-deployments) for more details.
+
+To switch an existing cloud checkout to a local backend, run `npx convex dev --configure` and choose a local deployment. The app itself does not provide offline persistence or sync.
+
+## Cloud development
 
 ```sh
 npm ci
@@ -18,8 +45,6 @@ During Convex setup, select the existing `max-grosse / sabine-ai` project. Teamm
 
 Open http://localhost:3000. Projects are available at `/projects/` and support create, list, view, and delete. Access is intentionally public.
 
-For offline backend development, run `npx convex dev --configure` and choose a local deployment. The initial backend download needs internet; its data lives in ignored `.convex/` and is separate from cloud deployments. The app itself does not provide offline persistence or sync.
-
 ```sh
 npm run typecheck
 npm run build
@@ -29,6 +54,8 @@ npm run preview
 The build runs TypeScript checks before bundling. Preview serves the production build locally. `npm test` runs the unit tests (Vitest).
 
 Copy `.env.example` to `.env` and fill in any server API keys needed for the AI features. Those keys are read with `process.env` in server routes only. `VITE_CONVEX_URL` is public and normally supplied by the Convex CLI in `.env.local`.
+
+Convex stores project names in the `projects` table defined in `convex/schema.ts`. Its queries and mutations live in `convex/projects.ts`. The router configures Convex and TanStack Query for server rendering and live updates. Commit `convex/_generated` so a fresh checkout can typecheck before connecting to Convex. Regenerate these files with `npm run convex:codegen` when needed.
 
 ## Project layout
 
