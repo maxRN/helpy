@@ -10,10 +10,14 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiFrameRouteImport } from './routes/api/frame'
 import { Route as ApiPolicyRouteImport } from './routes/api/policy'
 import { Route as ApiTtsRouteImport } from './routes/api/tts'
+import { Route as ApiWorkmapRouteImport } from './routes/api/workmap'
 import { Route as ProjectsIndexRouteImport } from './routes/projects.index'
 import { Route as ProjectsProjectIdRouteImport } from './routes/projects.$projectId'
+import { Route as ApiDebriefGapsRouteImport } from './routes/api/debrief/gaps'
+import { Route as ApiDebriefTeachbackRouteImport } from './routes/api/debrief/teachback'
 import { Route as ApiElevenlabsSignedUrlRouteImport } from './routes/api/elevenlabs/signed-url'
 import { Route as ApiGuardrailsCompileRouteImport } from './routes/api/guardrails/compile'
 import { Route as ProjectsProjectIdTasksTaskIdRouteImport } from './routes/projects.$projectId_.tasks.$taskId'
@@ -21,6 +25,11 @@ import { Route as ProjectsProjectIdTasksTaskIdRouteImport } from './routes/proje
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiFrameRoute = ApiFrameRouteImport.update({
+  id: '/api/frame',
+  path: '/api/frame',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPolicyRoute = ApiPolicyRouteImport.update({
@@ -33,6 +42,11 @@ const ApiTtsRoute = ApiTtsRouteImport.update({
   path: '/api/tts',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiWorkmapRoute = ApiWorkmapRouteImport.update({
+  id: '/api/workmap',
+  path: '/api/workmap',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProjectsIndexRoute = ProjectsIndexRouteImport.update({
   id: '/projects/',
   path: '/projects/',
@@ -41,6 +55,16 @@ const ProjectsIndexRoute = ProjectsIndexRouteImport.update({
 const ProjectsProjectIdRoute = ProjectsProjectIdRouteImport.update({
   id: '/projects/$projectId',
   path: '/projects/$projectId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiDebriefGapsRoute = ApiDebriefGapsRouteImport.update({
+  id: '/api/debrief/gaps',
+  path: '/api/debrief/gaps',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiDebriefTeachbackRoute = ApiDebriefTeachbackRouteImport.update({
+  id: '/api/debrief/teachback',
+  path: '/api/debrief/teachback',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiElevenlabsSignedUrlRoute = ApiElevenlabsSignedUrlRouteImport.update({
@@ -62,20 +86,28 @@ const ProjectsProjectIdTasksTaskIdRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api/frame': typeof ApiFrameRoute
   '/api/policy': typeof ApiPolicyRoute
   '/api/tts': typeof ApiTtsRoute
+  '/api/workmap': typeof ApiWorkmapRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
   '/projects/': typeof ProjectsIndexRoute
+  '/api/debrief/gaps': typeof ApiDebriefGapsRoute
+  '/api/debrief/teachback': typeof ApiDebriefTeachbackRoute
   '/api/elevenlabs/signed-url': typeof ApiElevenlabsSignedUrlRoute
   '/api/guardrails/compile': typeof ApiGuardrailsCompileRoute
   '/projects/$projectId/tasks/$taskId': typeof ProjectsProjectIdTasksTaskIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/frame': typeof ApiFrameRoute
   '/api/policy': typeof ApiPolicyRoute
   '/api/tts': typeof ApiTtsRoute
+  '/api/workmap': typeof ApiWorkmapRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
   '/projects': typeof ProjectsIndexRoute
+  '/api/debrief/gaps': typeof ApiDebriefGapsRoute
+  '/api/debrief/teachback': typeof ApiDebriefTeachbackRoute
   '/api/elevenlabs/signed-url': typeof ApiElevenlabsSignedUrlRoute
   '/api/guardrails/compile': typeof ApiGuardrailsCompileRoute
   '/projects/$projectId/tasks/$taskId': typeof ProjectsProjectIdTasksTaskIdRoute
@@ -83,10 +115,14 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api/frame': typeof ApiFrameRoute
   '/api/policy': typeof ApiPolicyRoute
   '/api/tts': typeof ApiTtsRoute
+  '/api/workmap': typeof ApiWorkmapRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
   '/projects/': typeof ProjectsIndexRoute
+  '/api/debrief/gaps': typeof ApiDebriefGapsRoute
+  '/api/debrief/teachback': typeof ApiDebriefTeachbackRoute
   '/api/elevenlabs/signed-url': typeof ApiElevenlabsSignedUrlRoute
   '/api/guardrails/compile': typeof ApiGuardrailsCompileRoute
   '/projects/$projectId_/tasks/$taskId': typeof ProjectsProjectIdTasksTaskIdRoute
@@ -95,30 +131,42 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/api/frame'
     | '/api/policy'
     | '/api/tts'
+    | '/api/workmap'
     | '/projects/$projectId'
     | '/projects/'
+    | '/api/debrief/gaps'
+    | '/api/debrief/teachback'
     | '/api/elevenlabs/signed-url'
     | '/api/guardrails/compile'
     | '/projects/$projectId/tasks/$taskId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/api/frame'
     | '/api/policy'
     | '/api/tts'
+    | '/api/workmap'
     | '/projects/$projectId'
     | '/projects'
+    | '/api/debrief/gaps'
+    | '/api/debrief/teachback'
     | '/api/elevenlabs/signed-url'
     | '/api/guardrails/compile'
     | '/projects/$projectId/tasks/$taskId'
   id:
     | '__root__'
     | '/'
+    | '/api/frame'
     | '/api/policy'
     | '/api/tts'
+    | '/api/workmap'
     | '/projects/$projectId'
     | '/projects/'
+    | '/api/debrief/gaps'
+    | '/api/debrief/teachback'
     | '/api/elevenlabs/signed-url'
     | '/api/guardrails/compile'
     | '/projects/$projectId_/tasks/$taskId'
@@ -126,10 +174,14 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiFrameRoute: typeof ApiFrameRoute
   ApiPolicyRoute: typeof ApiPolicyRoute
   ApiTtsRoute: typeof ApiTtsRoute
+  ApiWorkmapRoute: typeof ApiWorkmapRoute
   ProjectsProjectIdRoute: typeof ProjectsProjectIdRoute
   ProjectsIndexRoute: typeof ProjectsIndexRoute
+  ApiDebriefGapsRoute: typeof ApiDebriefGapsRoute
+  ApiDebriefTeachbackRoute: typeof ApiDebriefTeachbackRoute
   ApiElevenlabsSignedUrlRoute: typeof ApiElevenlabsSignedUrlRoute
   ApiGuardrailsCompileRoute: typeof ApiGuardrailsCompileRoute
   ProjectsProjectIdTasksTaskIdRoute: typeof ProjectsProjectIdTasksTaskIdRoute
@@ -142,6 +194,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/frame': {
+      id: '/api/frame'
+      path: '/api/frame'
+      fullPath: '/api/frame'
+      preLoaderRoute: typeof ApiFrameRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/policy': {
@@ -158,6 +217,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiTtsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/workmap': {
+      id: '/api/workmap'
+      path: '/api/workmap'
+      fullPath: '/api/workmap'
+      preLoaderRoute: typeof ApiWorkmapRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/projects/': {
       id: '/projects/'
       path: '/projects'
@@ -170,6 +236,20 @@ declare module '@tanstack/react-router' {
       path: '/projects/$projectId'
       fullPath: '/projects/$projectId'
       preLoaderRoute: typeof ProjectsProjectIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/debrief/gaps': {
+      id: '/api/debrief/gaps'
+      path: '/api/debrief/gaps'
+      fullPath: '/api/debrief/gaps'
+      preLoaderRoute: typeof ApiDebriefGapsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/debrief/teachback': {
+      id: '/api/debrief/teachback'
+      path: '/api/debrief/teachback'
+      fullPath: '/api/debrief/teachback'
+      preLoaderRoute: typeof ApiDebriefTeachbackRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/elevenlabs/signed-url': {
@@ -198,10 +278,14 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiFrameRoute: ApiFrameRoute,
   ApiPolicyRoute: ApiPolicyRoute,
   ApiTtsRoute: ApiTtsRoute,
+  ApiWorkmapRoute: ApiWorkmapRoute,
   ProjectsProjectIdRoute: ProjectsProjectIdRoute,
   ProjectsIndexRoute: ProjectsIndexRoute,
+  ApiDebriefGapsRoute: ApiDebriefGapsRoute,
+  ApiDebriefTeachbackRoute: ApiDebriefTeachbackRoute,
   ApiElevenlabsSignedUrlRoute: ApiElevenlabsSignedUrlRoute,
   ApiGuardrailsCompileRoute: ApiGuardrailsCompileRoute,
   ProjectsProjectIdTasksTaskIdRoute: ProjectsProjectIdTasksTaskIdRoute,

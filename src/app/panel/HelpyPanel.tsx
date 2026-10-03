@@ -3,7 +3,6 @@ import { HelpyMark, MASCOT_SIZE, useHelpyExtras, visibleBounds } from '../../mas
 import { HomeView } from './HomeView'
 import { LearningView, MomentView, ReportView } from './LearningViews'
 import { ProcessView } from './ProcessView'
-import { QuestionsView } from './QuestionsView'
 import { RecordView } from './RecordView'
 import { panel, usePanel, type View } from './store'
 
@@ -92,7 +91,6 @@ export function HelpyPanel({ boundsRef }: { boundsRef?: RefObject<HTMLElement | 
         {view.name === 'home' ? <HomeView /> : null}
         {view.name === 'process' ? <ProcessView processId={view.processId} /> : null}
         {view.name === 'record' ? <RecordView /> : null}
-        {view.name === 'questions' ? <QuestionsView processId={view.processId} /> : null}
         {view.name === 'learning' ? <LearningView /> : null}
         {view.name === 'report' ? <ReportView /> : null}
         {view.name === 'moment' ? <MomentView stepId={view.stepId} processId={view.processId} /> : null}

@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, type RefObject } from 'react'
 import { useTaskRecording } from '../capture/TaskRecorder'
+import { useDebriefUi } from '../debrief/DebriefPanel'
 import { mascot, MascotLayer, setMascotClickHandler } from '../mascot'
 import { useMascot } from '../shared/mascot'
 import { useSession } from '../shared/session'
 import { TeachLayer } from '../teach-ui/TeachLayer'
 import { HelpyPanel } from './panel/HelpyPanel'
 import { panel, usePanel } from './panel/store'
-import { stopVoice } from './voice'
+import { askQuestions } from './panel/questions'
+import { stopVoice, useVoice } from './voice'
 
 /** Small red light on the robot while it records. */
 function RecordingLight() {
@@ -46,21 +48,29 @@ export function Helpy({ boundsRef }: { boundsRef?: RefObject<HTMLElement | null>
     if (clipRequest) panel.show({ name: 'moment', stepId: clipRequest.stepId })
   }, [clipRequest])
 
-  // End of a recording, from "I'm done" or the browser's "Stop sharing": thank, then show what Helpy is writing down.
+  // End of a recording, from "I'm done" or the browser's "Stop sharing": thank, then ask the follow-up questions.
   const { state: recorder } = useTaskRecording()
   const wasRecording = useRef(false)
   useEffect(() => {
     const recording = recorder.kind !== 'idle'
     const current = usePanel.getState().activity
     if (wasRecording.current && !recording && current?.kind === 'recording') {
-      void stopVoice()
       panel.setActivity(null)
-      mascot.setState('thinking')
-      mascot.bubble('Thank you! I’m writing it all down now.', { ttlMs: 6000 })
-      panel.show({ name: 'process', processId: current.processId })
+      mascot.setState('speaking')
+      mascot.bubble('Thank you! I have a few questions about what I saw.', { ttlMs: 5000 })
+      void stopVoice().then(() => setTimeout(askQuestions, 1500))
     }
     wasRecording.current = recording
   }, [recorder.kind])
+
+  // When the debrief closes, the debrief agent is done too.
+  const debriefOpen = useDebriefUi((s) => s.open)
+  useEffect(() => {
+    if (!debriefOpen && useVoice.getState().mode === 'debrief') void stopVoice()
+  }, [debriefOpen])
+
+  // Teach mode can start from Helpy or from the debrief's last screen; the guidance runs in both cases.
+  const teaching = useSession((s) => s.mode === 'teach' && s.workMap !== null)
 
   const onCaseDone = useCallback(() => {
     setTimeout(() => panel.show({ name: 'report' }), 2500)
@@ -70,7 +80,7 @@ export function Helpy({ boundsRef }: { boundsRef?: RefObject<HTMLElement | null>
     <>
       <MascotLayer boundsRef={boundsRef} hideBubble={open} badge={activity?.kind === 'recording' ? <RecordingLight /> : null} />
       <HelpyPanel boundsRef={boundsRef} />
-      {activity?.kind === 'learning' ? <TeachLayer onCaseDone={onCaseDone} /> : null}
+      {teaching ? <TeachLayer onCaseDone={onCaseDone} /> : null}
     </>
   )
 }

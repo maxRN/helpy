@@ -4,7 +4,7 @@ import type { AppEvent as AgentEvent } from '../agent/types'
 import { FIXTURE_WORKMAP } from '../erp/fixtures'
 import { installStepTracker, resetStepTracker } from '../erp/stepTracker'
 import { erp } from '../erp/store'
-import { clearEventLog, getEventLog } from '../shared/bus'
+import { clearEventLog, emitEvent, getEventLog } from '../shared/bus'
 import { useSession } from '../shared/session'
 import { installVoiceBridge, workMapMarkdown } from './voiceBridge'
 
@@ -50,6 +50,15 @@ describe('voice bridge', () => {
     off()
     expect(getEventLog().at(-1)).toMatchObject({ source: 'voice', kind: 'question_asked', text: 'Why capex?', t: 5_000 })
     expect(seen[0]).toMatchObject({ id: 'q1', type: 'question_asked', meta: { kind: 'why' } })
+  })
+
+  it('forwards vision events, but not ones that repeat an ERP click', () => {
+    const off = listen()
+    emitEvent({ source: 'vision', kind: 'field_changed', invoiceId: '9000', text: 'Excel: cell B4 changed to 120' })
+    emitEvent({ source: 'vision', kind: 'field_changed', invoiceId: '4471', text: 'Invoice 4471: cost center → 0400', meta: { confirms: 'd1' } })
+    off()
+    expect(seen.map((e) => e.text)).toEqual(['Excel: cell B4 changed to 120'])
+    expect(seen[0].type).toBe('vision')
   })
 
   it('mirrors off the record into the session', () => {

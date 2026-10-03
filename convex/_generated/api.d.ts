@@ -9,6 +9,7 @@
  */
 
 import type * as clips from "../clips.js";
+import type * as debrief from "../debrief.js";
 import type * as events from "../events.js";
 import type * as invoiceValidators from "../invoiceValidators.js";
 import type * as invoices from "../invoices.js";
@@ -27,6 +28,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   clips: typeof clips;
+  debrief: typeof debrief;
   events: typeof events;
   invoiceValidators: typeof invoiceValidators;
   invoices: typeof invoices;

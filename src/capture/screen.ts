@@ -1,3 +1,6 @@
+import { maskPii } from '../shared/pii'
+import { session } from '../shared/session'
+
 export type Screenshot = {
   blob: Blob
   capturedAt: number
@@ -37,7 +40,10 @@ export async function openScreenCapture() {
     const canvas = document.createElement('canvas')
     const context = canvas.getContext('2d')
     if (!context) throw new Error('This browser cannot capture screenshots.')
-    const drawScreenshot = () => context.drawImage(video, 0, 0)
+    const drawScreenshot = () => {
+      context.drawImage(video, 0, 0)
+      maskPii(context, video.videoWidth) // personal data never leaves the browser unmasked
+    }
     const startedAt = Date.now()
     const startTime = performance.now()
 
@@ -56,7 +62,7 @@ export async function openScreenCapture() {
         let stopped = false
 
         function capture() {
-          if (stopped) return
+          if (stopped || session().offRecord) return // off the record: no screenshots
           const job = (async () => {
             if (track.readyState !== 'live' || track.muted || video.readyState < 2) {
               throw new Error('Screen capture was interrupted. Saved screenshots are still available.')

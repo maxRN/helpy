@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useSession } from '../../shared/session'
+import { askQuestions } from './questions'
 import { panel } from './store'
 import { STATUS, statusOf, useProcesses } from './processes'
 import { field, primaryBtn } from './ui'
@@ -9,7 +11,9 @@ export function HomeView() {
   const [query, setQuery] = useState('')
   const q = query.trim().toLowerCase()
   const shown = (processes ?? []).filter((p) => !q || p.name.toLowerCase().includes(q) || p.workMap?.steps.some((s) => s.title.toLowerCase().includes(q)))
-  const waiting = (processes ?? []).find((p) => !p.example && statusOf(p) === 'questions')
+  const sessionId = useSession((s) => s.sessionId)
+  // Questions are about the latest recording on this computer (the debrief works on the current session).
+  const waiting = (processes ?? []).find((p) => !p.example && p.sessionId === sessionId && (statusOf(p) === 'questions' || statusOf(p) === 'processing'))
 
   return (
     <div className="flex flex-col gap-5">
@@ -21,7 +25,7 @@ export function HomeView() {
       {waiting ? (
         <div className="rounded-xl bg-ask-soft p-4">
           <p className="m-0 text-[16px] font-medium leading-snug text-ink">I have a few questions about “{waiting.name}”.</p>
-          <button type="button" onClick={() => panel.show({ name: 'questions', processId: waiting.id })} className={`${primaryBtn} mt-3`}>
+          <button type="button" onClick={askQuestions} className={`${primaryBtn} mt-3`}>
             Answer now
           </button>
         </div>

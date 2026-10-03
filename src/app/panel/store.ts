@@ -5,13 +5,12 @@ export type View =
   | { name: 'home' }
   | { name: 'process'; processId: string }
   | { name: 'record' }
-  | { name: 'questions'; processId: string }
   | { name: 'learning' }
   | { name: 'moment'; stepId: string; processId?: string }
   | { name: 'report' }
 
 /** What Helpy is busy with right now; clicking the robot opens the matching view. */
-export type Activity = { kind: 'recording'; processId: string } | { kind: 'learning'; processId: string } | { kind: 'questions'; processId: string } | null
+export type Activity = { kind: 'recording'; processId: string } | { kind: 'learning'; processId: string } | null
 
 interface PanelState {
   open: boolean
@@ -21,8 +20,7 @@ interface PanelState {
 
 export const usePanel = create<PanelState>()(() => ({ open: false, view: { name: 'home' }, activity: null }))
 
-const activityView = (a: Activity): View =>
-  a?.kind === 'recording' ? { name: 'record' } : a?.kind === 'learning' ? { name: 'learning' } : a?.kind === 'questions' ? { name: 'questions', processId: a.processId } : { name: 'home' }
+const activityView = (a: Activity): View => (a?.kind === 'recording' ? { name: 'record' } : a?.kind === 'learning' ? { name: 'learning' } : { name: 'home' })
 
 export const panel = {
   show(view?: View) {
