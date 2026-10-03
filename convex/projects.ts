@@ -28,6 +28,17 @@ export const remove = mutation({
   args: { projectId: v.id('projects') },
   returns: v.null(),
   handler: async (ctx, { projectId }) => {
+    const tasks = await ctx.db.query('tasks')
+      .withIndex('by_project', (q) => q.eq('projectId', projectId)).collect()
+    for (const task of tasks) {
+      const screenshots = await ctx.db.query('screenshots')
+        .withIndex('by_task', (q) => q.eq('taskId', task._id)).collect()
+      for (const screenshot of screenshots) {
+        await ctx.storage.delete(screenshot.storageId)
+        await ctx.db.delete('screenshots', screenshot._id)
+      }
+      await ctx.db.delete('tasks', task._id)
+    }
     await ctx.db.delete('projects', projectId)
     return null
   },

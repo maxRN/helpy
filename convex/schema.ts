@@ -15,4 +15,19 @@ export default defineSchema({
 
   // AppEvent log per session (shape: AppEvent in src/shared/types.ts).
   events: defineTable({ sessionId: v.string(), event: v.any() }).index('by_sessionId', ['sessionId']),
+
+  tasks: defineTable({
+    projectId: v.id('projects'),
+    startedAt: v.number(),
+    completion: v.union(v.null(), v.object({
+      durationMs: v.number(),
+      error: v.union(v.null(), v.string()),
+    })),
+  }).index('by_project', ['projectId']),
+  screenshots: defineTable({
+    taskId: v.id('tasks'),
+    storageId: v.id('_storage'),
+    capturedAt: v.number(),
+    offsetMs: v.number(),
+  }).index('by_task', ['taskId', 'offsetMs']),
 })

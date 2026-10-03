@@ -12,6 +12,7 @@ import type * as events from "../events.js";
 import type * as invoiceValidators from "../invoiceValidators.js";
 import type * as invoices from "../invoices.js";
 import type * as projects from "../projects.js";
+import type * as tasks from "../tasks.js";
 import type * as workMaps from "../workMaps.js";
 
 import type {
@@ -25,6 +26,7 @@ declare const fullApi: ApiFromModules<{
   invoiceValidators: typeof invoiceValidators;
   invoices: typeof invoices;
   projects: typeof projects;
+  tasks: typeof tasks;
   workMaps: typeof workMaps;
 }>;
 

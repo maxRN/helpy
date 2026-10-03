@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProjectsIndexRouteImport } from './routes/projects.index'
 import { Route as ProjectsProjectIdRouteImport } from './routes/projects.$projectId'
 import { Route as ApiGuardrailsCompileRouteImport } from './routes/api/guardrails/compile'
+import { Route as ProjectsProjectIdTasksTaskIdRouteImport } from './routes/projects.$projectId_.tasks.$taskId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -34,18 +35,26 @@ const ApiGuardrailsCompileRoute = ApiGuardrailsCompileRouteImport.update({
   path: '/api/guardrails/compile',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProjectsProjectIdTasksTaskIdRoute =
+  ProjectsProjectIdTasksTaskIdRouteImport.update({
+    id: '/projects/$projectId_/tasks/$taskId',
+    path: '/projects/$projectId/tasks/$taskId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
   '/projects/': typeof ProjectsIndexRoute
   '/api/guardrails/compile': typeof ApiGuardrailsCompileRoute
+  '/projects/$projectId/tasks/$taskId': typeof ProjectsProjectIdTasksTaskIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
   '/projects': typeof ProjectsIndexRoute
   '/api/guardrails/compile': typeof ApiGuardrailsCompileRoute
+  '/projects/$projectId/tasks/$taskId': typeof ProjectsProjectIdTasksTaskIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,19 +62,30 @@ export interface FileRoutesById {
   '/projects/$projectId': typeof ProjectsProjectIdRoute
   '/projects/': typeof ProjectsIndexRoute
   '/api/guardrails/compile': typeof ApiGuardrailsCompileRoute
+  '/projects/$projectId_/tasks/$taskId': typeof ProjectsProjectIdTasksTaskIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/projects/$projectId' | '/projects/' | '/api/guardrails/compile'
+    | '/'
+    | '/projects/$projectId'
+    | '/projects/'
+    | '/api/guardrails/compile'
+    | '/projects/$projectId/tasks/$taskId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/projects/$projectId' | '/projects' | '/api/guardrails/compile'
+  to:
+    | '/'
+    | '/projects/$projectId'
+    | '/projects'
+    | '/api/guardrails/compile'
+    | '/projects/$projectId/tasks/$taskId'
   id:
     | '__root__'
     | '/'
     | '/projects/$projectId'
     | '/projects/'
     | '/api/guardrails/compile'
+    | '/projects/$projectId_/tasks/$taskId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -73,6 +93,7 @@ export interface RootRouteChildren {
   ProjectsProjectIdRoute: typeof ProjectsProjectIdRoute
   ProjectsIndexRoute: typeof ProjectsIndexRoute
   ApiGuardrailsCompileRoute: typeof ApiGuardrailsCompileRoute
+  ProjectsProjectIdTasksTaskIdRoute: typeof ProjectsProjectIdTasksTaskIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -105,6 +126,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiGuardrailsCompileRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/projects/$projectId_/tasks/$taskId': {
+      id: '/projects/$projectId_/tasks/$taskId'
+      path: '/projects/$projectId/tasks/$taskId'
+      fullPath: '/projects/$projectId/tasks/$taskId'
+      preLoaderRoute: typeof ProjectsProjectIdTasksTaskIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -113,6 +141,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProjectsProjectIdRoute: ProjectsProjectIdRoute,
   ProjectsIndexRoute: ProjectsIndexRoute,
   ApiGuardrailsCompileRoute: ApiGuardrailsCompileRoute,
+  ProjectsProjectIdTasksTaskIdRoute: ProjectsProjectIdTasksTaskIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

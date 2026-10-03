@@ -45,6 +45,18 @@ During Convex setup, select the existing `max-grosse / sabine-ai` project. Teamm
 
 Open http://localhost:3000. Projects are available at `/projects/` and support create, list, view, and delete. Access is intentionally public.
 
+## Task recording
+
+Open a project and click **New task**. Choose **Entire Screen** in the browser's sharing dialog. The app requires a desktop browser that supports screen capture and reports the selected display surface, such as Chrome or Edge. Screen sharing works on HTTPS and localhost, and the browser asks for permission for every task.
+
+The app captures a full-resolution JPEG when recording starts and every 2 seconds afterward. A worker triggers capture while you work in other apps; browser suspension, screen locking, or putting the computer to sleep can delay or interrupt capture. Keep the recording page open. Click **Done**, or stop sharing through the browser, to stop capture, finish pending uploads, and open the task summary. Task duration ends when capture stops, excluding time spent finishing uploads. The summary shows each screenshot's capture time and offset from the task's start. Click a screenshot to open the full image.
+
+Tasks and screenshot metadata live in Convex's `tasks` and `screenshots` tables. Image bytes go directly from the browser to Convex File Storage using generated upload URLs. The app stores each file's `_storage` ID with its task and timestamps, then obtains its display URL in the summary query. Deleting a project also deletes its tasks and their stored screenshots. Capture and upload failures stop the recording and appear on the summary; if saving the task fails, the recording page offers **Retry saving**. A task left unfinished by a closed tab can be finalized from its summary at the last saved screenshot, with the interrupted duration labeled explicitly.
+
+No Railway bucket or S3 credentials are required. Local and cloud development use the same Convex upload API. With a local Convex backend, uploads stay on that backend alongside the local database; with a cloud development deployment, uploads go to that deployment, separate from production. Run both `npm run dev:convex` and `npm run dev` as described above.
+
+Access to tasks and screenshots follows the current public project model. Convex file URLs grant download access to anyone who has the URL. Before using this app for private workflows, add user authentication and project authorization, and serve images through an authenticated HTTP action if access must be checked for every download. See [Convex File Storage](https://docs.convex.dev/file-storage/overview) and [uploading files](https://docs.convex.dev/file-storage/upload-files).
+
 ```sh
 npm run typecheck
 npm run build

@@ -33,6 +33,19 @@
 .projects-page .danger:hover { background: #812828; }
 .projects-page .error { margin: 1rem 0 0; color: #a13333; overflow-wrap: anywhere; }
 
+.projects-page .tasks-section { margin: 2rem 0; }
+.projects-page .recording-status { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; font-weight: 600; }
+.projects-page .recording-dot { width: 0.6rem; height: 0.6rem; flex-shrink: 0; border-radius: 50%; background: #bd3030; }
+.projects-page .duration { font-variant-numeric: tabular-nums; }
+.projects-page .task-duration { flex-shrink: 0; font-weight: 400; }
+.projects-page.task-summary { width: min(64rem, calc(100% - 2rem)); }
+.projects-page .summary-details dl { display: flex; flex-wrap: wrap; gap: 1rem 3rem; }
+.projects-page .summary-details dd { margin-bottom: 0; font-weight: 600; }
+.projects-page .screenshot-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr)); gap: 1rem; padding: 0; list-style: none; }
+.projects-page .screenshot-grid figure { margin: 0; overflow: hidden; border: 1px solid #dce4de; border-radius: 0.75rem; background: white; }
+.projects-page .screenshot-grid img { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: contain; background: #edf1ee; }
+.projects-page .screenshot-grid figcaption { display: flex; justify-content: space-between; gap: 1rem; padding: 0.75rem 1rem; color: #476856; font-size: 0.85rem; }
+
 @media (max-width: 480px) {
   .projects-page { margin: 2rem auto; }
   .projects-page .form-row { flex-direction: column; }
