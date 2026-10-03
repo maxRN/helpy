@@ -24,3 +24,6 @@ The build runs TypeScript checks before bundling. Preview serves the production 
 Edit `src/routes/index.tsx` for the home page and `src/routes/__root.tsx` for the shared document layout. Add routes under `src/routes`; TanStack Router generates `src/routeTree.gen.ts` automatically.
 
 For production, run `npm run build` followed by `npm start`. Nitro serves the app from `.output/server/index.mjs` and uses the `PORT` environment variable supplied by Railway.
+
+The app is live at [sabine-ai-production.up.railway.app](https://sabine-ai-production.up.railway.app).
+Railway automatically deploys pushes to `main` in [maxRN/sabine-ai](https://github.com/maxRN/sabine-ai). Manage the service in the [Railway dashboard](https://railway.com/project/ebd389b6-7753-4899-a19c-a4a8f9444f9e/service/f32ebfc7-df13-454c-8493-dd019170435a?environmentId=77184c62-0bf5-4208-b595-e1768dca5688).
