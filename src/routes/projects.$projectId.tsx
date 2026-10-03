@@ -1,9 +1,8 @@
 import { convexQuery, useConvexMutation } from '@convex-dev/react-query'
 import { useMutation, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { useState } from 'react'
 import { api } from '../../convex/_generated/api'
-import { TaskRecorder } from '../capture/TaskRecorder'
+import { TaskRecorder, useTaskRecording } from '../capture/TaskRecorder'
 import { RecordedTime } from '../capture/RecordedTime'
 import { formatDuration } from '../capture/screen'
 
@@ -13,7 +12,9 @@ function Project() {
   const { projectId } = Route.useParams()
   const { data: project } = useSuspenseQuery(convexQuery(api.projects.get, { projectId }))
   const { data: tasks } = useSuspenseQuery(convexQuery(api.tasks.list, { projectId }))
-  const [isRecording, setIsRecording] = useState(false)
+  const { state } = useTaskRecording()
+  const isRecording = state.kind === 'starting' ? state.project._id === projectId
+    : 'task' in state && state.task.project._id === projectId
   const navigate = Route.useNavigate()
   const removeProject = useMutation({
     mutationFn: useConvexMutation(api.projects.remove),
@@ -29,7 +30,7 @@ function Project() {
       </header>
       {project ? (
         <>
-          <TaskRecorder projectId={project._id} onBusyChange={setIsRecording} />
+          <TaskRecorder project={project} />
           <section className="tasks-section" aria-labelledby="tasks-heading">
             <h2 id="tasks-heading">Tasks <span className="count">{tasks.length}</span></h2>
             {tasks.length === 0 ? (

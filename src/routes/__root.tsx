@@ -1,5 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query'
-import { HeadContent, Scripts, createRootRouteWithContext } from '@tanstack/react-router'
+import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from '@tanstack/react-router'
+import { ActiveTaskBar, TaskRecordingProvider } from '../capture/TaskRecorder'
 
 import appCss from '../styles.css?url'
 
@@ -24,8 +25,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       },
     ],
   }),
+  component: RootLayout,
   shellComponent: RootDocument,
 })
+
+function RootLayout() {
+  return (
+    <TaskRecordingProvider>
+      <ActiveTaskBar />
+      <Outlet />
+    </TaskRecordingProvider>
+  )
+}
 
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (

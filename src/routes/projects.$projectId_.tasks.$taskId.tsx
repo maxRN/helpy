@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { api } from '../../convex/_generated/api'
 import { formatDuration } from '../capture/screen'
 import { RecordedTime } from '../capture/RecordedTime'
+import { TaskRecorder, useTaskRecording } from '../capture/TaskRecorder'
 
 export const Route = createFileRoute('/projects/$projectId_/tasks/$taskId')({ component: TaskSummary })
 
@@ -15,16 +16,19 @@ function TaskSummary() {
   const finishTask = useMutation(api.tasks.finish)
   const [isFinishing, setIsFinishing] = useState(false)
   const [error, setError] = useState('')
+  const { state } = useTaskRecording()
+  const isActiveTask = 'task' in state && state.task.taskId === taskId
 
   return (
     <main className="projects-page task-summary">
       <Link to="/projects/$projectId" params={{ projectId }} className="back-link">← Back to project</Link>
       <header>
         <p className="eyebrow">Sabine AI / {task?.projectName ?? 'Task'}</p>
-        <h1>{task ? 'Task summary' : 'Task not found'}</h1>
+        <h1>{task ? isActiveTask ? 'Current task' : 'Task summary' : 'Task not found'}</h1>
       </header>
       {task ? (
         <>
+          {isActiveTask && <TaskRecorder project={{ _id: task.projectId, name: task.projectName }} />}
           <section className="panel summary-details" aria-label="Task details">
             <dl>
               <div><dt>Started</dt><dd><RecordedTime timestamp={task.startedAt} /></dd></div>
@@ -32,7 +36,7 @@ function TaskSummary() {
               <div><dt>Screenshots</dt><dd>{task.screenshots.length}</dd></div>
             </dl>
             {task.completion?.error && <p className="error" role="alert">Recording ended with an error: {task.completion.error}</p>}
-            {!task.completion && (
+            {!task.completion && !isActiveTask && (
               <>
                 <p className="muted">This task has not been finalized. If its recording page was closed, you can end it at the last saved screenshot.</p>
                 <button disabled={isFinishing} onClick={async () => {

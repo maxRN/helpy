@@ -45,6 +45,18 @@
 .projects-page .screenshot-grid figure { margin: 0; overflow: hidden; border: 1px solid #dce4de; border-radius: 0.75rem; background: white; }
 .projects-page .screenshot-grid img { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: contain; background: #edf1ee; }
 .projects-page .screenshot-grid figcaption { display: flex; justify-content: space-between; gap: 1rem; padding: 0.75rem 1rem; color: #476856; font-size: 0.85rem; }
+.projects-page .task-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
+.projects-page .task-link { color: #476856; }
+
+.recording-bar { position: sticky; top: 0; z-index: 20; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem 1.5rem; padding: 0.75rem 1.5rem; border-bottom: 1px solid #bac8be; background: #eef6f0; color: #202a25; font-size: 0.875rem; }
+.recording-bar-details, .recording-bar nav { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
+.recording-bar-details > span:first-child { font-weight: 600; }
+.recording-bar a { color: #285b40; text-decoration: underline; text-underline-offset: 3px; }
+.recording-bar button { border: 0; border-radius: 0.4rem; padding: 0.5rem 0.75rem; background: #285b40; color: white; font-weight: 600; cursor: pointer; }
+.recording-bar button:disabled { opacity: 0.55; cursor: default; }
+.recording-bar .error { width: 100%; margin: 0; color: #a13333; }
+.recording-bar :focus-visible { outline: 3px solid #70a88c; outline-offset: 3px; }
+.recording-bar .duration { font-variant-numeric: tabular-nums; }
 
 @media (max-width: 480px) {
   .projects-page { margin: 2rem auto; }

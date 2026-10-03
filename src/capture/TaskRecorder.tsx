@@ -1,43 +1,52 @@
-import { useBlocker, useNavigate } from '@tanstack/react-router'
+import { Link, useBlocker, useNavigate } from '@tanstack/react-router'
 import { useMutation } from 'convex/react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { z } from 'zod'
 import { api } from '../../convex/_generated/api'
-import type { Id } from '../../convex/_generated/dataModel'
+import type { Doc, Id } from '../../convex/_generated/dataModel'
 import { clearEventLog, emitEvent } from '../shared/bus'
 import { useSession } from '../shared/session'
 import { formatDuration, openScreenCapture } from './screen'
 import type { ScreenRecording } from './screen'
 
 const uploadResponse = z.object({ storageId: z.string() })
-type Phase = 'idle' | 'starting' | 'recording' | 'saving' | 'save-failed'
-type ActiveTask = { taskId: Id<'tasks'>; recording: ScreenRecording; saving: boolean }
+type Project = Pick<Doc<'projects'>, '_id' | 'name'>
+type Task = { project: Project; taskId: Id<'tasks'>; startedAt: number }
+type RecordingState =
+  | { kind: 'idle' }
+  | { kind: 'starting'; project: Project }
+  | { kind: 'recording' | 'saving' | 'save-failed'; task: Task }
+type ActiveTask = { task: Task; recording: ScreenRecording; saving: boolean }
+const TaskRecordingContext = createContext<ReturnType<typeof useRecordingController> | null>(null)
 
-export function TaskRecorder({ projectId, onBusyChange }: {
-  projectId: Id<'projects'>
-  onBusyChange: (busy: boolean) => void
-}) {
+export function TaskRecordingProvider({ children }: { children: ReactNode }) {
+  const recording = useRecordingController()
+  return <TaskRecordingContext.Provider value={recording}>{children}</TaskRecordingContext.Provider>
+}
+
+export function useTaskRecording() {
+  const recording = useContext(TaskRecordingContext)
+  if (!recording) throw new Error('TaskRecordingProvider is missing.')
+  return recording
+}
+
+function useRecordingController() {
   const createTask = useMutation(api.tasks.create)
   const generateUploadUrl = useMutation(api.tasks.generateUploadUrl)
   const addScreenshot = useMutation(api.tasks.addScreenshot)
   const finishTask = useMutation(api.tasks.finish)
   const navigate = useNavigate()
-  const [phase, setPhase] = useState<Phase>('idle')
+  const [state, setState] = useState<RecordingState>({ kind: 'idle' })
   const [error, setError] = useState('')
   const [savedCount, setSavedCount] = useState(0)
-  const [startedAt, setStartedAt] = useState(0)
   const active = useRef<ActiveTask | null>(null)
   const pendingCapture = useRef<Awaited<ReturnType<typeof openScreenCapture>> | null>(null)
   const mounted = useRef(true)
-  const busy = phase !== 'idle'
+  const busy = state.kind !== 'idle'
 
-  useEffect(() => onBusyChange(busy), [busy, onBusyChange])
   useBlocker({
-    shouldBlockFn: () => {
-      if (!active.current && !pendingCapture.current && phase !== 'starting') return false
-      setError('Finish and save this task before leaving the project.')
-      return true
-    },
+    shouldBlockFn: () => false,
     enableBeforeUnload: busy,
   })
 
@@ -45,23 +54,23 @@ export function TaskRecorder({ projectId, onBusyChange }: {
     const task = active.current
     if (!task || task.saving) return
     task.saving = true
-    setPhase('saving')
+    setState({ kind: 'saving', task: task.task })
     setError('')
     try {
       const result = await task.recording.finish()
-      await finishTask({ taskId: task.taskId, ...result })
+      await finishTask({ taskId: task.task.taskId, ...result })
       useSession.getState().setT0(null)
-      emitEvent({ source: 'system', kind: 'action', t: result.durationMs, meta: { action: 'task_finished', taskId: task.taskId } })
+      emitEvent({ source: 'system', kind: 'action', t: result.durationMs, meta: { action: 'task_finished', taskId: task.task.taskId } })
       active.current = null
-      setPhase('idle')
-      await navigate({ to: '/projects/$projectId/tasks/$taskId', params: { projectId, taskId: task.taskId } })
+      setState({ kind: 'idle' })
+      await navigate({ to: '/projects/$projectId/tasks/$taskId', params: { projectId: task.task.project._id, taskId: task.task.taskId } })
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Could not save the task.')
-      setPhase(active.current ? 'save-failed' : 'idle')
+      setState(active.current ? { kind: 'save-failed', task: task.task } : { kind: 'idle' })
     } finally {
       task.saving = false
     }
-  }, [finishTask, navigate, projectId])
+  }, [finishTask, navigate])
 
   useEffect(() => {
     mounted.current = true
@@ -70,16 +79,16 @@ export function TaskRecorder({ projectId, onBusyChange }: {
       pendingCapture.current?.close()
       const task = active.current
       if (task) {
-        void task.recording.finish().then((result) => finishTask({ taskId: task.taskId, ...result }))
-          .catch((error: unknown) => console.error('Could not finish the task after leaving the page.', error))
+        void task.recording.finish().then((result) => finishTask({ taskId: task.task.taskId, ...result }))
+          .catch((error: unknown) => console.error('Could not finish the task after closing the app.', error))
         useSession.getState().setT0(null)
       }
     }
   }, [finishTask])
 
-  async function start() {
+  async function start(project: Project) {
     if (busy) return
-    setPhase('starting')
+    setState({ kind: 'starting', project })
     setError('')
     setSavedCount(0)
     let taskId: Id<'tasks'> | null = null
@@ -90,7 +99,7 @@ export function TaskRecorder({ projectId, onBusyChange }: {
         capture.close()
         return
       }
-      taskId = await createTask({ projectId, startedAt: capture.startedAt })
+      taskId = await createTask({ projectId: project._id, startedAt: capture.startedAt })
       const createdTaskId = taskId
       if (!mounted.current) {
         capture.close()
@@ -115,13 +124,14 @@ export function TaskRecorder({ projectId, onBusyChange }: {
         },
         onStopped: () => { void finish() },
       })
-      active.current = { taskId, recording, saving: false }
-      setStartedAt(capture.startedAt)
+      const task = { project, taskId, startedAt: capture.startedAt }
+      active.current = { task, recording, saving: false }
       useSession.getState().newSession()
+      useSession.getState().setMode('capture')
       useSession.getState().setT0(capture.startedAt)
       clearEventLog()
       emitEvent({ source: 'system', kind: 'action', meta: { action: 'task_started', taskId } })
-      setPhase('recording')
+      setState({ kind: 'recording', task })
     } catch (failure) {
       pendingCapture.current?.close()
       const message = failure instanceof Error ? failure.message : 'Could not start screen capture.'
@@ -133,37 +143,96 @@ export function TaskRecorder({ projectId, onBusyChange }: {
           setError(`${message} Could not finalize the task: ${error instanceof Error ? error.message : String(error)}`)
         }
       }
-      setPhase('idle')
+      setState({ kind: 'idle' })
     } finally {
       pendingCapture.current = null
     }
   }
 
+  return { state, error, savedCount, start, finish }
+}
+
+export function TaskRecorder({ project }: { project: Project }) {
+  const { state, error, savedCount, start } = useTaskRecording()
+  const busy = state.kind !== 'idle'
+  const owner = state.kind === 'idle' ? null : state.kind === 'starting' ? state.project : state.task.project
+
+  if (owner && owner._id !== project._id) {
+    return (
+      <section className="panel recording-panel" aria-label="Current task">
+        <h2>A task is already in progress</h2>
+        <p className="muted">Finish the task in {owner.name} before starting another.</p>
+        <ReturnToTaskLink />
+      </section>
+    )
+  }
+
   return (
     <section className="panel recording-panel" aria-labelledby="recording-heading">
       <h2 id="recording-heading">{busy ? 'Current task' : 'Record a task'}</h2>
-      {phase === 'recording' ? (
+      {state.kind === 'recording' ? (
         <div className="recording-status" role="status">
           <span className="recording-dot" aria-hidden="true" />
-          Recording your screen · <RecordingClock startedAt={startedAt} />
+          Recording your screen · <RecordingClock startedAt={state.task.startedAt} />
         </div>
       ) : (
         <p className="muted">
-          {phase === 'saving' ? 'Screen capture stopped. Finishing screenshot uploads and saving your task…'
-            : phase === 'save-failed' ? 'Screen capture stopped. Retry saving to open your summary.'
+          {state.kind === 'saving' ? 'Screen capture stopped. Finishing screenshot uploads and saving your task…'
+            : state.kind === 'save-failed' ? 'Screen capture stopped. Retry saving to open your summary.'
               : 'Share an entire screen to save a screenshot every 2 seconds. Click Done when you finish.'}
         </p>
       )}
       {busy && <p className="muted">{savedCount} screenshots saved</p>}
-      <button
-        disabled={phase === 'starting' || phase === 'saving'}
-        onClick={() => { void (phase === 'idle' ? start() : finish()) }}
-      >
-        {phase === 'idle' ? 'New task' : phase === 'starting' ? 'Starting…'
-          : phase === 'saving' ? 'Saving…' : phase === 'save-failed' ? 'Retry saving' : 'Done'}
-      </button>
+      <div className="task-actions">
+        {busy ? <FinishTaskButton /> : <button onClick={() => { void start(project) }}>New task</button>}
+        <Link to="/" className="task-link">Example ERP</Link>
+      </div>
       {error && <p className="error" role="alert">{error}</p>}
     </section>
+  )
+}
+
+export function ActiveTaskBar() {
+  const { state, savedCount, error } = useTaskRecording()
+  if (state.kind === 'idle') return null
+  const project = state.kind === 'starting' ? state.project : state.task.project
+
+  return (
+    <aside className="recording-bar" aria-label="Active task">
+      <div className="recording-bar-details" role="status">
+        <span>
+          {state.kind === 'recording' ? 'Recording' : state.kind === 'starting' ? 'Starting task' : state.kind === 'saving' ? 'Saving task' : 'Task needs saving'}
+          {' · '}{project.name}
+        </span>
+        {state.kind === 'recording' && <RecordingClock startedAt={state.task.startedAt} />}
+        <span>{savedCount} screenshots saved</span>
+      </div>
+      <nav aria-label="Recording navigation">
+        <Link to="/">Example ERP</Link>
+        <ReturnToTaskLink />
+        <FinishTaskButton />
+      </nav>
+      {error && <p className="error" role="alert">{error}</p>}
+    </aside>
+  )
+}
+
+function ReturnToTaskLink() {
+  const { state } = useTaskRecording()
+  if (state.kind === 'idle') return null
+  return state.kind === 'starting' ? (
+    <Link to="/projects/$projectId" params={{ projectId: state.project._id }}>Return to task</Link>
+  ) : (
+    <Link to="/projects/$projectId/tasks/$taskId" params={{ projectId: state.task.project._id, taskId: state.task.taskId }}>Return to task</Link>
+  )
+}
+
+function FinishTaskButton() {
+  const { state, finish } = useTaskRecording()
+  return (
+    <button disabled={state.kind === 'starting' || state.kind === 'saving'} onClick={() => { void finish() }}>
+      {state.kind === 'starting' ? 'Starting…' : state.kind === 'saving' ? 'Saving…' : state.kind === 'save-failed' ? 'Retry saving' : 'Done'}
+    </button>
   )
 }
 
