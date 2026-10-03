@@ -1,5 +1,6 @@
 import { ConvexError, v } from 'convex/values'
 import { mutation, query } from './_generated/server'
+import { deleteTask } from './taskCleanup'
 
 export const list = query({
   args: { projectId: v.string() },
@@ -39,6 +40,18 @@ export const create = mutation({
     if (!await ctx.db.get('projects', projectId)) throw new ConvexError('Project not found.')
     if (!Number.isFinite(startedAt) || startedAt < 0) throw new ConvexError('Invalid start time.')
     return ctx.db.insert('tasks', { projectId, startedAt, completion: null })
+  },
+})
+
+export const remove = mutation({
+  args: { taskId: v.id('tasks') },
+  returns: v.null(),
+  handler: async (ctx, { taskId }) => {
+    const task = await ctx.db.get('tasks', taskId)
+    if (!task) throw new ConvexError('Task not found.')
+    if (!task.completion) throw new ConvexError('Finish this task before deleting it.')
+    await deleteTask(ctx, taskId)
+    return null
   },
 })
 

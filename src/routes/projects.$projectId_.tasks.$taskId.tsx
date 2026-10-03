@@ -1,8 +1,6 @@
-import { convexQuery } from '@convex-dev/react-query'
-import { useSuspenseQuery } from '@tanstack/react-query'
+import { convexQuery, useConvexMutation } from '@convex-dev/react-query'
+import { useMutation, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { useMutation } from 'convex/react'
-import { useState } from 'react'
 import { api } from '../../convex/_generated/api'
 import { formatDuration } from '../capture/screen'
 import { RecordedTime } from '../capture/RecordedTime'
@@ -13,9 +11,12 @@ export const Route = createFileRoute('/projects/$projectId_/tasks/$taskId')({ co
 function TaskSummary() {
   const { projectId, taskId } = Route.useParams()
   const { data: task } = useSuspenseQuery(convexQuery(api.tasks.get, { projectId, taskId }))
-  const finishTask = useMutation(api.tasks.finish)
-  const [isFinishing, setIsFinishing] = useState(false)
-  const [error, setError] = useState('')
+  const finishTask = useMutation({ mutationFn: useConvexMutation(api.tasks.finish) })
+  const navigate = Route.useNavigate()
+  const removeTask = useMutation({
+    mutationFn: useConvexMutation(api.tasks.remove),
+    onSuccess: () => navigate({ to: '/projects/$projectId', params: { projectId } }),
+  })
   const { state } = useTaskRecording()
   const isActiveTask = 'task' in state && state.task.taskId === taskId
 
@@ -39,19 +40,21 @@ function TaskSummary() {
             {!task.completion && !isActiveTask && (
               <>
                 <p className="muted">This task has not been finalized. If its recording page was closed, you can end it at the last saved screenshot.</p>
-                <button disabled={isFinishing} onClick={async () => {
-                  setIsFinishing(true)
-                  setError('')
-                  try {
-                    const lastScreenshot = task.screenshots.at(-1)
-                    await finishTask({ taskId: task._id, durationMs: lastScreenshot?.offsetMs ?? 0, error: 'Recording interrupted. Duration ends at the last saved screenshot.' })
-                  } catch (failure) {
-                    setError(failure instanceof Error ? failure.message : 'Could not finish this task.')
-                  } finally {
-                    setIsFinishing(false)
-                  }
-                }}>{isFinishing ? 'Saving…' : 'End interrupted task'}</button>
-                {error && <p className="error" role="alert">{error}</p>}
+                <button disabled={finishTask.isPending} onClick={() => finishTask.mutate({
+                  taskId: task._id,
+                  durationMs: task.screenshots.at(-1)?.offsetMs ?? 0,
+                  error: 'Recording interrupted. Duration ends at the last saved screenshot.',
+                })}>{finishTask.isPending ? 'Saving…' : 'End interrupted task'}</button>
+                {finishTask.error && <p className="error" role="alert">{finishTask.error.message}</p>}
+              </>
+            )}
+            {task.completion && (
+              <>
+                <p className="muted">Deleting this task permanently removes all its screenshots.</p>
+                <button className="danger" disabled={isActiveTask || removeTask.isPending} onClick={() => removeTask.mutate({ taskId: task._id })}>
+                  {removeTask.isPending ? 'Deleting…' : 'Delete task'}
+                </button>
+                {removeTask.error && <p className="error" role="alert">{removeTask.error.message}</p>}
               </>
             )}
           </section>
