@@ -19,7 +19,25 @@ npm run build
 npm run preview
 ```
 
-The build runs TypeScript checks before bundling. Preview serves the production build locally.
+The build runs TypeScript checks before bundling. Preview serves the production build locally. `npm test` runs the unit tests (Vitest).
+
+Copy `.env.example` to `.env` and fill in the keys. Keys are read with `process.env` in server routes only.
+
+## Project layout
+
+| Path | Owner | What |
+|---|---|---|
+| `src/shared/` | P1 | Shared contract: types, event bus, session store, element registry, input activity |
+| `src/erp/` | P1 | ProcureFlow mini ERP, seed invoices, guardrail engine, Teach step tracker |
+| `src/server/anthropic.ts` | P1 | Server-only Anthropic client and `generateJson()` helper |
+| `src/agent/` | P2 | ElevenLabs voice agents, pause detector, question policy, tutor |
+| `src/capture/`, `src/debrief/` | P3 | Screen share, frames, recording, clips, debrief window |
+| `src/app/`, `src/mascot/`, `src/workmap/`, `src/teach-ui/` | P4 | App shell, mascot, Work Map view, Teach UI |
+| `src/routes/api/` | all | Server routes (`POST /api/frame`, …) |
+
+Rules: emit everything that happens through `emitEvent()` from `src/shared/bus.ts`. Register anything the mascot should point at with `useTarget(id)` from `src/erp/useTarget.ts`. Touch browser-only APIs (`window`, `localStorage`, screen capture, ElevenLabs) only in `useEffect` or event handlers, because pages render on the server first.
+
+In dev, the event panel (bottom left) shows every `AppEvent` live. Its **Teach (fixture)** button loads a hand-written Work Map from `src/erp/fixtures.ts`, so the guardrails can be tested before the real pipeline exists.
 
 Edit `src/routes/index.tsx` for the home page and `src/routes/__root.tsx` for the shared document layout. Add routes under `src/routes`; TanStack Router generates `src/routeTree.gen.ts` automatically.
 

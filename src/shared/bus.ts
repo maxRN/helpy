@@ -1,0 +1,33 @@
+import mitt from 'mitt'
+import { session } from './session'
+import type { AppEvent } from './types'
+
+type BusEvents = {
+  event: AppEvent
+}
+
+export const bus = mitt<BusEvents>()
+
+const log: AppEvent[] = []
+let counter = 0
+
+/** Fills in id and t (ms since session.t0), stores the event in the log and broadcasts it. */
+export function emitEvent(partial: Omit<AppEvent, 'id' | 't'> & { t?: number }): AppEvent {
+  const now = Date.now()
+  const t0 = session().t0
+  const event: AppEvent = {
+    ...partial,
+    id: `e${++counter}-${now.toString(36)}`,
+    t: partial.t ?? (t0 === null ? 0 : now - t0),
+  }
+  log.push(event)
+  bus.emit('event', event)
+  return event
+}
+
+/** Everything emitted since the page loaded (or since clearEventLog). */
+export const getEventLog = (): readonly AppEvent[] => log
+
+export function clearEventLog() {
+  log.length = 0
+}
