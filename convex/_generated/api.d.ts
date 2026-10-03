@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as debrief from "../debrief.js";
 import type * as events from "../events.js";
 import type * as invoiceValidators from "../invoiceValidators.js";
 import type * as invoices from "../invoices.js";
@@ -24,6 +25,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  debrief: typeof debrief;
   events: typeof events;
   invoiceValidators: typeof invoiceValidators;
   invoices: typeof invoices;

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { PauseLogEntry } from '../agent/pause'
+import { openDebrief } from '../debrief/DebriefPanel'
 import { useMascot } from '../shared/mascot'
 import { useSession } from '../shared/session'
 import { installVoiceBridge, resetVoiceClock } from './voiceBridge'
@@ -112,6 +113,10 @@ export function VoicePanel() {
           {offRecord ? 'Off the record' : 'On the record'}
         </button>
       </div>
+
+      <button type="button" onClick={openDebrief} className={`${btn} w-fit border-sky-700 bg-sky-700 text-white hover:bg-sky-800`}>
+        Open debrief
+      </button>
 
       {bubble ? <p className="rounded-sm bg-sky-50 px-2 py-1.5 text-sky-900">“{bubble}”</p> : null}
       {clipRequest ? <p className="text-[12px] text-slate-600">Tutor wants to replay step {clipRequest.stepId} (clip player comes with P4).</p> : null}

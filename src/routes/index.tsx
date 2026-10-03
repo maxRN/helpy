@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
+import { DebriefPanel } from '../debrief/DebriefPanel'
 import { DebugPanel } from '../erp/DebugPanel'
 import { ErpApp } from '../erp/ErpApp'
 import { VoicePanel } from '../integration/VoicePanel'
@@ -14,6 +15,7 @@ function Home() {
       </nav>
       <ErpApp />
       <VoicePanel />
+      <DebriefPanel />
       {import.meta.env.DEV ? <DebugPanel /> : null}
     </div>
   )
