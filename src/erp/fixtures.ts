@@ -50,6 +50,16 @@ export const FIXTURE_GUARDRAILS: Guardrail[] = [
     severity: 'block',
     stepId: 'S6',
   },
+  {
+    // From the debrief (a case Sabine never had on screen), not from the live task.
+    id: 'G5',
+    text: 'Unknown supplier (not in the vendor master): do not post, hold it and ask the controller.',
+    quote: { text: "If they're not in the vendor master, I don't pay. I hold it and ask Weber.", t: 610_000, speaker: 'expert' },
+    when: [{ field: 'supplierVerified', op: 'eq', value: false }],
+    require: [{ field: 'status', op: 'in', value: ['on_hold', 'awaiting_approval'] }],
+    severity: 'block',
+    stepId: 'S8',
+  },
 ]
 
 const clip = (t: number) => ({ start: Math.max(0, t - 8000), end: t + 8000 })
@@ -61,7 +71,8 @@ export const FIXTURE_STEPS: Step[] = [
   { id: 'S4', index: 4, title: 'Enter the asset number', targetId: 'field-assetNumber', clip: clip(201_000), decision: 'Asset number from the PO entered', reason: { text: 'No asset number, no capex booking. Never.', t: 201_000, speaker: 'expert' }, guardrailIds: ['G2'], isJudgmentCall: false, confidence: 0.85 },
   { id: 'S5', index: 5, title: 'Hold known December double-billers', targetId: 'action-hold', clip: clip(265_000), decision: 'Kramer invoice put on hold', reason: { text: 'Kramer bills us twice every December, so I hold it and Weber releases it.', t: 265_000, speaker: 'expert' }, guardrailIds: ['G3'], isJudgmentCall: true, confidence: 0.75 },
   { id: 'S6', index: 6, title: 'Request a second approval for intercompany invoices from Brno', targetId: 'action-request_approval', clip: clip(330_000), decision: 'Second approval requested from J. Novak', reason: { text: 'Anything from Brno gets a second pair of eyes.', t: 330_000, speaker: 'expert' }, guardrailIds: ['G4'], isJudgmentCall: true, confidence: 0.8 },
-  { id: 'S7', index: 7, title: 'Post the invoice', targetId: 'action-post', clip: clip(360_000), decision: 'Invoice posted', guardrailIds: [], isJudgmentCall: false, confidence: 0.95 },
+  { id: 'S8', index: 7, title: 'Hold invoices from suppliers not in the vendor master', targetId: 'action-hold', clip: clip(600_000), decision: 'Not seen live; rule from the debrief', reason: { text: "If they're not in the vendor master, I don't pay. I hold it and ask Weber.", t: 610_000, speaker: 'expert' }, guardrailIds: ['G5'], isJudgmentCall: true, confidence: 0.7 },
+  { id: 'S7', index: 8, title: 'Post the invoice', targetId: 'action-post', clip: clip(360_000), decision: 'Invoice posted', guardrailIds: [], isJudgmentCall: false, confidence: 0.95 },
 ]
 
 export const FIXTURE_WORKMAP: WorkMap = {

@@ -15,6 +15,7 @@ export interface Invoice {
   supplierName: string
   supplierCountry: string // ISO code, e.g. "US", "CZ"
   supplierAddress: string
+  supplierVerified: boolean // false: supplier is not in the vendor master yet
   invoiceDate: string // ISO date
   dueDate: string
   month: number // 1–12, derived from invoiceDate, used by guardrails
@@ -28,6 +29,7 @@ export interface Invoice {
   approver: string
   approvalRequested: boolean
   status: InvoiceStatus
+  note: string // reason typed when holding or asking for approval; visible on screen for the vision model
   // PII, masked before frames go to a model (data-pii)
   bankAccount: string
   contactName: string

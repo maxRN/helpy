@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { COMPANY_NAME } from './seed'
 import {
   APPROVERS,
@@ -8,7 +9,7 @@ import {
   type Invoice,
 } from './model'
 import { StatusPill } from './StatusPill'
-import { actionTarget, PREVIEW_TARGET, useErp, type ErpAction } from './store'
+import { actionTarget, PREVIEW_TARGET, useErp, VENDOR_TARGET, type ErpAction } from './store'
 import { SelectField, TextField } from './TrackedField'
 import { useTarget } from './useTarget'
 
@@ -89,19 +90,105 @@ const ACTIONS: { action: ErpAction; label: string; className: string }[] = [
   { action: 'post', label: 'Post', className: 'border-sky-800 bg-sky-700 text-white hover:bg-sky-800' },
 ]
 
-function ActionButton({ invoiceId, action, label, className, disabled }: (typeof ACTIONS)[number] & { invoiceId: string; disabled: boolean }) {
-  const commit = useErp((s) => s.commit)
+function ActionButton({
+  action,
+  label,
+  className,
+  disabled,
+  active,
+  onClick,
+}: (typeof ACTIONS)[number] & { disabled: boolean; active: boolean; onClick: () => void }) {
   const ref = useTarget(actionTarget(action))
   return (
     <button
       ref={ref}
       type="button"
       disabled={disabled}
-      onClick={() => commit(invoiceId, action)}
-      className={`h-8 rounded-sm border px-4 text-[13px] font-medium disabled:cursor-not-allowed disabled:opacity-40 ${className}`}
+      aria-pressed={active}
+      onClick={onClick}
+      className={`h-8 rounded-sm border px-4 text-[13px] font-medium disabled:cursor-not-allowed disabled:opacity-40 ${active ? 'ring-2 ring-sky-500' : ''} ${className}`}
     >
       {label}
     </button>
+  )
+}
+
+const NOTE_PROMPT: Record<Exclude<ErpAction, 'post'>, { label: string; placeholder: string; confirm: string }> = {
+  hold: { label: 'Reason for hold', placeholder: 'e.g. possible duplicate, ask controller', confirm: 'Confirm hold' },
+  request_approval: { label: 'Note for the approver', placeholder: 'e.g. intercompany, second check', confirm: 'Send for approval' },
+}
+
+/** Post commits at once; Hold and 2nd approval first ask for a short reason (optional, Enter confirms). */
+function Actions({ invoiceId, locked }: { invoiceId: string; locked: boolean }) {
+  const commit = useErp((s) => s.commit)
+  const [pending, setPending] = useState<Exclude<ErpAction, 'post'> | null>(null)
+  const [note, setNote] = useState('')
+
+  const confirm = () => {
+    if (!pending) return
+    commit(invoiceId, pending, note)
+    setPending(null)
+    setNote('')
+  }
+
+  return (
+    <div className="mt-1 flex flex-col gap-2 border-t border-slate-200 pt-3">
+      <div className="flex flex-wrap gap-2">
+        {ACTIONS.map((a) => (
+          <ActionButton
+            key={a.action}
+            {...a}
+            disabled={locked}
+            active={pending === a.action}
+            onClick={() => {
+              if (a.action === 'post') {
+                setPending(null)
+                commit(invoiceId, 'post')
+              } else {
+                setPending(a.action)
+              }
+            }}
+          />
+        ))}
+      </div>
+      {pending ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-sm bg-slate-50 p-2">
+          <label htmlFor="action-note" className="text-[12px] font-medium text-slate-600">
+            {NOTE_PROMPT[pending].label}
+          </label>
+          <input
+            id="action-note"
+            autoFocus
+            value={note}
+            placeholder={NOTE_PROMPT[pending].placeholder}
+            onChange={(e) => setNote(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') confirm()
+              if (e.key === 'Escape') setPending(null)
+            }}
+            className="h-8 min-w-0 flex-1 rounded-sm border border-slate-300 bg-white px-2 text-[13px] outline-none focus:border-sky-600"
+          />
+          <button type="button" onClick={confirm} className="h-8 rounded-sm bg-slate-800 px-3 text-[13px] font-medium text-white hover:bg-slate-900">
+            {NOTE_PROMPT[pending].confirm}
+          </button>
+          <button type="button" onClick={() => setPending(null)} className="text-[12px] text-slate-600 hover:underline">
+            Cancel
+          </button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function VendorStatus({ verified }: { verified: boolean }) {
+  const ref = useTarget(VENDOR_TARGET)
+  return (
+    <span
+      ref={ref}
+      className={`inline-flex w-fit rounded-sm px-1.5 py-0.5 text-[12px] font-medium ${verified ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-100 text-amber-900'}`}
+    >
+      {verified ? 'Verified' : 'Not in vendor master'}
+    </span>
   )
 }
 
@@ -157,6 +244,10 @@ export function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
           <dl className="grid grid-cols-[8.5rem_1fr] gap-x-3 gap-y-1 text-[13px]">
             <dt className="text-[12px] font-medium text-slate-600">Supplier ID</dt>
             <dd className="font-mono">{invoice.supplierId}</dd>
+            <dt className="text-[12px] font-medium text-slate-600">Vendor master</dt>
+            <dd>
+              <VendorStatus verified={invoice.supplierVerified} />
+            </dd>
             <dt className="text-[12px] font-medium text-slate-600">Country</dt>
             <dd>{invoice.supplierCountry}</dd>
             <dt className="text-[12px] font-medium text-slate-600">Amount</dt>
@@ -197,13 +288,15 @@ export function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
             disabled={locked}
           />
 
+          {invoice.note ? (
+            <div className="rounded-sm bg-amber-50 px-2 py-1.5 text-[12px] text-amber-900">
+              <span className="font-medium">{invoice.status === 'on_hold' ? 'Hold reason' : 'Note'}:</span> {invoice.note}
+            </div>
+          ) : null}
+
           <BlockedBanner invoiceId={invoiceId} />
 
-          <div className="mt-1 flex flex-wrap gap-2 border-t border-slate-200 pt-3">
-            {ACTIONS.map((a) => (
-              <ActionButton key={a.action} {...a} invoiceId={invoiceId} disabled={locked} />
-            ))}
-          </div>
+          <Actions invoiceId={invoiceId} locked={locked} />
         </div>
       </div>
     </section>

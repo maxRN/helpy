@@ -28,6 +28,13 @@ describe('ERP store', () => {
     expect(erp().invoices['4471'].account).toBe('capex')
   })
 
+  it('keeps the hold reason on the invoice and in the event text', () => {
+    erp().commit('4472', 'hold', '  Kramer double-bills in December  ')
+    expect(erp().invoices['4472'].note).toBe('Kramer double-bills in December')
+    const e = getEventLog().at(-1)!
+    expect(e).toMatchObject({ kind: 'action', action: 'hold', text: 'Kramer double-bills in December' })
+  })
+
   it('does not enforce guardrails on the expert in Capture mode', () => {
     useSession.setState({ workMap: FIXTURE_WORKMAP })
     expect(erp().commit('4471', 'post').ok).toBe(true)

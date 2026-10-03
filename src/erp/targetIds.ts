@@ -7,3 +7,4 @@ export const fieldTarget = (field: EditableField) => `field-${field}`
 export const actionTarget = (action: ErpAction) => `action-${action}`
 export const rowTarget = (invoiceId: string) => `row-${invoiceId}`
 export const PREVIEW_TARGET = 'invoice-preview'
+export const VENDOR_TARGET = 'vendor-status'

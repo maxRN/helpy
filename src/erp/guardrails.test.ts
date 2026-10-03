@@ -45,6 +45,12 @@ describe('evaluateGuardrails on the demo invoices', () => {
     expect(ids({ ...byId('5105'), status: 'posted' })).toEqual([])
   })
 
+  it('5106: unknown supplier may be held but not posted', () => {
+    expect(ids({ ...byId('5106'), status: 'posted' })).toEqual(['G5'])
+    expect(ids({ ...byId('5106'), status: 'on_hold' })).toEqual([])
+    expect(ids({ ...byId('5106'), approvalRequested: true, status: 'awaiting_approval' })).toEqual([])
+  })
+
   it('Kramer outside December is not held', () => {
     expect(ids({ ...byId('4472'), month: 11, status: 'posted' })).toEqual([])
   })

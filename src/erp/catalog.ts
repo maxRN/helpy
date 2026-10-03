@@ -4,7 +4,7 @@
 import { INVOICE_FIELDS, type InvoiceField } from '../shared/types'
 import { CATEGORIES, COST_CENTERS } from './model'
 import { ALL_INVOICES } from './seed'
-import { actionTarget, fieldTarget, PREVIEW_TARGET } from './targetIds'
+import { actionTarget, fieldTarget, PREVIEW_TARGET, VENDOR_TARGET } from './targetIds'
 
 export interface TargetInfo {
   id: string
@@ -14,6 +14,7 @@ export interface TargetInfo {
 
 export const TARGETS: TargetInfo[] = [
   { id: PREVIEW_TARGET, label: 'Invoice document', description: 'The supplier invoice as a document: supplier, address, invoice and PO number, line items, total, remit-to.' },
+  { id: VENDOR_TARGET, label: 'Vendor master status', description: 'Shows whether the supplier is verified in the vendor master or unknown.' },
   { id: fieldTarget('category'), label: 'Category', description: 'What was bought: equipment, raw materials, services, software, office supplies, intercompany.' },
   { id: fieldTarget('costCenter'), label: 'Cost center', description: 'Cost center code. It decides the GL account: 0400 is capex, every other code is opex.' },
   { id: fieldTarget('assetNumber'), label: 'Asset no.', description: 'Fixed-asset number, needed for capex postings.' },
@@ -49,6 +50,7 @@ export const FIELD_VOCABULARY: Record<InvoiceField, FieldInfo> = {
   category: { type: 'string', description: 'What was bought.', values: CATEGORIES.map((c) => c.value) },
   supplierId: { type: 'string', description: 'Supplier id. Map supplier names to ids with the supplier list.', values: SUPPLIERS.map((s) => s.id) },
   supplierCountry: { type: 'string', description: 'ISO country code of the supplier.', values: [...new Set(SUPPLIERS.map((s) => s.country))] },
+  supplierVerified: { type: 'boolean', description: 'False when the supplier is not in the vendor master yet (a new or unknown supplier).' },
   month: { type: 'number', description: 'Month of the invoice date, 1–12 (December is 12).' },
   costCenter: { type: 'string', description: 'Cost center code.', values: COST_CENTERS.map((c) => c.code) },
   account: { type: 'string', description: 'GL account, derived from the cost center.', values: ['opex', 'capex'] },

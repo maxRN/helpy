@@ -53,6 +53,7 @@ export type InvoiceField =
   | 'category'
   | 'supplierId'
   | 'supplierCountry'
+  | 'supplierVerified'
   | 'month'
   | 'costCenter'
   | 'account'
@@ -65,6 +66,7 @@ export const INVOICE_FIELDS: InvoiceField[] = [
   'category',
   'supplierId',
   'supplierCountry',
+  'supplierVerified',
   'month',
   'costCenter',
   'account',

@@ -61,7 +61,7 @@ describe('startTeach', () => {
     vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: 'no key' }, { status: 502 })))
     const { warnings, workMap } = await startTeach(FIXTURE_WORKMAP)
     expect(warnings[0]).toContain('no key')
-    expect(workMap.guardrails).toHaveLength(4)
+    expect(workMap.guardrails).toHaveLength(FIXTURE_WORKMAP.guardrails.length)
     expect(session().mode).toBe('teach')
   })
 })

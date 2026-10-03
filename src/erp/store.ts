@@ -20,7 +20,8 @@ interface ErpState {
   blocked: Blocked | null
   open: (id: string | null) => void
   update: (id: string, field: EditableField, value: string) => void
-  commit: (id: string, action: ErpAction) => { ok: boolean; violations: Violation[] }
+  /** `note`: the reason typed for a hold or approval request (shown on screen, sent as the event text). */
+  commit: (id: string, action: ErpAction, note?: string) => { ok: boolean; violations: Violation[] }
   dismissBlocked: () => void
   reset: () => void
 }
@@ -32,12 +33,12 @@ const costCenterLabel = (code: string) => {
   return cc ? `${cc.code} ${cc.name} (${cc.account})` : code
 }
 
-function applyAction(inv: Invoice, action: ErpAction): Invoice {
+function applyAction(inv: Invoice, action: ErpAction, note: string): Invoice {
   switch (action) {
     case 'hold':
-      return { ...inv, status: 'on_hold' }
+      return { ...inv, status: 'on_hold', note }
     case 'request_approval':
-      return { ...inv, approvalRequested: true, status: 'awaiting_approval' }
+      return { ...inv, approvalRequested: true, status: 'awaiting_approval', note }
     case 'post':
       return { ...inv, status: 'posted' }
   }
@@ -73,10 +74,10 @@ export const useErp = create<ErpState>()(
         })
       },
 
-      commit: (id, action) => {
+      commit: (id, action, note = '') => {
         const inv = get().invoices[id]
         if (!inv) return { ok: false, violations: [] }
-        const proposed = applyAction(inv, action)
+        const proposed = applyAction(inv, action, note.trim())
 
         // Guardrails are only enforced on the trainee, and only when money moves.
         const { mode, workMap } = session()
@@ -108,7 +109,14 @@ export const useErp = create<ErpState>()(
         }
 
         set({ invoices: { ...get().invoices, [id]: proposed }, blocked: null })
-        emitEvent({ source: 'dom', kind: 'action', action, invoiceId: id, targetId: actionTarget(action) })
+        emitEvent({
+          source: 'dom',
+          kind: 'action',
+          action,
+          invoiceId: id,
+          targetId: actionTarget(action),
+          ...(proposed.note && action !== 'post' ? { text: proposed.note } : {}),
+        })
         return { ok: true, violations: [] }
       },
 
@@ -120,6 +128,8 @@ export const useErp = create<ErpState>()(
       name: 'sabine-erp',
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => ({ invoices: s.invoices }),
+      version: 2, // bump when the Invoice shape changes, so old saved invoices are dropped
+      migrate: () => ({ invoices: initialInvoices() }),
       skipHydration: true, // SSR: call useErp.persist.rehydrate() in a client useEffect
     },
   ),

@@ -23,7 +23,9 @@ export const anthropic = () => {
         // no .env file: fall through to the SDK's own credential lookup
       }
     }
-    client = new Anthropic()
+    // Keys that are not scoped to a workspace need the workspace id on every request.
+    const workspaceId = process.env.ANTHROPIC_WORKSPACE_ID
+    client = new Anthropic(workspaceId ? { defaultHeaders: { 'anthropic-workspace-id': workspaceId } } : {})
   }
   return client
 }

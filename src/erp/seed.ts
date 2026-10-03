@@ -12,6 +12,7 @@ interface SeedInput {
   supplierName: string
   supplierCountry?: string
   supplierAddress: string
+  supplierVerified?: boolean
   invoiceDate: string
   dueInDays?: number
   poNumber?: string
@@ -35,6 +36,7 @@ function invoice(s: SeedInput): Invoice {
     supplierName: s.supplierName,
     supplierCountry: s.supplierCountry ?? 'US',
     supplierAddress: s.supplierAddress,
+    supplierVerified: s.supplierVerified ?? true,
     invoiceDate: s.invoiceDate,
     dueDate: due.toISOString().slice(0, 10),
     month: date.getUTCMonth() + 1,
@@ -48,6 +50,7 @@ function invoice(s: SeedInput): Invoice {
     approver: '',
     approvalRequested: false,
     status: 'open',
+    note: '',
     bankAccount: s.bankAccount,
     contactName: s.contactName,
     contactEmail: s.contactEmail,
@@ -201,6 +204,22 @@ export const EXTRA_TEACH_INVOICES: Invoice[] = [
     contactName: 'Luis Ortega',
     contactEmail: 'invoices@northline.example',
     bankAccount: 'ACH 072000326 · 5530 1189 2207',
+    teachOnly: true,
+  }),
+  // Supplier not in the vendor master: Sabine never saw one, the rule comes from the debrief.
+  invoice({
+    id: '5106',
+    supplierId: 'SUP-9001',
+    supplierName: 'Apex Industrial Parts LLC',
+    supplierAddress: 'PO Box 4471, Wilmington, DE 19801',
+    supplierVerified: false,
+    invoiceDate: '2025-12-28',
+    lines: [{ description: 'Hydraulic pump repair kit', qty: 3, unitPrice: 640 }],
+    category: 'raw_materials',
+    costCenter: '4711',
+    contactName: 'Accounts Dept.',
+    contactEmail: 'payments@apex-parts.example',
+    bankAccount: 'ACH 031100209 · 0099 4410 7765',
     teachOnly: true,
   }),
 ]
