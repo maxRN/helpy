@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { DebugPanel } from '../erp/DebugPanel'
 import { ErpApp } from '../erp/ErpApp'
+import { VoicePanel } from '../integration/VoicePanel'
 
 export const Route = createFileRoute('/')({ component: Home })
 
@@ -12,6 +13,7 @@ function Home() {
         <Link to="/projects" className="font-medium text-indigo-700 hover:underline">Projects</Link>
       </nav>
       <ErpApp />
+      <VoicePanel />
       {import.meta.env.DEV ? <DebugPanel /> : null}
     </div>
   )
