@@ -37,12 +37,14 @@ export const jpegBlock = (base64: string): Anthropic.ImageBlockParam => ({
 })
 
 interface JsonOptions<T extends z.ZodType> {
-  model: ModelId
+  model: ModelId | (string & {}) // e.g. from an env override
   schema: T
   system?: string
   content: string | Anthropic.ContentBlockParam[]
   maxTokens?: number
   effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+  /** For latency-bound calls (e.g. a question during a pause): fail fast, no retries. */
+  timeoutMs?: number
 }
 
 /**
@@ -50,17 +52,20 @@ interface JsonOptions<T extends z.ZodType> {
  * so callers can catch once and fall back to their last good state.
  */
 export async function generateJson<T extends z.ZodType>(opts: JsonOptions<T>): Promise<z.infer<T>> {
-  const response = await anthropic().messages.parse({
-    model: opts.model,
-    max_tokens: opts.maxTokens ?? 16000,
-    ...(opts.system ? { system: opts.system } : {}),
-    messages: [{ role: 'user', content: opts.content }],
-    output_config: {
-      // Haiku 4.5 does not take effort; the newer models do.
-      ...(opts.effort && opts.model !== MODELS.fast ? { effort: opts.effort } : {}),
-      format: zodOutputFormat(opts.schema),
+  const response = await anthropic().messages.parse(
+    {
+      model: opts.model,
+      max_tokens: opts.maxTokens ?? 16000,
+      ...(opts.system ? { system: opts.system } : {}),
+      messages: [{ role: 'user', content: opts.content }],
+      output_config: {
+        // Haiku 4.5 does not take effort; the newer models do.
+        ...(opts.effort && !opts.model.startsWith('claude-haiku') ? { effort: opts.effort } : {}),
+        format: zodOutputFormat(opts.schema),
+      },
     },
-  })
+    opts.timeoutMs ? { timeout: opts.timeoutMs, maxRetries: 0 } : undefined,
+  )
 
   if (response.stop_reason === 'refusal') {
     throw new Error(`Model refused: ${response.stop_details?.category ?? 'unknown'}`)
