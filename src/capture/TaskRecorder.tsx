@@ -11,6 +11,7 @@ import { useSession } from '../shared/session'
 import { formatDuration, openScreenCapture } from './screen'
 import type { ScreenRecording } from './screen'
 import { analyzeScreenshot, loadOcrModel, useOcrModel } from './ocr'
+import { OCR_MODELS, OCR_MODEL } from './ocr-contract'
 
 const uploadResponse = z.object({ storageId: z.string() })
 type Project = Pick<Doc<'projects'>, '_id' | 'name'>
@@ -93,7 +94,7 @@ function useRecordingController() {
 
   async function start(project: Project, { stay = false }: { stay?: boolean } = {}) {
     if (busy) return
-    if (useOcrModel.getState().kind !== 'ready') {
+    if (useOcrModel.getState().state.kind !== 'ready') {
       setError('Wait for the local text recognition model to finish loading before starting a task.')
       return
     }
@@ -135,7 +136,7 @@ function useRecordingController() {
           try {
             const result = await analyzeScreenshot(blob)
             await annotateScreenshot({ screenshotId, ocr: { kind: 'completed', result } })
-            emitEvent({ source: 'system', kind: 'screenshot_analyzed', t: timestamps.offsetMs, meta: { taskId: createdTaskId, screenshotId, regions: result.regions.length } })
+            emitEvent({ source: 'system', kind: 'screenshot_analyzed', t: timestamps.offsetMs, meta: { taskId: createdTaskId, screenshotId, model: result.model, ...(result.model === OCR_MODEL ? { regions: result.regions.length } : {}) } })
           } catch (failure) {
             const message = failure instanceof Error ? failure.message : 'Could not recognize screenshot text.'
             await annotateScreenshot({ screenshotId, ocr: { kind: 'failed', error: message } })
@@ -175,7 +176,7 @@ function useRecordingController() {
 
 export function TaskRecorder({ project }: { project: Project }) {
   const { state, error, savedCount, start } = useTaskRecording()
-  const model = useOcrModel()
+  const { state: model, modelId } = useOcrModel()
   const busy = state.kind !== 'idle'
   const owner = state.kind === 'idle' ? null : state.kind === 'starting' ? state.project : state.task.project
 
@@ -212,7 +213,7 @@ export function TaskRecorder({ project }: { project: Project }) {
         <Link to="/" className="task-link">Example ERP</Link>
       </div>
       {error && <p className="error" role="alert">{error}</p>}
-      {!busy && model.kind === 'ready' && <p className="muted model-ready">Florence-2 is ready on this device. Text and positions will be saved with every screenshot.</p>}
+      {!busy && model.kind === 'ready' && <p className="muted model-ready">{OCR_MODELS[modelId].label} is ready on this device. {modelId === 'florence' ? 'Text and positions' : 'Extracted text'} will be saved with every screenshot.</p>}
     </section>
   )
 }

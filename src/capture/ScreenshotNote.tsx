@@ -1,10 +1,18 @@
 import type { Doc } from '../../convex/_generated/dataModel'
+import { SMOLVLM_MODEL } from './ocr-contract'
 
 export function ScreenshotNote({ ocr }: { ocr: Doc<'screenshots'>['ocr'] }) {
   if (!ocr) return <p className="screenshot-note muted">This screenshot was captured before text recognition was added.</p>
   if (ocr.kind === 'pending') return <p className="screenshot-note muted" role="status">Text recognition pending.</p>
   if (ocr.kind === 'failed') return <p className="screenshot-note error">Text recognition failed: {ocr.error}</p>
   const { result } = ocr
+  if (result.model === SMOLVLM_MODEL) return (
+    <details className="screenshot-note">
+      <summary>Text note</summary>
+      <p className="muted">SmolVLM-500M-Instruct · {result.width} × {result.height} pixels.</p>
+      {result.text ? <p className="ocr-text">{result.text}</p> : <p className="muted">No text detected.</p>}
+    </details>
+  )
   return (
     <details className="screenshot-note">
       <summary>Text note · {result.regions.length} regions</summary>

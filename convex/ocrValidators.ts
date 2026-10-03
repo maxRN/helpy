@@ -1,13 +1,19 @@
 import { v } from 'convex/values'
-import { OCR_MODEL, OCR_REVISION } from '../src/capture/ocr-contract'
+import { OCR_MODEL, OCR_REVISION, SMOLVLM_MODEL, SMOLVLM_REVISION } from '../src/capture/ocr-contract'
 
-export const ocrResult = v.object({
+export const ocrResult = v.union(v.object({
   model: v.literal(OCR_MODEL),
   revision: v.literal(OCR_REVISION),
   width: v.number(),
   height: v.number(),
   regions: v.array(v.object({ text: v.string(), quad: v.array(v.number()) })),
-})
+}), v.object({
+  model: v.literal(SMOLVLM_MODEL),
+  revision: v.literal(SMOLVLM_REVISION),
+  width: v.number(),
+  height: v.number(),
+  text: v.string(),
+}))
 export const screenshotAnnotation = v.union(
   v.object({ kind: v.literal('completed'), result: ocrResult }),
   v.object({ kind: v.literal('failed'), error: v.string() }),
