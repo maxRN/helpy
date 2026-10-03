@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { evaluateGuardrails } from './guardrails'
 import { FIXTURE_GUARDRAILS } from './fixtures'
 import { accountFor, type Invoice } from './model'
-import { DEMO_INVOICES, TEACH_INVOICE } from './seed'
+import { DEMO_INVOICES, TEACH_INVOICE, TEACH_INVOICES } from './seed'
 
-const byId = (id: string) => [...DEMO_INVOICES, TEACH_INVOICE].find((i) => i.id === id)!
+const byId = (id: string) => [...DEMO_INVOICES, ...TEACH_INVOICES].find((i) => i.id === id)!
 const ids = (inv: Invoice) => evaluateGuardrails(inv, FIXTURE_GUARDRAILS).map((v) => v.guardrail.id)
 const recode = (inv: Invoice, costCenter: string): Invoice => ({ ...inv, costCenter, account: accountFor(costCenter) })
 
@@ -37,6 +37,12 @@ describe('evaluateGuardrails on the demo invoices', () => {
 
   it('5102 (teach case): $7,200 equipment as opex is caught', () => {
     expect(ids({ ...TEACH_INVOICE, status: 'posted' })).toEqual(['G1'])
+  })
+
+  it('extra teach cases: Kramer held, Brno approved, small equipment passes', () => {
+    expect(ids({ ...byId('5103'), status: 'posted' })).toEqual(['G3'])
+    expect(ids({ ...byId('5104'), status: 'posted' })).toEqual(['G4'])
+    expect(ids({ ...byId('5105'), status: 'posted' })).toEqual([])
   })
 
   it('Kramer outside December is not held', () => {

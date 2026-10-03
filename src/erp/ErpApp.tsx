@@ -1,17 +1,47 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { installActivityTracker } from '../shared/activity'
+import { useSession } from '../shared/session'
 import { InvoiceDetail } from './InvoiceDetail'
 import { InvoiceInbox } from './InvoiceInbox'
 import { COMPANY_NAME } from './seed'
-import { installStepTracker } from './stepTracker'
+import { installStepTracker, resetStepTracker } from './stepTracker'
 import { useErp } from './store'
+
+/** Two clicks so nobody wipes the invoices by accident mid-demo. Keeps the Work Map and the event log. */
+function ResetDemoButton() {
+  const reset = useErp((s) => s.reset)
+  const [armed, setArmed] = useState(false)
+
+  useEffect(() => {
+    if (!armed) return
+    const timer = setTimeout(() => setArmed(false), 4000)
+    return () => clearTimeout(timer)
+  }, [armed])
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (!armed) return setArmed(true)
+        reset()
+        resetStepTracker()
+        setArmed(false)
+      }}
+      className={`rounded-sm px-2 py-0.5 text-[11px] ${armed ? 'bg-amber-400 text-slate-900' : 'text-slate-400 hover:text-white'}`}
+    >
+      {armed ? 'Click again to reset invoices' : 'Reset demo'}
+    </button>
+  )
+}
 
 /** The mini ERP ("ProcureFlow"). Mount it once inside the app shell. */
 export function ErpApp() {
   const openId = useErp((s) => s.openId)
+  const user = useSession((s) => (s.mode === 'teach' ? 'L. Hoffmann (new hire)' : 'S. Brandt'))
 
   useEffect(() => {
     void useErp.persist.rehydrate()
+    void useSession.persist.rehydrate()
     installActivityTracker()
     installStepTracker()
   }, [])
@@ -23,9 +53,12 @@ export function ErpApp() {
           <span className="text-[15px] font-semibold tracking-tight">ProcureFlow</span>
           <span className="text-[12px] text-slate-300">{COMPANY_NAME} · Accounts Payable</span>
         </div>
-        <div className="text-[12px] text-slate-300">
-          Posting period <span className="font-medium text-white">Dec 2025</span> · Close in{' '}
-          <span className="font-medium text-amber-300">2 days</span> · Signed in as S. Brandt
+        <div className="flex flex-wrap items-center gap-3 text-[12px] text-slate-300">
+          <span>
+            Posting period <span className="font-medium text-white">Dec 2025</span> · Close in{' '}
+            <span className="font-medium text-amber-300">2 days</span> · Signed in as {user}
+          </span>
+          <ResetDemoButton />
         </div>
       </header>
       <main className="flex min-w-0 flex-1 flex-col gap-4 p-4">

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { createJSONStorage, persist } from 'zustand/middleware'
 import type { Mode, WorkMap } from './types'
 
 interface SessionState {
@@ -16,18 +17,29 @@ interface SessionState {
 
 const makeSessionId = () => `s-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}`
 
-export const useSession = create<SessionState>((set) => ({
-  mode: 'capture',
-  sessionId: makeSessionId(),
-  t0: null,
-  offRecord: false,
-  workMap: null,
-  setMode: (mode) => set({ mode }),
-  setT0: (t0) => set({ t0 }),
-  setOffRecord: (offRecord) => set({ offRecord }),
-  setWorkMap: (workMap) => set({ workMap }),
-  newSession: () => set({ sessionId: makeSessionId(), t0: null, offRecord: false, workMap: null }),
-}))
+export const useSession = create<SessionState>()(
+  persist(
+    (set) => ({
+      mode: 'capture',
+      sessionId: makeSessionId(),
+      t0: null,
+      offRecord: false,
+      workMap: null,
+      setMode: (mode) => set({ mode }),
+      setT0: (t0) => set({ t0 }),
+      setOffRecord: (offRecord) => set({ offRecord }),
+      setWorkMap: (workMap) => set({ workMap }),
+      newSession: () => set({ sessionId: makeSessionId(), t0: null, offRecord: false, workMap: null }),
+    }),
+    {
+      // A reload mid-demo keeps the mode and the Work Map. t0 and offRecord belong to a live recording, so they reset.
+      name: 'sabine-session',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (s) => ({ mode: s.mode, sessionId: s.sessionId, workMap: s.workMap }),
+      skipHydration: true, // SSR: rehydrated in ErpApp's useEffect
+    },
+  ),
+)
 
 /** Non-React access, e.g. from event handlers and the bus. */
 export const session = useSession.getState

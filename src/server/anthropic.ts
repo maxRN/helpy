@@ -13,8 +13,20 @@ export type ModelId = (typeof MODELS)[keyof typeof MODELS]
 
 let client: Anthropic | null = null
 
-/** Reads ANTHROPIC_API_KEY from the environment. */
-export const anthropic = () => (client ??= new Anthropic())
+/** Reads ANTHROPIC_API_KEY from the environment (Railway variables, or .env locally). */
+export const anthropic = () => {
+  if (!client) {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      try {
+        process.loadEnvFile() // local dev: .env in the project root
+      } catch {
+        // no .env file: fall through to the SDK's own credential lookup
+      }
+    }
+    client = new Anthropic()
+  }
+  return client
+}
 
 /** A base64 JPEG (without the data: prefix) as an image block. */
 export const jpegBlock = (base64: string): Anthropic.ImageBlockParam => ({

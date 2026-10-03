@@ -10,33 +10,43 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiGuardrailsCompileRouteImport } from './routes/api/guardrails/compile'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiGuardrailsCompileRoute = ApiGuardrailsCompileRouteImport.update({
+  id: '/api/guardrails/compile',
+  path: '/api/guardrails/compile',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api/guardrails/compile': typeof ApiGuardrailsCompileRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/guardrails/compile': typeof ApiGuardrailsCompileRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api/guardrails/compile': typeof ApiGuardrailsCompileRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/api/guardrails/compile'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/api/guardrails/compile'
+  id: '__root__' | '/' | '/api/guardrails/compile'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiGuardrailsCompileRoute: typeof ApiGuardrailsCompileRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +58,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/guardrails/compile': {
+      id: '/api/guardrails/compile'
+      path: '/api/guardrails/compile'
+      fullPath: '/api/guardrails/compile'
+      preLoaderRoute: typeof ApiGuardrailsCompileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiGuardrailsCompileRoute: ApiGuardrailsCompileRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

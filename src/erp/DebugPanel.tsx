@@ -5,6 +5,7 @@ import type { AppEvent } from '../shared/types'
 import { FIXTURE_WORKMAP } from './fixtures'
 import { resetStepTracker } from './stepTracker'
 import { useErp } from './store'
+import { startTeach } from './teach'
 
 const fmt = (ms: number) => {
   const s = Math.floor(ms / 1000)
@@ -69,6 +70,14 @@ export function DebugPanel() {
             }}
           >
             Teach (fixture)
+          </button>
+          <button
+            type="button"
+            className={btn}
+            title="Recompile the fixture guardrails from their text via /api/guardrails/compile"
+            onClick={() => void startTeach(FIXTURE_WORKMAP).then((r) => console.info('[startTeach]', r))}
+          >
+            Teach (compile)
           </button>
           <button type="button" className={btn} onClick={resetDemo}>
             Reset demo

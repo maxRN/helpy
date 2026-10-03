@@ -5,15 +5,9 @@ import { session } from '../shared/session'
 import { evaluateGuardrails, type Violation } from './guardrails'
 import { accountFor, COST_CENTERS, type Invoice } from './model'
 import { ALL_INVOICES } from './seed'
+import { actionTarget, fieldTarget, rowTarget, type EditableField, type ErpAction } from './targetIds'
 
-export type EditableField = 'category' | 'costCenter' | 'assetNumber' | 'approver'
-export type ErpAction = 'hold' | 'request_approval' | 'post'
-
-// data-target ids, shared with the mascot (P4) and the step tracker.
-export const fieldTarget = (field: EditableField) => `field-${field}`
-export const actionTarget = (action: ErpAction) => `action-${action}`
-export const rowTarget = (invoiceId: string) => `row-${invoiceId}`
-export const PREVIEW_TARGET = 'invoice-preview'
+export * from './targetIds'
 
 interface Blocked {
   invoiceId: string

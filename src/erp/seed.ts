@@ -150,6 +150,61 @@ export const TEACH_INVOICE: Invoice = invoice({
   teachOnly: true,
 })
 
+/**
+ * More cases Sabine never showed, so a judge can pick one.
+ * 5105 is the honest check: small equipment may stay opex, the tutor must NOT stop it.
+ */
+export const EXTRA_TEACH_INVOICES: Invoice[] = [
+  // Kramer again, December: must be held.
+  invoice({
+    id: '5103',
+    supplierId: 'SUP-1007',
+    supplierName: 'Kramer Industrial Supply',
+    supplierAddress: '415 Foundry St, Milwaukee, WI 53204',
+    invoiceDate: '2025-12-26',
+    poNumber: 'PO-88252',
+    lines: [{ description: 'Pneumatic fittings assortment', qty: 1, unitPrice: 980 }],
+    category: 'raw_materials',
+    costCenter: '4711',
+    contactName: 'Greg Kramer',
+    contactEmail: 'billing@kramersupply.example',
+    bankAccount: 'ACH 075000022 · 9001 3356 1180',
+    teachOnly: true,
+  }),
+  // Brno intercompany again: needs a second approval.
+  invoice({
+    id: '5104',
+    supplierId: 'SUP-2001',
+    supplierName: 'Hartmann Machine Works s.r.o. (Brno)',
+    supplierCountry: 'CZ',
+    supplierAddress: 'Hrnčířská 12, 602 00 Brno, Czech Republic',
+    invoiceDate: '2025-12-27',
+    lines: [{ description: 'Spare parts transfer (intercompany)', qty: 1, unitPrice: 2450 }],
+    category: 'intercompany',
+    costCenter: '4800',
+    contactName: 'Jana Novak',
+    contactEmail: 'j.novak@hartmann-brno.example',
+    bankAccount: 'IBAN CZ65 0800 0000 1920 0014 5399',
+    teachOnly: true,
+  }),
+  // Equipment under $5,000: opex is correct, nothing to stop.
+  invoice({
+    id: '5105',
+    supplierId: 'SUP-1125',
+    supplierName: 'Northline Tool Supply',
+    supplierAddress: '30 Mill Rd, Grand Rapids, MI 49503',
+    invoiceDate: '2025-12-27',
+    poNumber: 'PO-88255',
+    lines: [{ description: 'Bench grinder, 8", variable speed', qty: 1, unitPrice: 1900 }],
+    category: 'equipment',
+    costCenter: '4711',
+    contactName: 'Luis Ortega',
+    contactEmail: 'invoices@northline.example',
+    bankAccount: 'ACH 072000326 · 5530 1189 2207',
+    teachOnly: true,
+  }),
+]
+
 const filler = (
   id: string,
   supplierId: string,
@@ -180,7 +235,8 @@ export const FILLER_INVOICES: Invoice[] = [
   filler('4458', 'SUP-1015', 'Great Lakes Freight', '2025-12-02', 'Inbound freight, Nov', 1, 1840, 'services', '4500'),
   filler('4460', 'SUP-1103', 'Officeworks Direct', '2025-12-04', 'Desk chairs', 4, 189, 'office', '4100'),
   filler('4462', 'SUP-1201', 'Cloudline Software', '2025-12-05', 'CAD licenses, annual', 5, 420, 'software', '4300'),
-  filler('4463', 'SUP-1007', 'Kramer Industrial Supply', '2025-12-05', 'Bearings 6205-2RS', 120, 6.4, 'raw_materials', '4711'),
+  // Kramer in November: posted normally. The December double-billing only shows up in December.
+  filler('4463', 'SUP-1007', 'Kramer Industrial Supply', '2025-11-28', 'Bearings 6205-2RS', 120, 6.4, 'raw_materials', '4711'),
   filler('4465', 'SUP-1032', 'Allied Steel Service', '2025-12-08', 'Cold-rolled sheet, 2 mm', 30, 96, 'raw_materials', '4711'),
   filler('4466', 'SUP-1150', 'Brightway Facility Services', '2025-12-09', 'Cleaning, December', 1, 2150, 'services', '4100'),
   filler('4467', 'SUP-1015', 'Great Lakes Freight', '2025-12-10', 'Outbound freight, wk 49', 1, 960, 'services', '4500'),
@@ -191,4 +247,6 @@ export const FILLER_INVOICES: Invoice[] = [
   filler('4476', 'SUP-1015', 'Great Lakes Freight', '2025-12-24', 'Outbound freight, wk 51', 1, 1120, 'services', '4500'),
 ].map((inv, i) => ({ ...inv, status: i < 8 ? 'posted' : 'open' }) as Invoice)
 
-export const ALL_INVOICES: Invoice[] = [...FILLER_INVOICES, ...DEMO_INVOICES, TEACH_INVOICE]
+export const TEACH_INVOICES: Invoice[] = [TEACH_INVOICE, ...EXTRA_TEACH_INVOICES]
+
+export const ALL_INVOICES: Invoice[] = [...FILLER_INVOICES, ...DEMO_INVOICES, ...TEACH_INVOICES]
