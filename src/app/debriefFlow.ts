@@ -68,16 +68,19 @@ export async function runDebriefFlow(io: DebriefIO): Promise<DebriefOutcome> {
   }
   if (io.stopped()) return { kind: 'stopped' }
 
-  // 2. Why the questions end, in Helpy's words from the server's decision.
+  // 2. Why the questions end, in Helpy's words from the server's decision. The Work Map is written
+  //    meanwhile (one model call of several seconds), so the teach-back follows without a gap.
+  const build = async (corrections: Quote[]) =>
+    (await io.post<{ workMap: WorkMap }>('/api/workmap', { sessionId: io.sessionId, log: await io.log(), corrections: corrections.map((c) => c.text) })).workMap
+  const corrections: Quote[] = []
+  const firstMap = build(corrections)
+  firstMap.catch(() => undefined) // awaited below; never an unhandled rejection while Helpy talks
   io.phase('concluding')
   if (doneReason) await io.say(doneReason)
 
   // 3. The Work Map, told back until the expert says it is right; each correction rebuilds it.
   io.phase('building')
-  const build = async (corrections: Quote[]) =>
-    (await io.post<{ workMap: WorkMap }>('/api/workmap', { sessionId: io.sessionId, log: await io.log(), corrections: corrections.map((c) => c.text) })).workMap
-  const corrections: Quote[] = []
-  let workMap = await build(corrections)
+  let workMap = await firstMap
   let text = ''
   let confirmed = false
   let rounds = 0
