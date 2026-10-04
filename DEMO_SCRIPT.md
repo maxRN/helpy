@@ -1,6 +1,6 @@
 # Helpy demo script (about 7 minutes)
 
-The exact sequence for the live or recorded product demo: Capture → Map → Teach, then Trust. Every control named here exists in the app. Two people: **Sabine** (the expert, shares her screen) and **Lena** (the new hire). One person can play both, signing out in between.
+The exact sequence for the live or recorded product demo: Capture → Map → Teach, then Trust. Every control named here exists in the app. Two people: **Sabine** (the expert, shares her screen) and **Lena** (the new hire). One person can play both. The current app uses a fixed Sabine identity; Teach mode labels the ERP user as the new hire automatically.
 
 ## Before the demo
 
@@ -9,15 +9,15 @@ The exact sequence for the live or recorded product demo: Capture → Map → Te
 | App | Chrome, full screen, on the deployed app (Railway). Microphone and speakers on, headset recommended so Scribe does not hear Helpy. |
 | Practice data | ProcureFlow shows the September 2026 invoices 4471 (Neckartal, €6,800, equipment), 4472 (Kramer, quarter-end), 4473 (Brno intercompany), 4474 (office). Practice cases 5102–5106 are reset automatically when Teach starts. |
 | Models | Open the app once beforehand so the screen-reading and redaction models are cached (first load downloads them). |
-| Sign-in | Mock sign-in: `sabine.brandt@hartmann.de`, any password. Later `lena.hoffmann@hartmann.de`. |
+| Identity | No login is required. The demo uses Sabine Brandt; Teach mode switches the ERP label to the new hire. |
 | Fallback map | If a live recording fails, use the hand-written example process **Process Supplier Invoices** in *Recorded processes* for Map and Teach. |
 
 ## 1. Capture (about 3 minutes)
 
 | # | Time | Screen | Sabine does | Helpy does | Apprentice Test |
 | --- | --- | --- | --- | --- | --- |
-| 1 | 0:00 | Desktop with ProcureFlow open, Helpy robot bottom right | Clicks the robot → **Record what I do**. Types the name in Helpy’s bubble (“What should I call this task?”), e.g. *Supplier invoices*, and clicks **Start**. | Asks the browser to share the screen. | |
-| 2 | 0:15 | Browser sharing dialog | Chooses *Entire screen*, **Share**, allows the microphone. | Shows **REC 00:00** on the robot and, in its bubble only: “Recording “Supplier invoices”. Work as usual and tell me what you do. I only ask in real pauses.” No spoken intro. | |
+| 1 | 0:00 | Desktop with ProcureFlow open, Helpy robot bottom right | Clicks the robot → **Record what I do**. The task starts as *New recording* and is named by Helpy after completion. If models become ready after the click, click **Start recording** when offered. | Asks the browser to share the screen. | |
+| 2 | 0:15 | Browser sharing dialog | Chooses *Entire screen*, **Share**, allows the microphone. | Shows **REC 00:00** on the robot and, in its bubble only: “I’m watching and listening. Work as usual and tell me what you do. I only ask in real pauses, and I’ll name this task for you at the end. Click me when you’re done.” No spoken intro. | |
 | 3 | 0:30 | Invoice 4471 open | Opens 4471 and, while explaining aloud, changes the cost center from 4711 to **0400 (capex)** and types the asset number. | Stays quiet while she types, talks, or is mid-step (clicked into a field in the last 4 s), and waits a breath after each sentence. Mouse movement never holds it back. If it already has a question, the robot shows **? Question · waiting, you’re typing** (or *you’re talking*, *you’re mid-step*). | Q1 when to ask |
 | 4 | ~1:00 | Natural pause, hands off the keyboard | Pauses for 2–3 s. | Asks aloud about what changed on screen, e.g. “You moved that one to capex. What made you do that?” | Q1, Q2 what to ask |
 | 5 | 1:10 | | Answers: “Equipment over five thousand is always capex.” | Records the answer and lowers the question sign. | |
@@ -41,7 +41,7 @@ The exact sequence for the live or recorded product demo: Capture → Map → Te
 
 | # | Time | Screen | Lena does | Helpy does | Apprentice Test |
 | --- | --- | --- | --- | --- | --- |
-| 16 | 5:40 | Process page | Signs in as Lena (robot → sign-out row, then sign in), opens the process, clicks **Teach me this**. | Closes its window, resets the practice cases, compiles Sabine’s rules, and points: “Let’s do a case Sabine never showed you. Open invoice 5102…” (opens ProcureFlow first if it is closed). | Q4 new case |
+| 16 | 5:40 | Process page | Opens the process and clicks **Teach me this**. The ERP switches its user label to the new hire automatically. | Closes its window, resets the practice cases, compiles Sabine’s rules, and points: “Let’s do a case Sabine never showed you. Open invoice 5102…” (opens ProcureFlow first if it is closed). | Q4 new case |
 | 17 | 6:00 | Invoice 5102: Albtal Lasersysteme, laser cutter, **€7,200**, pre-coded **4711 (opex)** | Opens 5102 and clicks **Post** with the opex code. | Stops it **before it is saved** (status stays *Open*), turns red, points at the cost center: “Sabine would stop here. Why do you think?” The voice tutor asks the same and listens. | Required: wrong decision caught before save |
 | 18 | 6:15 | | Gives a guess, then clicks **Tell me why** (or **Show me Sabine’s screen**). | “Sabine said: ‘Equipment over five thousand is always capex.’ Here that means: book it as capex (cost center 0400).” **Show me Sabine’s screen** replays her moment. Changing a cost center back to opex later is caught right away, too. | Required: explained with her reasoning |
 | 19 | 6:35 | | Sets the cost center to **0400**, enters an asset number, clicks **Post**. | “That’s it. Sabine would do the same.”, then the next step; once posted: “Invoice 5102 is done. Click me to see how you did.” | |
