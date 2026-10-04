@@ -101,11 +101,18 @@ let muteTimer: ReturnType<typeof setTimeout> | undefined
 function setMuted(muted: boolean) {
   if (!connection || useListener.getState().muted === muted) return
   clearTimeout(muteTimer)
+  try {
+    if (muted) connection.mute()
+    else connection.unmute()
+  } catch (err) {
+    // The microphone track is not live yet (Helpy spoke while Scribe was still starting): nothing to mute.
+    console.warn('[listener] could not', muted ? 'mute' : 'unmute', err)
+    return
+  }
   if (muted) {
-    connection.mute()
     tracker.dropTurn()
     muteTimer = setTimeout(() => setMuted(false), MAX_MUTED_MS)
-  } else connection.unmute()
+  }
   useListener.setState({ muted, speaking: false, partial: '' })
 }
 

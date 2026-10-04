@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AppEvent } from '../shared/types'
-import { CHANGE_RATIO, changedRatio, latestWins, matchingDomEvent } from './frameEvents'
+import { CHANGE_RATIO, changedRatio, latestWins, matchingDomEvent, THUMB_H, THUMB_W } from './frameEvents'
 
 const thumb = (pixels: number, value = 0) => new Uint8ClampedArray(pixels * 4).fill(value)
 
@@ -35,6 +35,40 @@ describe('matchingDomEvent', () => {
     expect(matchingDomEvent(log, 'field_changed', '4472', 10_000)).toBeUndefined()
     expect(matchingDomEvent(log, 'action', '4471', 10_000)).toBeUndefined()
     expect(matchingDomEvent(log, 'field_changed', '4471', 20_000)).toBeUndefined()
+  })
+})
+
+describe('change detection thresholds', () => {
+  // A white 320 x 180 thumbnail with dark "text" blocks: a stand-in for a screen scaled down 1/6.
+  const screen = (draw: (put: (x: number, y: number) => void) => void) => {
+    const px = new Uint8ClampedArray(THUMB_W * THUMB_H * 4).fill(255)
+    draw((x, y) => px.fill(30, (y * THUMB_W + x) * 4, (y * THUMB_W + x) * 4 + 3))
+    return px
+  }
+  // Text as a pattern of dark pixels; other glyphs = another pattern in the same box.
+  const text = (x0: number, y0: number, w: number, h: number, glyphs: number) => (put: (x: number, y: number) => void) => {
+    for (let x = x0; x < x0 + w; x++) for (let y = y0; y < y0 + h; y++) if ((x + y + glyphs) % 2 === 0) put(x, y)
+  }
+
+  it('a changed field value counts as a change (13 px text on a 1920 px screen: a 37 x 2 box at 1/6)', () => {
+    const before = screen(text(100, 60, 37, 2, 0)) // "4711 – Production – Maintenance"
+    const after = screen(text(100, 60, 37, 2, 1)) // "0400 – Capital Equipment"
+    expect(changedRatio(before, after)).toBeGreaterThanOrEqual(CHANGE_RATIO)
+  })
+
+  it('a moving mouse cursor or a blinking caret does not', () => {
+    const base = screen(text(100, 60, 37, 2, 0))
+    const cursor = screen((put) => {
+      text(100, 60, 37, 2, 0)(put)
+      for (let i = 0; i < 6; i++) put(200 + (i % 2), 100 + Math.floor(i / 2)) // arrow cursor, ~2 x 3
+    })
+    const caret = screen((put) => {
+      text(100, 60, 37, 2, 0)(put)
+      put(140, 60)
+      put(140, 61)
+    })
+    expect(changedRatio(base, cursor)).toBeLessThan(CHANGE_RATIO)
+    expect(changedRatio(base, caret)).toBeLessThan(CHANGE_RATIO)
   })
 })
 

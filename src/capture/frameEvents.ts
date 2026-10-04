@@ -9,10 +9,14 @@ import { markScreenChanged, noteVisionScreen, resetScreen } from '../shared/scre
 import { session } from '../shared/session'
 import type { AppEvent } from '../shared/types'
 
-const THUMB_W = 64
-const THUMB_H = 36
+// Large enough that a changed field value (a few words of 13-15 px text) still shows: at 64 x 36 the text
+// was averaged away and value changes were never sent to vision. The diff stays cheap (57,600 pixels).
+export const THUMB_W = 320
+export const THUMB_H = 180
 const PIXEL_DELTA = 24 // per channel, out of 255
-export const CHANGE_RATIO = 0.01 // share of thumbnail pixels that must change
+// 0.05 % = 29 thumbnail pixels. A changed field value on a 1920 px screen (13 px text, ~220 px wide, so a
+// 37 x 2 box here) changes 40-70; a cursor (~6), a caret or the clock's digit (1-3), Helpy blinking (~12) less.
+export const CHANGE_RATIO = 0.0005
 const MAX_WIDTH = 1280
 const DOM_MATCH_MS = 3000
 
