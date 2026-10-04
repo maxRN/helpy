@@ -39,11 +39,10 @@ export function termOccurrences(text: string, term: string): Array<[number, numb
   return [...text.matchAll(re)].map((m) => [m.index, m.index + m[0].length])
 }
 
-/** Drops detected PII spans that lie entirely inside a known business identifier or name. */
+/** Drops detected PII spans that overlap business terms or explicit invoice numbers. */
 export function withoutBusinessTerms<S extends { start: number; end: number }>(text: string, spans: S[], terms: readonly string[]): S[] {
-  if (!spans.length || !terms.length) return spans
-  const keep = terms.flatMap((term) => termOccurrences(text, term))
-  return spans.filter((s) => !keep.some(([a, b]) => a <= s.start && s.end <= b))
+  const keep = [...terms, ...invoiceRefs(text)].flatMap((term) => termOccurrences(text, term))
+  return spans.filter((s) => !keep.some(([a, b]) => a < s.end && s.start < b))
 }
 
 // "invoice 4471", "Invoice No. 4471", "invoice #4471", "Rechnung Nr. 4471", "Rechnung 4471"
