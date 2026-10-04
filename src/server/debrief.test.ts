@@ -33,6 +33,37 @@ describe('findExpertQuote', () => {
     expect(findExpertQuote(log, 'Equipment over ten thousand is capex')).toBeNull()
     expect(findExpertQuote(log, 'What made you do that')).toBeNull()
   })
+  it('a slight paraphrase counts as the own sentence of the expert, quoted verbatim', () => {
+    expect(findExpertQuote(log, 'Equipment above five thousand is always capex')).toEqual({ text: 'Equipment over five thousand is always capex.', t: 55_000, speaker: 'expert' })
+  })
+
+  it('never when a number differs', () => {
+    expect(findExpertQuote(log, 'Equipment over six thousand is always capex')).toBeNull()
+  })
+})
+
+describe('every step and guardrail in the expert words, at a screen moment', () => {
+  it('a step without a quote takes what the expert said while doing it, never a question or a line used elsewhere', async () => {
+    const { wordsDuringStep } = await import('./debrief')
+    const talk: LogLine[] = [
+      { t: 10_000, who: 'expert', text: 'Kramer always bills us twice in December, so I hold it.' },
+      { t: 12_000, who: 'expert', text: 'Do you see that?' },
+      { t: 40_000, who: 'expert', text: 'Now the next one, from Brno.' },
+    ]
+    expect(wordsDuringStep(talk, 8_000, 18_000, 9_000, new Set())?.t).toBe(10_000)
+    expect(wordsDuringStep(talk, 8_000, 18_000, 9_000, new Set([10_000]))).toBeNull()
+  })
+
+  it('a rule said only in the debrief is linked to the screen event it is about', async () => {
+    const { momentAbout } = await import('./debrief')
+    const screen: LogLine[] = [
+      { t: 5_000, who: 'screen', text: 'Opened invoice 4472 from Kramer Industrial Supply (€1,240.00, raw materials)' },
+      { t: 9_000, who: 'screen', text: 'Invoice 4472: put on hold' },
+      { t: 30_000, who: 'screen', text: 'Opened invoice 4473 from Hartmann Machine Works Brno' },
+    ]
+    expect(momentAbout(screen, 'Hold invoice 4472 from Kramer until the controller releases it')?.t).toBe(9_000)
+    expect(momentAbout(screen, 'Never pay on Fridays')).toBeNull()
+  })
 })
 
 describe('clipAround', () => {

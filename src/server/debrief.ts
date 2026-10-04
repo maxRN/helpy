@@ -39,12 +39,67 @@ const normalize = (s: string) =>
     .replace(/\s+/g, ' ')
     .trim()
 
-/** A quote counts only if the expert actually said it (normalized substring of one of their lines). */
+const NUMBER_WORDS = /^(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|hundred|thousand|million|null|eins?|zwei|drei|vier|fünf|sechs|sieben|acht|neun|zehn|hundert|tausend)$/
+const isNumber = (w: string) => /\d/.test(w) || NUMBER_WORDS.test(w)
+const words = (s: string) => normalize(s).split(' ').filter((w) => w.length >= 3 || isNumber(w))
+/** Share of `needle`'s words found in `hay` (0..1). */
+function overlap(needle: string, hay: string): number {
+  const want = words(needle)
+  if (!want.length) return 0
+  const have = new Set(words(hay))
+  return want.filter((w) => have.has(w)).length / want.length
+}
+
+/** A paraphrase this close to one sentence of the expert counts as that sentence (quoted in their own words). */
+const QUOTE_OVERLAP = 0.8
+
+/**
+ * A quote counts only if the expert actually said it: a normalized substring of one of their lines, or, when the
+ * model paraphrased slightly, the expert's own sentence that has nearly all its words and every one of its numbers
+ * ("ten thousand" never matches "five thousand"). Then the quote is the expert's sentence, verbatim.
+ */
 export function findExpertQuote(log: LogLine[], text: string): Quote | null {
   const needle = normalize(text)
   if (needle.length < 8) return null
   const line = log.find((l) => l.who === 'expert' && normalize(l.text).includes(needle))
-  return line ? { text: text.trim(), t: line.t, speaker: 'expert' } : null
+  if (line) return { text: text.trim(), t: line.t, speaker: 'expert' }
+  const numbers = words(text).filter(isNumber)
+  let best: { text: string; t: number; score: number } | null = null
+  for (const l of log) {
+    if (l.who !== 'expert') continue
+    for (const sentence of l.text.split(/(?<=[.!?])\s+/)) {
+      const have = new Set(words(sentence))
+      if (numbers.some((n) => !have.has(n))) continue
+      const score = overlap(text, sentence)
+      if (score >= QUOTE_OVERLAP && (!best || score > best.score)) best = { text: sentence.trim(), t: l.t, score }
+    }
+  }
+  return best ? { text: best.text, t: best.t, speaker: 'expert' } : null
+}
+
+/**
+ * The expert's words while doing a step (they talked as they worked), when the model found no reason quote: the
+ * statement closest to the step's screen moment inside the step, not used by another step, never a question.
+ */
+export function wordsDuringStep(log: LogLine[], start: number, end: number, at: number, used: ReadonlySet<number>): Quote | null {
+  const inside = log.filter((l) => l.who === 'expert' && l.t >= start - 3_000 && l.t <= end + 5_000 && !used.has(l.t) && !l.text.trim().endsWith('?') && words(l.text).length >= 4)
+  const line = inside.sort((a, b) => Math.abs(a.t - at) - Math.abs(b.t - at))[0]
+  return line ? { text: line.text.trim(), t: line.t, speaker: 'expert' } : null
+}
+
+/** Words that say nothing about which screen event a rule is about. */
+const GENERIC = new Set(['from', 'with', 'that', 'this', 'then', 'when', 'into', 'until', 'over', 'always', 'never', 'invoice', 'invoices', 'opened'])
+
+/** The screen event a rule is about, by its words (e.g. "Kramer", "capex"; a decision wins a tie): for rules said only in the debrief. */
+export function momentAbout(log: LogLine[], text: string): ScreenMoment | null {
+  const rule = new Set(words(text).filter((w) => (w.length >= 4 || isNumber(w)) && !GENERIC.has(w)))
+  let best: { line: LogLine; hits: number } | null = null
+  for (const l of log) {
+    if (l.who !== 'screen') continue
+    const hits = words(l.text).filter((w) => rule.has(w)).length
+    if (hits > 0 && (!best || hits > best.hits || (hits === best.hits && isDecisionLine(l) && !isDecisionLine(best.line)))) best = { line: l, hits }
+  }
+  return asMoment(best?.line)
 }
 
 // ------------------------------------------------------------------ screen moments
@@ -391,14 +446,24 @@ export async function buildWorkMap(sessionId: string, log: LogLine[], expert = '
   }
   const known = new Set(guardrails.map((g) => g.id))
 
+  // Every step should carry the expert's own words (the brief): the model's quote, else what they said during it.
+  const quoted = draft.steps.map((s) => (s.reasonQuote ? findExpertQuote(log, s.reasonQuote) : null))
+  const used = new Set(quoted.filter((q): q is Quote => !!q).map((q) => q.t))
+  const openQuestions = [...draft.openQuestions]
   const steps: Step[] = draft.steps.map((s, i) => {
     const id = `S${i + 1}`
-    const reason = s.reasonQuote ? findExpertQuote(log, s.reasonQuote) : null
-    if (s.reasonQuote && !reason) warnings.push(`Step "${s.title}": reason quote not found, left out.`)
     const start = Math.max(0, Math.min(s.startT, lastT))
     const end = Math.max(start + 10_000, Math.min(s.endT, start + 20_000))
     // The clip is centered on a real screen event; without one the step says so instead of a made-up time.
     const moment = stepMoment(log, start, end)
+    let reason = quoted[i]
+    if (!reason) {
+      reason = wordsDuringStep(log, start, end, moment?.t ?? start, used)
+      if (reason) used.add(reason.t)
+      if (s.reasonQuote) warnings.push(`Step "${s.title}": reason quote not found${reason ? ', used what the expert said during it' : ', left out'}.`)
+      // Nothing in the expert's words: the Work Map says so, instead of a step without a why.
+      if (!reason) openQuestions.push(`Why “${s.title.trim()}”? Not said in ${expert}'s words yet.`)
+    }
     return {
       id,
       index: i + 1,
@@ -410,7 +475,7 @@ export async function buildWorkMap(sessionId: string, log: LogLine[], expert = '
       ...(reason ? { reason: { ...reason, via: quoteVia(log, reason, corrections) } } : {}),
       guardrailIds: s.guardrailIds.filter((g) => known.has(g)),
       isJudgmentCall: s.isJudgmentCall,
-      confidence: Math.max(0, Math.min(1, reason || !s.reasonQuote ? s.confidence : s.confidence * 0.6)),
+      confidence: Math.max(0, Math.min(1, quoted[i] ? s.confidence : reason ? s.confidence * 0.8 : s.confidence * 0.6)),
     }
   })
   // Each guardrail points back at the first step that uses it, and at the screen moment it was explained at:
@@ -419,12 +484,13 @@ export async function buildWorkMap(sessionId: string, log: LogLine[], expert = '
     const step = steps.find((s) => s.guardrailIds.includes(g.id))
     g.stepId = step?.id
     const live = g.quote.via === 'live_question' || g.quote.via === 'narration'
-    g.moment = (live ? momentBefore(log, g.quote.t) : null) ?? step?.moment ?? null
+    // Said only in the debrief, with no step of its own: the screen event it is about, by its words.
+    g.moment = (live ? momentBefore(log, g.quote.t) : null) ?? step?.moment ?? momentAbout(log, `${g.text} ${g.quote.text}`)
   }
 
   return {
     // A verbose model output never becomes a huge title in "Recorded processes".
-    workMap: { sessionId, task: conciseProcessName(draft.task) || 'Recorded Process', expert, language: 'en', steps, guardrails, openQuestions: draft.openQuestions },
+    workMap: { sessionId, task: conciseProcessName(draft.task) || 'Recorded Process', expert, language: 'en', steps, guardrails, openQuestions },
     warnings,
   }
 }
