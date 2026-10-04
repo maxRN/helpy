@@ -10,6 +10,8 @@ import { getNextStep } from '../erp/stepTracker'
 import { erp } from '../erp/store'
 import { activity } from '../shared/activity'
 import { bus, emitEvent } from '../shared/bus'
+import { mascot as helpy } from '../mascot/api'
+import { useHelpyExtras } from '../mascot/store'
 import { mascot, useMascot } from '../shared/mascot'
 import { ungroundedInvoiceRefs } from '../shared/grounding'
 import { screenSummary } from '../shared/screen'
@@ -177,6 +179,14 @@ export function installVoiceBridge() {
       bubble: (text) => mascot.bubble(text),
       pointTo: (targetId) => mascot.pointTo(targetId),
       waiting: (question) => mascot.waiting(question),
+      // The agent's own words (an explanation, a reply) replace the bubble while it says them. The same text again
+      // (e.g. "Sabine would stop here. Why do you think?" from Teach's alert) keeps that bubble and its buttons.
+      spoken: (text) => {
+        if (useMascot.getState().bubble === text) return
+        const extras = useHelpyExtras.getState().bubbleExtras
+        const alert = extras?.tone === 'alert' && extras.text === useMascot.getState().bubble
+        helpy.bubble(text, { topic: session().mode === 'teach' ? 'step' : 'question', tone: alert ? 'alert' : 'default' })
+      },
     },
     getNextStep: () => {
       const openId = erp().openId

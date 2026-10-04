@@ -25,6 +25,7 @@ const API = 'https://api.elevenlabs.io/v1'
 const HELPY_VOICE = JSON.parse(readFileSync(new URL('../src/shared/helpyVoice.json', import.meta.url), 'utf8'))
 const VOICE = process.env.ELEVENLABS_TTS_VOICE_ID || HELPY_VOICE.voiceId // River: relaxed, neutral, calm
 const LLM = process.env.ELEVENLABS_AGENT_LLM || 'claude-sonnet-5-5'
+// Only for NEW agents: an existing agent keeps the TTS model stored on it (the team set it to the newest model).
 // English agents reject the v2.5 models ("English Agents must use turbo or flash v2"), but accept the newer
 // multilingual ones (checked against the API): eleven_v4_turbo speaks German too, so Helpy can explain a question
 // in the language it was asked in.
@@ -148,6 +149,9 @@ for (const [name, body] of Object.entries(TOOLS)) {
 const forceNew = process.argv.includes('--new')
 async function upsert(role, envId, body) {
   if (envId && !forceNew) {
+    // The team picked the agents' TTS model on purpose (newest ElevenLabs model): an update never changes it.
+    const stored = (await call('GET', `/convai/agents/${envId}`)).conversation_config.tts.model_id
+    body.conversation_config.tts.model_id = stored
     await call('PATCH', `/convai/agents/${envId}`, body)
     console.log(`agent ${role}: ${envId} (updated)`)
     return { agent_id: envId }
@@ -175,9 +179,9 @@ const tutor = await upsert(
 // check as /api/elevenlabs/signed-url.
 for (const [role, id] of [['interviewer', interviewer.agent_id], ['tutor', tutor.agent_id]]) {
   const stored = (await call('GET', `/convai/agents/${id}`)).conversation_config.tts
-  const want = { voice_id: VOICE, model_id: TTS_MODEL, ...HELPY_VOICE.settings }
+  const want = { voice_id: VOICE, ...HELPY_VOICE.settings }
   const wrong = Object.entries(want).filter(([k, v]) => stored[k] !== v)
-  console.log(`stored voice ${role}: ${wrong.length ? `MISMATCH ${wrong.map(([k, v]) => `${k}=${stored[k]} (want ${v})`).join(', ')}` : `ok ${JSON.stringify(want)}`}`)
+  console.log(`stored voice ${role}: model ${stored.model_id}, ${wrong.length ? `MISMATCH ${wrong.map(([k, v]) => `${k}=${stored[k]} (want ${v})`).join(', ')}` : `ok ${JSON.stringify(want)}`}`)
   const signed = await call('GET', `/convai/conversation/get-signed-url?agent_id=${id}`)
   console.log(`signed url ${role}: ${signed.signed_url ? 'ok' : 'MISSING'}`)
 }

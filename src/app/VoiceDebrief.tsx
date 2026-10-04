@@ -13,7 +13,7 @@ import { session, sessionClock, useSession } from '../shared/session'
 import type { AppEvent } from '../shared/types'
 import { runDebriefFlow } from './debriefFlow'
 import { panel } from './panel/store'
-import { startVoice, stopVoice } from './voice'
+import { askAloud, startVoice, stopVoice } from './voice'
 
 // Helpy's follow-up questions after a recording, spoken only: no window, nothing to type.
 // Same steps as P3's debrief (gaps -> answers -> Work Map -> teach-back -> confirmation), but before every
@@ -136,9 +136,10 @@ async function debrief(convex: ConvexReactClient) {
       mascot.bubble(null)
       mascot.setState('listening')
       if (takeSkip()) return null
-      const answer = await interruptible(voice.ask(question)) // no answer or skipped: go on
+      // Until it is really answered: "Wie meinst du das?" gets an explanation and the same question stays open.
+      const outcome = await askAloud(question, { wrap: interruptible, stopped: () => !run || run.stopped || run.skip })
       takeSkip()
-      return answer?.text?.trim() || null
+      return outcome?.kind === 'answered' ? outcome.answer : null // no answer or skipped: go on
     },
     teachBack: async (text) => {
       mascot.bubble('Here’s how I understood it. Tell me if something is wrong.')

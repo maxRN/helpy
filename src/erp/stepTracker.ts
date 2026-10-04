@@ -71,7 +71,9 @@ export function markTouched(invoiceId: string, targetId: string) {
   touched.set(invoiceId, done)
 }
 
-function onFocusIn(e: FocusEvent) {
+// A field counts as checked once the trainee leaves it (focusout), not when they click into it: moving from one
+// field into the next must not tick off the next one before Helpy has said it (Teach never skips a step).
+function onFocusOut(e: FocusEvent) {
   const openId = erp().openId
   if (session().mode !== 'teach' || !openId || !(e.target instanceof Element)) return
   const targetId = e.target.closest<HTMLElement>('[data-target]')?.dataset.target
@@ -85,7 +87,7 @@ export function installStepTracker() {
   if (installed) return
   installed = true
   bus.on('event', onEvent)
-  if (typeof window !== 'undefined') window.addEventListener('focusin', onFocusIn)
+  if (typeof window !== 'undefined') window.addEventListener('focusout', onFocusOut)
 }
 
 export function resetStepTracker() {

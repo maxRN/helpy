@@ -7,11 +7,13 @@ import { getEventLog } from '../shared/bus'
 import { ungroundedInvoiceRefs } from '../shared/grounding'
 import { screenSummary } from '../shared/screen'
 import { speech, startListening, stopListening } from '../integration/listener'
+import type { Quote } from '../agent/types'
 import type { TurnVerdict } from '../integration/speech'
 import { installVoiceBridge, resetVoiceClock } from '../integration/voiceBridge'
-import { mascot } from '../mascot'
+import { mascot, type BubbleAction } from '../mascot'
 import { useMascot } from '../shared/mascot'
 import { session } from '../shared/session'
+import { askUntilAnswered, type ReplyOutcome } from './replyLoop'
 
 export type AgentMode = 'capture' | 'debrief' | 'teach'
 
@@ -169,14 +171,92 @@ export async function setOffRecord(on: boolean) {
   } else session().setOffRecord(on)
 }
 
-/** Debrief: the agent asks out loud and returns the spoken answer; null when no agent runs. */
-export async function askAloud(question: string): Promise<string | null> {
+/** How long Helpy waits for the agent to explain its question by itself before it sends the explanation. */
+const AGENT_EXPLAINS_WITHIN_MS = 1500
+
+/**
+ * Debrief: the agent asks out loud until the question is really answered. A question back ("Wie meinst du
+ * das?") is explained (by the agent itself, which heard it, or with Claude's explanation) and the same question
+ * stays open; only a real answer is logged as the answer. `wrap` makes waits interruptible (skip, stop).
+ */
+export async function askAloud(
+  question: string,
+  opts: { wrap?: <T>(p: Promise<T>) => Promise<T | null>; stopped?: () => boolean } = {},
+): Promise<ReplyOutcome | null> {
   const voice = await load()
   if (!voice.isConnected()) return null
+  const wrap = opts.wrap ?? (<T,>(p: Promise<T>) => p.catch(() => null))
+  let last: Quote | null = null
+  let repliedAt = 0
+  const take = (q: Quote | null) => {
+    last = q
+    repliedAt = Date.now()
+    return q?.text?.trim() || null
+  }
+  const outcome = await askUntilAnswered({
+    ask: async () => take(await wrap(voice.ask(question, { emitAnswer: false }))),
+    listen: async () => take(await wrap(voice.listenAgain({ emitAnswer: false }))),
+    classify: (reply) => classifyTurn(reply, 'debrief', question),
+    explain: async (text) => {
+      // The agent heard the question back too and usually explains on its own (its prompt says so). If it
+      // does not, it says Claude's explanation; either way Helpy listens again once it is done.
+      const since = repliedAt - TURN_FLUSH_MS
+      const end = Date.now() + AGENT_EXPLAINS_WITHIN_MS
+      while (!voice.agentSpokeSince(since) && Date.now() < end) await new Promise((r) => setTimeout(r, 150))
+      if (!voice.agentSpokeSince(since)) {
+        mascot.bubble(text)
+        await wrap(voice.say(text))
+      }
+      await wrap(voice.agentQuiet())
+    },
+    stopped: opts.stopped,
+  })
+  if (outcome.kind === 'answered' && last) voice.recordAnswer(last)
+  return outcome
+}
+
+/** The transcript ends a reply after this much silence (src/agent/transcript.ts): the agent may start meanwhile. */
+const TURN_FLUSH_MS = 1500
+
+let tutorMuted = 0
+
+export interface SayStepOptions {
+  /** What Helpy flies to while it says the line (null: back to its corner). */
+  target?: string | null
+  tone?: 'default' | 'alert'
+  actions?: BubbleAction[]
+  /** False once a newer line replaced this one: it is then not said at all. */
+  current?: () => boolean
+  /** Context for the tutor agent instead of the default "[GUIDE] Helpy told the trainee: …". */
+  context?: string
+}
+
+/**
+ * Teach: Helpy says a line of its own (a step, the guardrail stop, praise) with its TTS voice. The bubble, the
+ * pointing and the voice start together, with the same words. The tutor agent never talks over it, does not hear
+ * it through the microphone, and gets it as context so it can answer "Wie meinst du das?" about it.
+ */
+export async function sayStep(text: string, o: SayStepOptions = {}): Promise<void> {
+  const voice = await load()
+  const current = o.current ?? (() => true)
+  const agent = voice.isConnected()
+  if (agent && voice.isAgentSpeaking()) await voice.agentQuiet(10_000) // the tutor finishes its sentence first
+  if (!current()) return
+  if (agent && tutorMuted++ === 0) voice.muteMic(true)
   try {
-    return (await voice.ask(question)).text
-  } catch {
-    return null
+    await speak(text, {
+      gate: current,
+      onStart: () => {
+        if (o.tone === 'alert') return mascot.alert(o.target ?? null, text, o.actions)
+        mascot.pointTo(o.target ?? null)
+        mascot.bubble(text, { topic: 'step', actions: o.actions })
+      },
+    })
+  } finally {
+    if (agent) {
+      if (--tutorMuted === 0) voice.muteMic(false)
+      voice.tellAgent(o.context ?? `[GUIDE] Helpy just told the trainee: "${text}"`)
+    }
   }
 }
 

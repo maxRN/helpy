@@ -113,9 +113,11 @@ export function DebriefPanel() {
       }
       setListening(true)
       try {
-        const quote = await v.ask(gap.question)
-        setAnswer(quote.text)
-        nextGap(phase.queue)
+        // A question back ("Wie meinst du das?") is explained; only a real answer (or a skip) moves on.
+        const { askAloud } = await import('../app/voice')
+        const outcome = await askAloud(gap.question)
+        if (outcome?.kind === 'answered') setAnswer(outcome.answer)
+        if (outcome && outcome.kind !== 'unanswered') nextGap(phase.queue)
       } catch {
         // timed out or disconnected: the expert can still type
       } finally {

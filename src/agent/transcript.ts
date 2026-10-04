@@ -11,7 +11,7 @@ export interface RawMessage {
 }
 
 // Messages WE send to the agent come back as "user" messages. Never log them as the expert talking.
-const CONTROL = /^\s*\[(ASK|SAY|TEACHBACK|INTERVENE|PREDICT|NUDGE|SCREEN|WORKMAP)\b/i;
+const CONTROL = /^\s*\[(ASK|SAY|TEACHBACK|INTERVENE|PREDICT|NUDGE|SCREEN|WORKMAP|GUIDE)\b/i;
 
 const TURN_END_MS = 1500; // expert silence that ends an answer
 const ARM_FALLBACK_MS = 6000; // start listening for the answer even if we never saw the agent speak
@@ -29,6 +29,8 @@ export interface TranscriptOpts {
 interface Collector {
   questionId: string;
   eventId?: string;
+  /** false: the caller decides whether the reply is the answer and logs it (see expect). */
+  emit?: boolean;
   armed: boolean;
   agentSpoke: boolean;
   resolve: (q: Quote) => void;
@@ -92,14 +94,16 @@ export function createTranscript(opts: TranscriptOpts) {
     chunks = [];
     clearCollector(c);
     collector = null;
-    emit({
-      type: 'answer_given',
-      speaker: userSpeaker,
-      text: quote.text,
-      t: quote.t,
-      meta: { questionId: c.questionId, eventId: c.eventId },
-    });
-    opts.onAnswer?.(quote);
+    if (c.emit !== false) {
+      emit({
+        type: 'answer_given',
+        speaker: userSpeaker,
+        text: quote.text,
+        t: quote.t,
+        meta: { questionId: c.questionId, eventId: c.eventId },
+      });
+      opts.onAnswer?.(quote);
+    }
     c.resolve(quote);
   }
 
@@ -113,8 +117,10 @@ export function createTranscript(opts: TranscriptOpts) {
    * Wait for the expert's answer to a question we just asked.
    * Starts listening once the agent has finished speaking the question.
    * Resolves when the expert's turn ends (1.5 s of silence). Rejects on timeout.
+   * `armed`: listen right away (e.g. for the real answer after a question back), unless the agent is talking.
+   * `emit: false`: the reply is not logged as the answer yet; the caller first decides whether it is one.
    */
-  function expect(o: { questionId: string; eventId?: string; timeoutMs: number }): Promise<Quote> {
+  function expect(o: { questionId: string; eventId?: string; timeoutMs: number; armed?: boolean; agentSpeaking?: boolean; emit?: boolean }): Promise<Quote> {
     if (collector) {
       clearCollector(collector);
       collector.reject(new Error('superseded by a newer question'));
@@ -122,7 +128,9 @@ export function createTranscript(opts: TranscriptOpts) {
       chunks = [];
     }
     return new Promise<Quote>((resolve, reject) => {
-      const c: Collector = { ...o, armed: false, agentSpoke: false, resolve, reject, timers: [] };
+      const { armed, agentSpeaking, ...rest } = o;
+      // Agent talking right now: start listening when it is done; else listen at once if asked to.
+      const c: Collector = { ...rest, armed: !!armed && !agentSpeaking, agentSpoke: !!agentSpeaking, resolve, reject, timers: [] };
       c.timers.push(setTimeout(() => (c.armed = true), ARM_FALLBACK_MS));
       c.timers.push(
         setTimeout(() => {

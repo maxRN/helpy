@@ -30,6 +30,11 @@ let transcript: TranscriptHandle | null = null;
 let policy: QuestionPolicy | null = null;
 let cleanup: Array<() => void> = [];
 let sayWaiters: Array<{ resolve: () => void; spoke: boolean }> = [];
+// The question asked last (debrief): a question back about it is answered, then the answer is awaited again.
+let asking: { questionId: string } | null = null;
+// When the agent last started speaking (epoch ms), and what it is saying, to show it in the bubble meanwhile.
+let agentStartedAt = 0;
+let agentLine: string | null = null;
 let teachback: {
   resolve: (r: { confirmed: boolean; correction?: string }) => void;
   timer: ReturnType<typeof setTimeout>;
@@ -115,11 +120,21 @@ export async function start(m: Mode, opts: { workMapMarkdown?: string } = {}): P
     clientTools: tools,
     ...(m === 'teach' ? { dynamicVariables: { work_map: workMap } } : {}),
 
-    onMessage: (msg) => transcript?.ingest(msg),
+    onMessage: (msg) => {
+      transcript?.ingest(msg);
+      // What Helpy says is what the bubble shows, at the same time (Teach, debrief; not the long teach-back).
+      const fromAgent = msg.source === 'ai' || (msg as { role?: string }).role === 'agent';
+      const text = (msg.message ?? '').trim();
+      if (!fromAgent || !text || teachback || m === 'capture') return;
+      agentLine = text;
+      if (agentSpeaking) showAgentLine(deps);
+    },
 
     onModeChange: ({ mode: agentMode }) => {
       if (agentMode === 'speaking') {
         agentSpeaking = true;
+        agentStartedAt = Date.now();
+        if (agentLine) showAgentLine(deps);
         transcript?.agentStarted();
         sayWaiters.forEach((w) => (w.spoke = true));
         deps.mascot.setState('speaking');
@@ -165,11 +180,21 @@ export async function start(m: Mode, opts: { workMapMarkdown?: string } = {}): P
       return true;
     });
   }
-  if (m === 'teach') cleanup.push(wireTutor(deps));
+  // Teach: the tutor never speaks up on its own. The Teach guide says the steps and the guardrail stop
+  // (src/teach-ui/learningGuide.ts) and gives them to the agent as context; the agent answers the trainee.
+}
+
+/** The agent's current line into the bubble, once (bubble and voice say the same thing at the same time). */
+function showAgentLine(deps: Deps): void {
+  const line = agentLine;
+  agentLine = null;
+  if (line) (deps.mascot.spoken ?? deps.mascot.bubble)(line);
 }
 
 export async function stop(): Promise<void> {
   startGen++;
+  asking = null;
+  agentLine = null;
   cleanup.forEach((fn) => {
     try {
       fn();
@@ -199,17 +224,64 @@ export async function stop(): Promise<void> {
 
 // ---------------------------------------------------------------- ask / say / teach-back
 
-/** Debrief: speak a question, resolve with the expert's answer when their turn ends. */
-export async function ask(question: string): Promise<Quote> {
+/**
+ * Debrief: speak a question, resolve with the expert's reply when their turn ends.
+ * `emitAnswer: false`: the reply is not logged as the answer yet (it may be a question back, see listenAgain).
+ */
+export async function ask(question: string, opts: { emitAnswer?: boolean } = {}): Promise<Quote> {
   const c = requireConn();
   const deps = getDeps();
   const qe = emit({ type: 'question_asked', speaker: 'agent', text: question, meta: { phase: mode } });
-  const answer = transcript!.expect({ questionId: qe.id, timeoutMs: 120_000 });
+  asking = { questionId: qe.id };
+  const answer = transcript!.expect({ questionId: qe.id, timeoutMs: 120_000, emit: opts.emitAnswer });
   deps.mascot.setState('speaking');
   deps.mascot.bubble(question);
   c.sendUserMessage(`[ASK] ${question}`);
   return answer;
 }
+
+/**
+ * After a question back ("Wie meinst du das?"): wait for the next reply to the same question, without asking
+ * it again. Listens once the agent finished explaining (or at once when it is quiet).
+ */
+export function listenAgain(opts: { emitAnswer?: boolean } = {}): Promise<Quote> {
+  requireConn();
+  if (!asking) return Promise.reject(new Error('[voice] no question asked'));
+  return transcript!.expect({ questionId: asking.questionId, timeoutMs: 120_000, armed: true, agentSpeaking, emit: opts.emitAnswer });
+}
+
+/** The reply was the real answer to the last question: log it as such (see ask's emitAnswer). */
+export function recordAnswer(q: Quote): void {
+  if (!asking) return;
+  emit({ type: 'answer_given', speaker: q.speaker, text: q.text, t: q.t, meta: { questionId: asking.questionId } });
+  asking = null;
+}
+
+/** Did the agent start speaking at or after `since` (epoch ms)? E.g. it already explained its question itself. */
+export const agentSpokeSince = (since: number): boolean => agentSpeaking || agentStartedAt >= since;
+
+/** Resolves once the agent is not speaking (checked every 200 ms), at the latest after `maxMs`. */
+export async function agentQuiet(maxMs = 30_000): Promise<void> {
+  const end = Date.now() + maxMs;
+  while (agentSpeaking && Date.now() < end) await new Promise((r) => setTimeout(r, 200));
+}
+
+/** Teach: Helpy's own voice says a step (TTS): the agent must not hear it as the trainee talking. */
+export function muteMic(on: boolean): void {
+  try {
+    conv?.setMicMuted(on);
+  } catch (e) {
+    console.warn('[voice] mute failed', e);
+  }
+}
+
+/** Background context for the agent (no reply), e.g. "[GUIDE] Helpy told the trainee: ...". */
+export function tellAgent(text: string): void {
+  conv?.sendContextualUpdate(text);
+}
+
+/** True while the agent is talking. */
+export const isAgentSpeaking = (): boolean => agentSpeaking;
 
 /** Speak text verbatim. Resolves when the agent has finished speaking (or after 30 s). */
 export function say(text: string): Promise<void> {
@@ -384,54 +456,4 @@ function startAgentScreenFeed(deps: Deps): () => void {
     off();
     feed.dispose();
   };
-}
-
-// ---------------------------------------------------------------- tutor interventions
-
-/**
- * Expected event shapes from P1 (adjust the meta keys here if theirs differ):
- *  guardrail_violation: meta { guardrailId, rule, quote, stepId, invoiceId }
- *  sequence_deviation:  meta { stepName, stepId }
- *  invoice_opened:      meta { invoiceId, fields }
- */
-function wireTutor(deps: Deps): () => void {
-  const lastSent = new Map<string, number>();
-  const allow = (key: string, ms: number): boolean => {
-    const now = Date.now();
-    if ((lastSent.get(key) ?? 0) + ms > now) return false;
-    lastSent.set(key, now);
-    return true;
-  };
-
-  return deps.bus.on('*', (e) => {
-    if (!conv) return;
-    const m = e.meta ?? {};
-
-    switch (e.type) {
-      case 'guardrail_violation': {
-        if (!allow(`g:${m.guardrailId}`, 15_000)) return;
-        conv.sendUserMessage(
-          `[INTERVENE] ${m.stage === 'decision' ? 'The trainee just made this decision' : 'The trainee tried to post'}, which breaks guardrail ${m.guardrailId ?? '?'}: ${m.rule ?? e.text ?? ''}. ` +
-            `Expert quote: "${m.quote ?? ''}". Step: ${m.stepId ?? '?'}. Invoice: ${m.invoiceId ?? '?'}.`,
-        );
-        emit({ type: 'tutor_intervention', speaker: 'agent', meta: { kind: 'guardrail', ...m } });
-        break;
-      }
-      case 'sequence_deviation': {
-        if (!allow(`s:${m.stepId}`, 20_000)) return;
-        conv.sendUserMessage(`[NUDGE] The trainee skipped step "${m.stepName ?? m.stepId ?? '?'}". Ask softly if it was on purpose.`);
-        emit({ type: 'tutor_intervention', speaker: 'agent', meta: { kind: 'sequence', ...m } });
-        break;
-      }
-      case 'invoice_opened': {
-        const hits = deps.matchGuardrails?.((m.fields as Record<string, unknown>) ?? {}) ?? [];
-        if (!hits.length || !allow(`p:${m.invoiceId}`, 60_000)) return;
-        conv.sendUserMessage(
-          `[PREDICT] Invoice ${m.invoiceId ?? '?'} matches guardrail ${hits.map((h) => h.id).join(', ')}. ` +
-            `Ask "What would you do with this one?" and do not hint at the answer.`,
-        );
-        break;
-      }
-    }
-  });
 }

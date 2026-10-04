@@ -1,5 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { helpyApp, useHelpyApp } from '../app/helpy-app/store'
+import { DESKTOP_APP_TARGET } from '../erp/targetIds'
+import { useTarget } from '../erp/useTarget'
 import { HelpyMark } from '../mascot'
 import { TITLE_BAR, TITLE_TEXT, TrafficLights, windowPlacement } from './TrafficLights'
 
@@ -94,6 +96,8 @@ export function Desktop({ app }: { app: ReactNode }) {
   const [maximized, setMaximized] = useState(false)
   const now = useStoryClock()
   const helpyOpen = useHelpyApp((s) => s.open)
+  // Helpy points at it in Teach ("First we open ProcureFlow").
+  const appIcon = useTarget(DESKTOP_APP_TARGET)
 
   const open = () => setWin('open')
   const clock = `${now.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} ${now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`
@@ -130,6 +134,7 @@ export function Desktop({ app }: { app: ReactNode }) {
       </header>
 
       <button
+        ref={appIcon}
         type="button"
         onClick={open}
         className="absolute top-12 left-5 flex w-24 flex-col items-center gap-1.5 rounded-lg p-2 text-center text-white outline-none hover:bg-white/15 focus-visible:bg-white/20 focus-visible:ring-1 focus-visible:ring-white/60"
