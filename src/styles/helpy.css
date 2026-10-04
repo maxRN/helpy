@@ -392,3 +392,39 @@ body:has([data-helpy]) .recording-bar {
     animation: none !important;
   }
 }
+
+/* Ceramic character rig. Scoped to the mascot; panel and Work Map styling are unchanged. */
+.helpy-robot[data-design='ceramic'] .r-bar { fill: #21ad8a; }
+.helpy-robot[data-design='ceramic'] .r-float { animation-name: helpy-ceramic-float; animation-duration: 4.8s; }
+.helpy-robot[data-design='ceramic'] .r-eyes { transform-origin: 59.4px 52px; transform-box: view-box; }
+.helpy-robot[data-design='ceramic'][data-state='listening'] .r-head { animation-duration: 3.2s; }
+.helpy-robot[data-design='ceramic'][data-state='speaking'] .r-head { animation-duration: .8s; }
+.helpy-robot[data-design='ceramic'][data-state='alert'] .r-float { animation: helpy-ceramic-alert .7s ease-out 1; }
+.helpy-robot[data-design='ceramic'][data-state='alert'] .r-eye { fill: #ffad91; }
+.helpy-robot[data-design='ceramic'][data-state='alert'] .r-bar { fill: #a53f35; }
+.helpy-robot[data-design='ceramic'][data-pose='cheer'] .r-float { animation: helpy-hop .7s ease-in-out 2; }
+/* Pointing wins while speaking/listening so the head and gaze really follow the target. */
+.helpy-robot[data-design='ceramic'][data-pointing] .r-head,
+.helpy-robot[data-design='ceramic'][data-pointing] .r-gaze { animation: none; }
+/* Retarget the lifted hand to clear the new, wider head. Static poses also survive reduced motion. */
+.helpy-robot[data-design='ceramic'][data-pose='question'] .r-arm-left { transform: rotate(118deg) scaleY(1.3); animation-name: helpy-ceramic-hand-up; }
+.helpy-robot[data-design='ceramic'][data-pose='wave'] .r-arm-raise { transform: rotate(-112deg) scaleY(1.2); }
+@keyframes helpy-ceramic-hand-up { from { transform: rotate(114deg) scaleY(1.3); } to { transform: rotate(122deg) scaleY(1.3); } }
+/* No animated signal should suggest ongoing capture while off the record. */
+.helpy-robot[data-design='ceramic'][data-off] *,
+.helpy-robot[data-design='ceramic'][data-off] { animation: none !important; transition: none !important; }
+.helpy-robot[data-design='ceramic'][data-off] .r-arm-left,
+.helpy-robot[data-design='ceramic'][data-off] .r-arm-raise,
+.helpy-robot[data-design='ceramic'][data-off] .r-gaze { transform: none; }
+.helpy-robot[data-design='ceramic'][data-off] .r-dots,
+.helpy-robot[data-design='ceramic'][data-off] .r-alert-mark,
+.helpy-robot[data-design='ceramic'][data-off] .r-ears-ring,
+.helpy-robot[data-design='ceramic'][data-off] .r-chin-hand,
+.helpy-robot[data-design='ceramic'][data-off] .r-eyes-happy { opacity: 0; }
+.helpy-robot[data-design='ceramic'][data-off] .r-bar { fill: #849e8f; }
+.helpy-robot[data-design='ceramic'][data-off] .r-zz { opacity: .65; }
+@keyframes helpy-ceramic-float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+@keyframes helpy-ceramic-alert { 0%,100% { transform: translateY(0); } 38% { transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) {
+  .helpy-robot[data-design='ceramic'], .helpy-robot[data-design='ceramic'] * { animation: none !important; transition: none !important; }
+}
