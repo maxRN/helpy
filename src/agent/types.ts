@@ -64,6 +64,8 @@ export interface PolicyRequest {
   language?: 'de' | 'en';
   /** What is visible right now, with the age of each source (see src/shared/screen.ts). */
   screen?: string;
+  /** Questions Helpy dropped because the expert explained it on their own, with what they said. Never ask again. */
+  explained?: { question: string; explanation: string }[];
 }
 
 export interface PolicyResponse {
@@ -111,6 +113,8 @@ export interface Deps {
     pointTo(targetId: string): void;
     /** A question is ready but the expert is busy (null = none). P4 raises a hand instead of interrupting. */
     waiting?(question: string | null): void;
+    /** Optional: the agent is saying `text` right now; show exactly that (default: bubble). */
+    spoken?(text: string): void;
   };
   getNextStep(): { stepId: string; targetId: string; text: string } | null; // P1
   showExpertClip(stepId: string): void; // P4

@@ -38,7 +38,8 @@ const WRAP_ANSWER_WAIT_MS = 30_000;
 // takes 1.5-2.5 s), with a slow periodic check as a fallback.
 const PREPARE_AFTER_EVENT_MS = 1200;
 const PREPARE_EVERY_MS = 8000;
-type ReadyQuestion = { question: string; kind: QuestionKind; eventId?: string; eventT?: number; heldAt?: number };
+/** thoughtAt / checkedAt: Date.now() when the model chose it, and when it was last checked against the narration. */
+type ReadyQuestion = { question: string; kind: QuestionKind; eventId?: string; eventT?: number; heldAt?: number; thoughtAt?: number; checkedAt?: number };
 
 /** What deliver() gets to say a question at the right moment. */
 export interface DeliveryControl {
@@ -84,6 +85,8 @@ export function createQuestionPolicy(o: PolicyOpts) {
   let answerWaiter: (() => void) | null = null;
   // Decisions the expert explained before Helpy got to ask (a held question was withdrawn): never asked about.
   const explained = new Set<string>();
+  const explanations: { question: string; explanation: string }[] = [];
+  let lastExpertTurnAt = 0; // Date.now() of the expert's latest finished sentence
   let checking: Promise<void> | null = null; // is the held question answered already? (Claude)
   let checkAgain = false;
   let checkSoon: ReturnType<typeof setTimeout> | undefined;
@@ -92,6 +95,7 @@ export function createQuestionPolicy(o: PolicyOpts) {
   const off = deps.bus.on('*', (e) => {
     // A held question may be answered by what the expert says (or does) before Helpy gets to ask it.
     const expertSaid = e.type === 'utterance' && e.speaker !== 'agent' && e.meta?.toHelpy !== true;
+    if (expertSaid) lastExpertTurnAt = Date.now();
     if (ready && e.text && (expertSaid || SCREEN_EVENT_TYPES.has(e.type))) {
       clearTimeout(checkSoon);
       checkSoon = setTimeout(() => void checkHeld(), ANSWERED_CHECK_DEBOUNCE_MS);
@@ -169,6 +173,7 @@ export function createQuestionPolicy(o: PolicyOpts) {
     }
     const q = ready;
     if (!q || disposed) return Promise.resolve();
+    const startedAt = Date.now();
     const since = (q.eventT ?? q.heldAt ?? 0) - 30_000;
     const req = {
       question: q.question,
@@ -185,6 +190,7 @@ export function createQuestionPolicy(o: PolicyOpts) {
       .then((res) => (res.ok ? (res.json() as Promise<{ answered?: boolean; reason?: string }>) : null))
       .catch(() => null)
       .then((verdict) => {
+        q.checkedAt = startedAt;
         if (verdict?.answered && ready === q && !delivering) withdraw(q, verdict.reason || 'answered');
       })
       .finally(() => {
@@ -200,10 +206,18 @@ export function createQuestionPolicy(o: PolicyOpts) {
   function withdraw(q: ReadyQuestion, why: string): void {
     ready = null;
     deps.mascot.waiting?.(null);
-    // What the question was about is explained now; only newer decisions may lead to a question.
-    if (q.eventId) explained.add(q.eventId);
-    for (const e of pending) if (isDecision(e) && e.t <= (q.eventT ?? Number.POSITIVE_INFINITY)) explained.add(e.id);
+    // What the question was about is explained now: that decision and the other decisions on the same invoice
+    // (e.g. the asset number that goes with a re-coding to capex). Only other work may lead to a question.
+    const about = seen.find((e) => e.id === q.eventId);
+    const invoice = about?.meta?.invoiceId;
+    for (const e of seen)
+      if (e.id === q.eventId || (isDecision(e) && (invoice ? e.meta?.invoiceId === invoice : e.t <= (q.eventT ?? 0)))) explained.add(e.id);
+    // The model's transcript tail forgets it after a few sentences: it gets the explanation with every request.
+    explanations.push({ question: q.question, explanation: why });
     logPause({ t: nowRel(), pause: false, blockers: [], note: `withdrawn, the expert answered it meanwhile (${why}): ${q.question}` });
+    // Think about the next open decision now, so a question is ready when the pause comes.
+    clearTimeout(prepareSoon);
+    prepareSoon = setTimeout(prepareAhead, 300);
   }
 
   /**
@@ -213,6 +227,7 @@ export function createQuestionPolicy(o: PolicyOpts) {
   async function think(events: AppEvent[] = pending, mustAsk = false): Promise<ReadyQuestion | null> {
     const newest = events[events.length - 1].id;
     const force = (asked >= POLICY_LIMITS.guardrailByQuestion || mustAsk) && !hasGuardrail();
+    const thoughtAt = Date.now();
     const req: PolicyRequest = {
       // Oldest first by screen time: a vision event can arrive after a newer ERP event.
       events: [...events].sort((a, b) => a.t - b.t).map((e) => ({ id: e.id, t: e.t, text: e.text as string })),
@@ -222,6 +237,7 @@ export function createQuestionPolicy(o: PolicyOpts) {
       coverage: { ...coverage(), mustAsk },
       language: deps.language?.() ?? 'en',
       screen: deps.screen?.(),
+      explained: explanations.slice(-6),
     };
     const res = await fetchPolicy(req);
     if (!res.ask || !res.question) {
@@ -245,13 +261,18 @@ export function createQuestionPolicy(o: PolicyOpts) {
     // The question must be about one of the events it was given (screen grounding).
     const eventId = events.some((e) => e.id === res.eventId) ? res.eventId : newest;
     const eventT = events.find((e) => e.id === eventId)?.t;
-    return { question: res.question, kind: res.kind ?? (force ? 'guardrail' : 'why'), eventId, eventT };
+    return { question: res.question, kind: res.kind ?? (force ? 'guardrail' : 'why'), eventId, eventT, thoughtAt };
   }
 
   /** Hold a question until the next pause; Helpy raises a hand meanwhile. */
   function hold(q: ReadyQuestion): void {
     ready = { ...q, heldAt: q.heldAt ?? nowRel() };
     deps.mascot.waiting?.(q.question);
+    // The expert said something while the model was choosing it: check it against that right away.
+    if (lastExpertTurnAt > (q.thoughtAt ?? 0)) {
+      clearTimeout(checkSoon);
+      checkSoon = setTimeout(() => void checkHeld(), 0);
+    }
     logPause({ t: nowRel(), pause: false, blockers: [], note: `holding (${q.kind}): ${q.question}` });
   }
 
@@ -285,9 +306,13 @@ export function createQuestionPolicy(o: PolicyOpts) {
    */
   async function askNow(q: ReadyQuestion): Promise<void> {
     if (delivering) return;
-    // The expert may just have answered the held question: let that check finish (briefly) before saying it.
-    if (ready === q && checking) {
-      await Promise.race([checking, new Promise((r) => setTimeout(r, ANSWERED_CHECK_WAIT_MS))]);
+    // The expert may just have answered it: they said something since the model chose the question (or since it
+    // was last checked), or a check is running. Let that check finish (briefly) before saying it.
+    const stale = lastExpertTurnAt > Math.max(q.thoughtAt ?? 0, q.checkedAt ?? 0);
+    if ((ready === q && checking) || stale) {
+      if (ready !== q) ready = q;
+      const check = checking ?? checkHeld();
+      await Promise.race([check, new Promise((r) => setTimeout(r, ANSWERED_CHECK_WAIT_MS))]);
       if (ready !== q || delivering) return; // withdrawn, or already being said
     }
     delivering = q;

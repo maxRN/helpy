@@ -427,3 +427,44 @@ describe('reserved live questions', () => {
     expect(spoken).toHaveLength(2);
   });
 });
+
+describe('reserved live questions: what was explained stays explained', () => {
+  it('once the expert explained a decision, the other decisions on that invoice are explained too', async () => {
+    const calls = stubRoutes({ question: 'You moved that one to capex. What made you do that?', answered: true });
+    startCaptureWithoutAgent(deliver);
+    typeKey();
+    decisionEvent({ kind: 'field_changed', field: 'costCenter', invoiceId: '4471' }, 'Invoice 4471: cost center 4711 → 0400 (capex)');
+    await keepDoing(typeKey, 250, 3_000); // held
+    decisionEvent({ kind: 'field_changed', field: 'assetNumber', invoiceId: '4471' }, 'Invoice 4471: asset number → A-2291');
+    expertSays('Weil Ausrüstung über fünftausend Euro bei uns immer aktiviert wird.');
+    await keepDoing(typeKey, 250, 1_000);
+    expect(getDeps().mascot.waiting).toHaveBeenLastCalledWith(null); // withdrawn
+    const policyCalls = calls.filter((u) => u.includes('/api/policy')).length;
+    await vi.advanceTimersByTimeAsync(30_000); // a long pause: nothing on 4471 is left to ask about
+    expect(calls.filter((u) => u.includes('/api/policy')).length).toBe(policyCalls);
+    expect(spoken).toEqual([]);
+  });
+
+  it('a question chosen before the expert\'s latest sentence is checked against it before it is said', async () => {
+    let resolvePolicy!: () => void;
+    const calls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        calls.push(url);
+        if (url.includes('/api/helpy/answered')) return { ok: true, json: async () => ({ answered: true, reason: 'test' }) };
+        await new Promise<void>((r) => (resolvePolicy = r)); // the model is still thinking
+        return { ok: true, json: async () => ({ ask: true, question: 'You sent that one for a second approval. Why?', eventId: '', kind: 'why' }) };
+      }),
+    );
+    startCaptureWithoutAgent(deliver);
+    typeKey();
+    decisionEvent({ kind: 'action', action: 'request_approval', invoiceId: '4473' }, 'Invoice 4473: sent for a second approval');
+    await vi.advanceTimersByTimeAsync(1_500); // think-ahead started
+    expertSays('Bei allem aus Brno will ich immer ein zweites Paar Augen.'); // said while the model thinks
+    resolvePolicy();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(calls.some((u) => u.includes('/api/helpy/answered'))).toBe(true);
+    expect(spoken).toEqual([]);
+  });
+});
