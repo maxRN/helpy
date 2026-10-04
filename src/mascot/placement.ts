@@ -135,7 +135,7 @@ export function placeBubble(robot: Box, bubble: { width: number; height: number 
   return { x: best!.x, y: best!.y }
 }
 
-/** Resting spot in the bottom-right corner of `bounds`, offset by the user's drag. */
+/** Resting spot in the bottom-right corner of `bounds`, `home` px in from its right and bottom edges. */
 export function homePosition(home: { right: number; bottom: number }, size: { width: number; height: number }, bounds: Box) {
   return {
     x: clamp(right(bounds) - home.right - size.width, bounds.left + MARGIN, right(bounds) - MARGIN - size.width),
@@ -143,33 +143,47 @@ export function homePosition(home: { right: number; bottom: number }, size: { wi
   }
 }
 
-/** Moves the resting spot out of the way when it would cover `avoid` (e.g. the focused field). */
-/** Moves the resting spot up and/or left in small steps until it covers none of the controls in `avoid`. */
-export function clearSpot(pos: { x: number; y: number }, size: { width: number; height: number }, avoid: readonly Box[], bounds: Box) {
-  const cost = (p: { x: number; y: number }) => covered({ left: p.x, top: p.y, ...size }, avoid)
-  let best = { ...pos, cost: cost(pos) }
-  if (best.cost === 0) return pos
-  for (let k = 1; k <= 10; k++) {
-    for (const c of [
-      { x: pos.x, y: pos.y - 40 * k },
-      { x: pos.x - 40 * k, y: pos.y },
-      { x: pos.x - 40 * k, y: pos.y - 40 * k },
-    ]) {
-      const p = {
-        x: clamp(c.x, bounds.left + MARGIN, right(bounds) - MARGIN - size.width),
-        y: clamp(c.y, bounds.top + MARGIN, bottom(bounds) - MARGIN - size.height),
-      }
-      const n = cost(p)
-      if (n === 0) return p
-      if (n < best.cost) best = { ...p, cost: n }
-    }
-  }
-  return { x: best.x, y: best.y }
-}
-
+/** Moves the resting spot out of the way when it would cover `avoid` (e.g. the field the user types in). */
 export function dodge(pos: { x: number; y: number }, size: { width: number; height: number }, avoid: Box | null, bounds: Box) {
   if (!avoid || overlap({ left: pos.x, top: pos.y, ...size }, avoid) === 0) return pos
   const above = avoid.top - GAP - size.height
   if (above >= bounds.top + MARGIN) return { x: pos.x, y: above }
   return { x: clamp(avoid.left - GAP - size.width, bounds.left + MARGIN, right(bounds) - MARGIN - size.width), y: pos.y }
+}
+
+/**
+ * Where Helpy rests: the bottom-right corner of the viewport bounds, nothing else. Page scrolling,
+ * controls passing underneath and layout shifts do not move it. Only a field the user is typing in
+ * (`typing`, measured when it got focus) makes it step aside until the field loses focus.
+ */
+export function restPosition(bounds: Box, size: { width: number; height: number }, typing: Box | null = null, home = REST_INSET) {
+  return dodge(homePosition(home, size, bounds), size, typing, bounds)
+}
+
+/** Distance of the resting spot from the right and bottom edges of the bounds. */
+export const REST_INSET = { right: 24, bottom: 24 }
+
+/** Keeps a position (e.g. where the user dragged Helpy) inside the bounds, e.g. after a resize. */
+export function clampInto(pos: { x: number; y: number }, size: { width: number; height: number }, bounds: Box) {
+  return {
+    x: clamp(pos.x, bounds.left + MARGIN, right(bounds) - MARGIN - size.width),
+    y: clamp(pos.y, bounds.top + MARGIN, bottom(bounds) - MARGIN - size.height),
+  }
+}
+
+/**
+ * Where Helpy is, as an explicit state:
+ * - pointing: next to the target it explains (flies there, ring around the target);
+ * - dragging: follows the user's pointer;
+ * - dragged:  stays where the user dropped it, until Helpy's next move (a new target, a new bubble or
+ *             its panel opening), then it returns to rest;
+ * - resting:  the bottom-right corner of the viewport (see restPosition). Scrolling never moves it.
+ */
+export type MascotMode = 'pointing' | 'dragging' | 'dragged' | 'resting'
+
+export function mascotMode(s: { pointingAt: boolean; dragging: boolean; dragged: boolean }): MascotMode {
+  if (s.dragging) return 'dragging'
+  if (s.pointingAt) return 'pointing'
+  if (s.dragged) return 'dragged'
+  return 'resting'
 }

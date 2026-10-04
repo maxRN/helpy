@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
-import { HelpyMark, MASCOT_SIZE, useHelpyExtras, visibleBounds } from '../../mascot'
+import { HelpyMark, MASCOT_SIZE, REST_INSET, visibleBounds } from '../../mascot'
 import { HomeView } from './HomeView'
 import { LearningView, MomentView, ReportView } from './LearningViews'
 import { SignInView } from './SignInView'
@@ -24,7 +24,7 @@ function backOf(view: View): View | null {
 
 /** Opens next to the robot's resting spot: to its left when there is room, above it otherwise. */
 function usePlacement(boundsRef?: RefObject<HTMLElement | null>) {
-  const home = useHelpyExtras((s) => s.home)
+  const home = REST_INSET
   const open = usePanel((s) => s.open)
   const [style, setStyle] = useState<React.CSSProperties>({})
   useEffect(() => {
@@ -44,7 +44,7 @@ function usePlacement(boundsRef?: RefObject<HTMLElement | null>) {
     place()
     window.addEventListener('resize', place)
     return () => window.removeEventListener('resize', place)
-  }, [open, home, boundsRef])
+  }, [open, boundsRef])
   return style
 }
 

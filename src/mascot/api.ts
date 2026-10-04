@@ -1,9 +1,10 @@
 import { mascot as shared, useMascot, type MascotState } from '../shared/mascot'
-import { useHelpyExtras, type BubbleAction, type BubbleInput, type HomeOffset, type Pose } from './store'
+import { useHelpyExtras, type BubbleAction, type BubbleInput, type Pose } from './store'
 
 let bubbleTimer: ReturnType<typeof setTimeout> | null = null
 let poseTimer: ReturnType<typeof setTimeout> | null = null
-const HOME_KEY = 'helpy-mascot-home'
+/** Where older versions remembered a dragged resting spot; Helpy now always rests bottom-right. */
+const LEGACY_HOME_KEY = 'helpy-mascot-home'
 
 export interface BubbleOptions {
   /** Hide the bubble after this many ms. Without it, it stays until replaced. */
@@ -62,21 +63,12 @@ export const mascot = {
     shared.setState('idle')
   },
 
-  setHome(home: HomeOffset) {
-    useHelpyExtras.setState({ home })
+  /** Forgets a resting spot an older version stored after a drag (it could park Helpy anywhere). */
+  forgetLegacyHome() {
     try {
-      localStorage.setItem(HOME_KEY, JSON.stringify(home))
+      localStorage.removeItem(LEGACY_HOME_KEY)
     } catch {
-      // Storage can be unavailable; the position just is not remembered.
-    }
-  },
-
-  restoreHome() {
-    try {
-      const home = JSON.parse(localStorage.getItem(HOME_KEY) ?? 'null') as Partial<HomeOffset> | null
-      if (typeof home?.right === 'number' && typeof home.bottom === 'number') useHelpyExtras.setState({ home: { right: home.right, bottom: home.bottom } })
-    } catch {
-      // Ignore broken or blocked storage.
+      // Storage can be unavailable; nothing to forget then.
     }
   },
 }

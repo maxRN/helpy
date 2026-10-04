@@ -3,7 +3,7 @@ import { useMascot } from '../shared/mascot'
 import { registry } from '../shared/registry'
 import { useSession } from '../shared/session'
 import { mascot } from './api'
-import { clearSpot, dodge, homePosition, placeBubble, placeNextTo, type Box, type Side } from './placement'
+import { clampInto, mascotMode, placeBubble, placeNextTo, restPosition, type Box, type Side } from './placement'
 import { Robot } from './Robot'
 import { useHelpyExtras, type BubbleAction, type BubbleInput } from './store'
 
@@ -88,7 +88,6 @@ export function MascotLayer({ boundsRef, hideBubble = false, badge }: { boundsRe
   const targetId = useMascot((s) => s.pointTarget)
   const extras = useHelpyExtras((s) => s.bubbleExtras)
   const tone = useHelpyExtras((s) => s.tone)
-  const home = useHelpyExtras((s) => s.home)
   const pose = useHelpyExtras((s) => s.pose)
   const waiting = useMascot((s) => s.waiting !== null)
   const offRecord = useSession((s) => s.offRecord)
@@ -96,17 +95,40 @@ export function MascotLayer({ boundsRef, hideBubble = false, badge }: { boundsRe
   const [layout, setLayout] = useState<Layout | null>(null)
   const [flying, setFlying] = useState(false)
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null)
+  /** Where the user dropped Helpy, and the bubble it showed then (a new bubble ends the drag). */
+  const [dragged, setDragged] = useState<{ x: number; y: number; bubble: string | null } | null>(null)
   const [bubbleSize, setBubbleSize] = useState(BUBBLE_GUESS)
   const bubbleRef = useRef<HTMLDivElement>(null)
   const showBubble = !!bubbleText && !hideBubble
   const dragStart = useRef<{ px: number; py: number; x: number; y: number; moved: boolean } | null>(null)
+  /** The field the user is typing in, measured when it got focus (not on every scroll). */
+  const typingBox = useRef<Box | null>(null)
+  /** Controls the bubble keeps off while resting, measured once per bubble (not on every scroll). */
+  const restAvoid = useRef<{ key: string; boxes: Box[] } | null>(null)
 
   useEffect(() => {
-    mascot.restoreHome()
+    mascot.forgetLegacyHome()
     // Tells the shared store a real mascot is on screen (turns off P1's fallback highlight).
     useMascot.setState({ rendered: true })
     return () => useMascot.setState({ rendered: false })
   }, [])
+
+  // Helpy's next move ends a drag: it points at a target, says something new or opens its panel.
+  useEffect(() => {
+    setDragged((d) => (d && (targetId || hideBubble || bubbleText !== d.bubble) ? null : d))
+  }, [targetId, bubbleText, hideBubble])
+
+  // Back from where it was dropped to its resting spot: fly, so the eye can follow.
+  const isDragged = dragged !== null
+  const wasDragged = useRef(false)
+  useEffect(() => {
+    const returning = wasDragged.current && !isDragged
+    wasDragged.current = isDragged
+    if (!returning) return
+    setFlying(true)
+    const timer = setTimeout(() => setFlying(false), FLY_MS + 50)
+    return () => clearTimeout(timer)
+  }, [isDragged])
 
   useEffect(() => {
     setFlying(true)
@@ -127,20 +149,18 @@ export function MascotLayer({ boundsRef, hideBubble = false, badge }: { boundsRe
       const r = el?.getBoundingClientRect()
       const onScreen = !!r && r.width > 0 && r.height > 0 && r.bottom > bounds.top && r.top < bounds.top + bounds.height
 
-      const avoid = controlsOnScreen(bounds, el)
-      const avoidKey = boxesKey(avoid)
       let next: Layout
       if (r && onScreen) {
+        const avoid = controlsOnScreen(bounds, el)
         const ring = toBox(r)
         const p = placeNextTo(ring, SIZE, bounds, showBubble ? bubbleSize : null, avoid)
-        next = { x: p.x, y: p.y, side: p.side, ring, bounds, avoid, avoidKey }
+        next = { x: p.x, y: p.y, side: p.side, ring, bounds, avoid, avoidKey: boxesKey(avoid) }
       } else {
-        const active = document.activeElement
-        const focused = typingIn(active) ? toBox(active!.getBoundingClientRect()) : null
-        let p = dodge(homePosition(home, SIZE, bounds), SIZE, focused, bounds)
-        // At rest, off the buttons and fields too; not while the panel is open, it opens next to the resting spot.
-        if (!hideBubble) p = clearSpot(p, SIZE, avoid, bounds)
-        next = { x: p.x, y: p.y, side: null, ring: null, bounds, avoid, avoidKey }
+        // Resting: bottom-right of the viewport. Only the bounds (resize) and the typing field move it.
+        const key = `${bubbleText ?? ''}|${Math.round(bounds.width)}x${Math.round(bounds.height)}`
+        if (restAvoid.current?.key !== key) restAvoid.current = { key, boxes: showBubble ? controlsOnScreen(bounds) : [] }
+        const p = restPosition(bounds, SIZE, typingBox.current)
+        next = { x: p.x, y: p.y, side: null, ring: null, bounds, avoid: restAvoid.current.boxes, avoidKey: key }
       }
       setLayout((prev) =>
         prev &&
@@ -154,18 +174,30 @@ export function MascotLayer({ boundsRef, hideBubble = false, badge }: { boundsRe
           : next,
       )
     }
+    // Typing in a field under the resting spot: step aside, measured once when it gets focus.
+    const onFocusIn = (e: FocusEvent) => {
+      typingBox.current = typingIn(e.target as Element) ? toBox((e.target as Element).getBoundingClientRect()) : null
+      update()
+    }
+    const onFocusOut = () => {
+      typingBox.current = null
+      update()
+    }
     update()
+    // Scroll only matters while pointing (the target moves); the resting spot ignores it.
     window.addEventListener('scroll', update, true)
     window.addEventListener('resize', update)
-    document.addEventListener('focusin', update)
+    document.addEventListener('focusin', onFocusIn)
+    document.addEventListener('focusout', onFocusOut)
     const interval = setInterval(update, 250) // layout shifts (banners, route changes) have no event
     return () => {
       window.removeEventListener('scroll', update, true)
       window.removeEventListener('resize', update)
-      document.removeEventListener('focusin', update)
+      document.removeEventListener('focusin', onFocusIn)
+      document.removeEventListener('focusout', onFocusOut)
       clearInterval(interval)
     }
-  }, [targetId, home, boundsRef, showBubble, bubbleSize, hideBubble])
+  }, [targetId, boundsRef, showBubble, bubbleSize, bubbleText])
 
   const own = extras?.text === bubbleText ? extras : null
   const actionCount = (own?.actions.length ?? 0) + (own?.input ? 1 + (own.input.suggestions?.length ?? 0) : 0)
@@ -178,8 +210,10 @@ export function MascotLayer({ boundsRef, hideBubble = false, badge }: { boundsRe
 
   if (!layout) return null
 
-  const x = drag?.x ?? layout.x
-  const y = drag?.y ?? layout.y
+  const mode = mascotMode({ pointingAt: !!layout.ring, dragging: !!drag, dragged: !!dragged })
+  const spot = mode === 'dragging' ? drag! : mode === 'dragged' ? clampInto(dragged!, SIZE, layout.bounds) : layout
+  const x = spot.x
+  const y = spot.y
   // The pointing arm is on the robot's right; mirror it when the target is to its left.
   const flip = layout.side === 'right' || (layout.side === 'below' || layout.side === 'above' ? (layout.ring?.left ?? 0) + (layout.ring?.width ?? 0) / 2 < x + SIZE.width / 2 : false)
   // Around the robot, but never on the thing it points at and never off screen.
@@ -208,8 +242,8 @@ export function MascotLayer({ boundsRef, hideBubble = false, badge }: { boundsRe
       return
     }
     if (drag) {
-      const b = layout.bounds
-      mascot.setHome({ right: b.left + b.width - (drag.x + SIZE.width), bottom: b.top + b.height - (drag.y + SIZE.height) })
+      // Held here until Helpy's next move; never remembered as a new resting spot.
+      setDragged({ ...clampInto(drag, SIZE, layout.bounds), bubble: bubbleText })
       if (targetId) mascot.pointTo(null)
     }
     setDrag(null)
