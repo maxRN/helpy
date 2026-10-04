@@ -55,6 +55,8 @@
 .projects-page .ocr-regions dt { color: #202a25; white-space: pre-wrap; }
 .projects-page .ocr-regions dd { margin: 0.25rem 0 0.75rem; color: #66746c; font: 0.75rem ui-monospace, monospace; }
 .projects-page .ocr-text { white-space: pre-wrap; max-height: 20rem; overflow-y: auto; }
+.projects-page .pii-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
+.projects-page .pii-actions p { margin: 0; }
 
 .model-status { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; padding: 0.75rem 1.5rem; border-bottom: 1px solid #bac8be; background: #eef6f0; color: #202a25; font: 0.875rem/1.5 system-ui, sans-serif; }
 .model-status p { margin: 0; }

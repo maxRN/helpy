@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { OCR_MODELS, ocrModelIdSchema, ocrResponseSchema } from './ocr-contract'
 import type { ModelState, OcrModelId, OcrRequest, OcrResult } from './ocr-contract'
 
-export const useOcrModel = create<{ modelId: OcrModelId; state: ModelState }>(() => ({ modelId: 'florence', state: { kind: 'loading', message: 'Loading local text recognition model…', progress: 0 } }))
+export const useOcrModel = create<{ modelId: OcrModelId; state: ModelState }>(() => ({ modelId: 'tesseract', state: { kind: 'loading', message: 'Loading local text recognition…', progress: 0 } }))
 const selectionKey = 'sabine-ocr-model'
 let selectionLoaded = false
 let worker: Worker | undefined
@@ -21,13 +21,19 @@ export function loadOcrModel() {
   if (worker) return
   try {
     if (!selectionLoaded) {
-      const saved = localStorage.getItem(selectionKey)
+      let saved = localStorage.getItem(selectionKey)
+      if (saved === 'smolvlm') {
+        saved = 'tesseract'
+        localStorage.setItem(selectionKey, saved)
+      }
       if (saved !== null) useOcrModel.setState({ modelId: ocrModelIdSchema.parse(saved) })
       selectionLoaded = true
     }
     const { modelId } = useOcrModel.getState()
     useOcrModel.setState({ state: { kind: 'loading', message: `Loading ${OCR_MODELS[modelId].label} on this device…`, progress: 0 } })
-    worker = new Worker(new URL('./ocr.worker.ts', import.meta.url), { type: 'module' })
+    worker = modelId === 'tesseract'
+      ? new Worker(new URL('./ocr.worker.ts', import.meta.url), { type: 'module' })
+      : new Worker(new URL('./florence.worker.ts', import.meta.url), { type: 'module' })
     const activeWorker = worker
     worker.onmessage = ({ data }: MessageEvent<unknown>) => {
       if (worker !== activeWorker) return

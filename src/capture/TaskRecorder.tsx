@@ -11,7 +11,7 @@ import { useSession } from '../shared/session'
 import { formatDuration, openScreenCapture } from './screen'
 import type { ScreenRecording } from './screen'
 import { analyzeScreenshot, loadOcrModel, useOcrModel } from './ocr'
-import { OCR_MODELS, OCR_MODEL } from './ocr-contract'
+import { OCR_MODELS } from './ocr-contract'
 
 const uploadResponse = z.object({ storageId: z.string() })
 type Project = Pick<Doc<'projects'>, '_id' | 'name'>
@@ -136,7 +136,7 @@ function useRecordingController() {
           try {
             const result = await analyzeScreenshot(blob)
             await annotateScreenshot({ screenshotId, ocr: { kind: 'completed', result } })
-            emitEvent({ source: 'system', kind: 'screenshot_analyzed', t: timestamps.offsetMs, meta: { taskId: createdTaskId, screenshotId, model: result.model, ...(result.model === OCR_MODEL ? { regions: result.regions.length } : {}) } })
+            emitEvent({ source: 'system', kind: 'screenshot_analyzed', t: timestamps.offsetMs, meta: { taskId: createdTaskId, screenshotId, model: result.model, regions: result.regions.length } })
           } catch (failure) {
             const message = failure instanceof Error ? failure.message : 'Could not recognize screenshot text.'
             await annotateScreenshot({ screenshotId, ocr: { kind: 'failed', error: message } })
@@ -213,7 +213,7 @@ export function TaskRecorder({ project }: { project: Project }) {
         <Link to="/" className="task-link">Example ERP</Link>
       </div>
       {error && <p className="error" role="alert">{error}</p>}
-      {!busy && model.kind === 'ready' && <p className="muted model-ready">{OCR_MODELS[modelId].label} is ready on this device. {modelId === 'florence' ? 'Text and positions' : 'Extracted text'} will be saved with every screenshot.</p>}
+      {!busy && model.kind === 'ready' && <p className="muted model-ready">{OCR_MODELS[modelId].label} is ready on this device. Text and pixel coordinates will be saved with every screenshot.</p>}
     </section>
   )
 }
