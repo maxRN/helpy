@@ -39,12 +39,14 @@ export const rename = mutation({
 })
 
 export const remove = mutation({
-  args: { projectId: v.id('projects') },
+  // force: also delete recordings that never finished (e.g. the tab was closed while recording). Helpy's app asks first
+  // and never offers it for a process that is being recorded in that browser.
+  args: { projectId: v.id('projects'), force: v.optional(v.boolean()) },
   returns: v.null(),
-  handler: async (ctx, { projectId }) => {
+  handler: async (ctx, { projectId, force }) => {
     const tasks = await ctx.db.query('tasks')
       .withIndex('by_project', (q) => q.eq('projectId', projectId)).collect()
-    if (tasks.some((task) => !task.completion || task.processing?.kind === 'processing')) throw new ConvexError('Finish recording and processing all tasks before deleting this project.')
+    if (!force && tasks.some((task) => !task.completion || task.processing?.kind === 'processing')) throw new ConvexError('Finish recording and processing all tasks before deleting this project.')
     for (const task of tasks) await deleteTask(ctx, task._id)
     await ctx.db.delete('projects', projectId)
     return null

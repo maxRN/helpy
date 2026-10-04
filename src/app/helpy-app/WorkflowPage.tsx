@@ -12,6 +12,7 @@ import { field, textBtn } from '../panel/ui'
 import type { WorkMap } from '../../shared/types'
 import { momentCoverage } from '../../workmap/moments'
 import { answerQuestions, recordAgain, teach } from './actions'
+import { DeleteProcess } from './DeleteProcess'
 import { MomentLink, quoteSource } from './Moment'
 import { helpyApp } from './store'
 import { appPrimary, appSecondary, pageTitle, sectionTitle } from './ui'
@@ -74,6 +75,7 @@ function Title({ process }: { process: Process }) {
             Rename
           </button>
         ) : null}
+        <DeleteProcess process={process} onDeleted={() => helpyApp.go({ name: 'processes' })} />
       </div>
     )
   }

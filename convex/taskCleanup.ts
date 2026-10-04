@@ -13,5 +13,8 @@ export async function deleteTask(ctx: MutationCtx, taskId: Id<'tasks'>) {
     await ctx.db.delete('screenshots', screenshot._id)
   }
   for (const storageId of storageIds) await ctx.storage.delete(storageId)
+  // The recording's Work Map is stored under its session id, which is the task id.
+  const maps = await ctx.db.query('workMaps').withIndex('by_sessionId', (q) => q.eq('sessionId', taskId)).collect()
+  for (const map of maps) await ctx.db.delete('workMaps', map._id)
   await ctx.db.delete('tasks', taskId)
 }

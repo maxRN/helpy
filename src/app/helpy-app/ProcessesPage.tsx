@@ -1,5 +1,6 @@
 import { CATEGORIES, STATUS, statusOf, useProcesses, type Category, type Process } from '../panel/processes'
 import { field } from '../panel/ui'
+import { DeleteProcess } from './DeleteProcess'
 import { helpyApp, useHelpyApp } from './store'
 import { pageTitle } from './ui'
 
@@ -71,6 +72,9 @@ export function ProcessesPage() {
                 <th className="hidden px-3 pb-2 font-medium md:table-cell">Recorded by</th>
                 <th className="hidden px-3 pb-2 font-medium lg:table-cell">Last recorded</th>
                 <th className="px-3 pb-2 text-right font-medium">Status</th>
+                <th className="w-px pb-2">
+                  <span className="sr-only">Delete</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -94,6 +98,9 @@ export function ProcessesPage() {
                     <td className="hidden px-3 py-3.5 text-[15px] text-ink md:table-cell">{p.people[0] ?? <span className="text-faint">—</span>}</td>
                     <td className="hidden px-3 py-3.5 text-[15px] text-muted lg:table-cell">{last ? day(last) : p.example ? 'Example' : '—'}</td>
                     <td className={`px-3 py-3.5 text-right text-[15px] font-medium whitespace-nowrap ${status.tone}`}>{status.label}</td>
+                    <td className="py-2 pr-1 text-right whitespace-nowrap">
+                      <DeleteProcess process={p} compact />
+                    </td>
                   </tr>
                 )
               })}
