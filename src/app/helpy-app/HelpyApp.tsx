@@ -5,7 +5,7 @@ import { Avatar } from '../panel/SignInView'
 import { CompanyPage } from './CompanyPage'
 import { ProcessesPage } from './ProcessesPage'
 import { StepPage } from './StepPage'
-import { helpyApp, useHelpyApp, type AppPage } from './store'
+import { helpyApp, parentPage, useHelpyApp, type AppPage } from './store'
 import { WorkflowPage } from './WorkflowPage'
 
 function BuildingIcon() {
@@ -72,6 +72,27 @@ function Breadcrumb({ page }: { page: AppPage }) {
   )
 }
 
+/** Small arrow left of the breadcrumb: one level up (step -> its workflow, workflow -> the list). */
+function BackButton({ page }: { page: AppPage }) {
+  const up = parentPage(page)
+  const process = useProcess(up?.name === 'workflow' ? up.processId : null)
+  if (!up) return null
+  const label = up.name === 'workflow' ? `Back to ${process?.name ?? 'the process'}` : 'Back to Recorded processes'
+  return (
+    <button
+      type="button"
+      onClick={helpyApp.back}
+      aria-label={label}
+      title={label}
+      className="-ml-2 mr-1 flex size-9 shrink-0 items-center justify-center rounded-lg text-muted transition-colors duration-150 hover:bg-rule-soft hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-helpy-mint"
+    >
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M16 10H4M9 5l-5 5 5 5" />
+      </svg>
+    </button>
+  )
+}
+
 /**
  * Helpy's app, opened from the robot ("Open Helpy") or desktop icon: a window as large as the ERP's. Logo top left,
  * pages on the left (Company info, Recorded processes), then a process as a workflow and a step as a guide.
@@ -131,6 +152,7 @@ export function HelpyApp() {
         <main className="flex min-w-0 flex-1 flex-col">
           {page.name === 'workflow' || page.name === 'step' ? (
             <div className="flex h-12 shrink-0 items-center border-b border-helpy-line px-7">
+              <BackButton page={page} />
               <Breadcrumb page={page} />
             </div>
           ) : null}

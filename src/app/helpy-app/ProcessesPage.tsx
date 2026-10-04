@@ -1,7 +1,6 @@
-import { useState } from 'react'
 import { CATEGORIES, STATUS, statusOf, useProcesses, type Category, type Process } from '../panel/processes'
 import { field } from '../panel/ui'
-import { helpyApp } from './store'
+import { helpyApp, useHelpyApp } from './store'
 import { pageTitle } from './ui'
 
 export const day = (t: number) => new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -17,8 +16,10 @@ function matches(p: Process, q: string) {
 /** Everything the team recorded: search, filter by category, open one as a workflow. */
 export function ProcessesPage() {
   const processes = useProcesses()
-  const [query, setQuery] = useState('')
-  const [category, setCategory] = useState<Category | 'all'>('all')
+  // Kept in the app's store, so "back" from a workflow returns to the same search and filter.
+  const { query, category } = useHelpyApp((s) => s.processesView)
+  const setQuery = (q: string) => helpyApp.setProcessesView({ query: q })
+  const setCategory = (c: Category | 'all') => helpyApp.setProcessesView({ category: c })
   const q = query.trim().toLowerCase()
   const shown = (processes ?? [])
     .filter((p) => (category === 'all' || p.category === category) && matches(p, q))
