@@ -1,13 +1,19 @@
 import { useEffect, useState } from 'react'
 import { installAudioUnlock } from '../integration/audioUnlock'
 import { installActivityTracker } from '../shared/activity'
+import { registry } from '../shared/registry'
+import { registerAppScreen } from '../shared/screen'
 import { useSession } from '../shared/session'
 import { ConvexSync } from './ConvexSync'
 import { InvoiceDetail } from './InvoiceDetail'
 import { InvoiceInbox } from './InvoiceInbox'
 import { COMPANY_NAME } from './seed'
 import { installStepTracker, resetStepTracker } from './stepTracker'
-import { useErp } from './store'
+import { describeErpScreen } from './screenSnapshot'
+import { erp, useErp } from './store'
+
+/** On screen = mounted and not hidden (a minimized window keeps its elements but renders no boxes). */
+const onScreen = (targetId: string) => (registry.get(targetId)?.getClientRects().length ?? 0) > 0
 
 /** Two clicks so nobody wipes the invoices by accident mid-demo. Keeps the Work Map and the event log. */
 function ResetDemoButton() {
@@ -46,6 +52,12 @@ export function ErpServices() {
     void useSession.persist.rehydrate()
     installActivityTracker()
     installStepTracker()
+    // Helpy always knows what ProcureFlow shows, in every mode (Capture, debrief, Teach).
+    registerAppScreen(() => {
+      const { invoices, openId, blocked } = erp()
+      return describeErpScreen({ invoices, openId, visible: onScreen, blockedBy: blocked?.violations.map((v) => v.guardrail.text) })
+    })
+    return () => registerAppScreen(null)
   }, [])
   return <ConvexSync />
 }

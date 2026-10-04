@@ -110,11 +110,13 @@ export function createQuestionPolicy(o: PolicyOpts) {
     const newest = pending[pending.length - 1].id;
     const force = asked >= POLICY_LIMITS.guardrailByQuestion && !hasGuardrail();
     const req: PolicyRequest = {
-      events: pending.map((e) => ({ id: e.id, t: e.t, text: e.text as string })),
+      // Oldest first by screen time: a vision event can arrive after a newer ERP event.
+      events: [...pending].sort((a, b) => a.t - b.t).map((e) => ({ id: e.id, t: e.t, text: e.text as string })),
       history,
       transcriptTail: o.tail(8),
       budget: { questionsLeft: POLICY_LIMITS.maxQuestions - asked, forceGuardrail: force },
       language: deps.language?.() ?? 'en',
+      screen: deps.screen?.(),
     };
     const res = await fetchPolicy(req);
     if (!res.ask || !res.question) {

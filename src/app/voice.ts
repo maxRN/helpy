@@ -4,6 +4,7 @@ import { create } from 'zustand'
 import { toLogLines } from '../debrief/sessionLog'
 import { resumeAudio } from '../integration/audioUnlock'
 import { getEventLog } from '../shared/bus'
+import { screenSummary } from '../shared/screen'
 import { startListening, stopListening } from '../integration/listener'
 import { installVoiceBridge, resetVoiceClock } from '../integration/voiceBridge'
 import { mascot } from '../mascot'
@@ -103,7 +104,7 @@ export async function answerIfForHelpy(text: string, mode: AgentMode): Promise<b
   const res = await fetch('/api/helpy/turn', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, recent, language: session().language, mode }),
+    body: JSON.stringify({ text, recent, language: session().language, mode, screen: screenSummary() }),
   })
   if (!res.ok) return false
   const turn = (await res.json()) as { toHelpy: boolean; reply: string; language: 'de' | 'en' | 'keep' }

@@ -8,6 +8,8 @@ const BodySchema = z.object({
   recent: z.array(z.object({ who: z.enum(['screen', 'expert', 'agent']), text: z.string() })).max(30).default([]),
   language: z.enum(['de', 'en']).default('en'),
   mode: z.enum(['capture', 'debrief', 'teach']).default('capture'),
+  /** What is visible on the expert's screen right now (src/shared/screen.ts). */
+  screen: z.string().max(4000).default(''),
 })
 
 const TurnSchema = z.object({
@@ -29,6 +31,7 @@ If it is to you, reply like an attentive colleague in one or two short spoken se
 - Asked to speak German (or English): confirm in that language and say you will ask your questions in it from now on.
 - Asked why you do not answer or ask: you wait for a real pause so you never interrupt; offer to ask now.
 - Anything else: answer honestly and briefly. Do not give advice about their work and never invent facts they did not say.
+- Only mention invoices, suppliers and values that appear in the recent session or on screen. Never invent an invoice number; if you are not sure which one they mean, ask.
 It is spoken aloud: say values as words ("raw materials", "capex", "the Kramer invoice"), never codes, ids or underscores.
 Reply language: the one they asked for; otherwise the language they spoke to you in.
 language: "de" or "en" when they asked to switch or clearly spoke to you in that language, otherwise "keep".`
@@ -40,14 +43,14 @@ export const Route = createFileRoute('/api/helpy/turn')({
       POST: async ({ request }) => {
         const parsed = BodySchema.safeParse(await request.json().catch(() => null))
         if (!parsed.success) return Response.json({ error: 'Body must be { text, recent?, language?, mode? }' }, { status: 400 })
-        const { text, recent, language, mode } = parsed.data
+        const { text, recent, language, mode, screen } = parsed.data
         const context = recent.map((l) => `${l.who.toUpperCase()}: ${l.text}`).join('\n') || '(nothing yet)'
         try {
           const out = await generateJson({
             model: MODELS.fast,
             schema: TurnSchema,
             system: SYSTEM,
-            content: `Mode: ${mode}. Helpy currently speaks: ${language === 'de' ? 'German' : 'English'}.\n\nRecent session:\n${context}\n\nThe expert just said: "${text}"`,
+            content: `Mode: ${mode}. Helpy currently speaks: ${language === 'de' ? 'German' : 'English'}.\n\nNow on screen:\n${screen || '(unknown)'}\n\nRecent session:\n${context}\n\nThe expert just said: "${text}"`,
             maxTokens: 400,
             timeoutMs: 7000,
           })

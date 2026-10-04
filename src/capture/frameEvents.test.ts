@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AppEvent } from '../shared/types'
-import { CHANGE_RATIO, changedRatio, matchingDomEvent } from './frameEvents'
+import { CHANGE_RATIO, changedRatio, latestWins, matchingDomEvent } from './frameEvents'
 
 const thumb = (pixels: number, value = 0) => new Uint8ClampedArray(pixels * 4).fill(value)
 
@@ -35,5 +35,43 @@ describe('matchingDomEvent', () => {
     expect(matchingDomEvent(log, 'field_changed', '4472', 10_000)).toBeUndefined()
     expect(matchingDomEvent(log, 'action', '4471', 10_000)).toBeUndefined()
     expect(matchingDomEvent(log, 'field_changed', '4471', 20_000)).toBeUndefined()
+  })
+})
+
+describe('latestWins', () => {
+  it('runs one item at a time and skips the obsolete ones queued meanwhile', async () => {
+    const ran: number[] = []
+    let running = 0
+    let maxRunning = 0
+    const gates: Array<() => void> = []
+    const q = latestWins(async (n: number) => {
+      running++
+      maxRunning = Math.max(maxRunning, running)
+      await new Promise<void>((r) => gates.push(r))
+      ran.push(n)
+      running--
+    })
+    q.push(1) // starts at once
+    q.push(2) // obsolete before it ever runs
+    q.push(3) // newest: runs next
+    gates.shift()!()
+    await new Promise((r) => setTimeout(r, 0))
+    gates.shift()!()
+    await new Promise((r) => setTimeout(r, 0))
+    expect(ran).toEqual([1, 3])
+    expect(maxRunning).toBe(1)
+    expect(q.busy()).toBe(false)
+  })
+
+  it('keeps going after a failed item', async () => {
+    const ran: number[] = []
+    const q = latestWins(async (n: number) => {
+      if (n === 1) throw new Error('vision down')
+      ran.push(n)
+    })
+    q.push(1)
+    q.push(2)
+    await new Promise((r) => setTimeout(r, 0))
+    expect(ran).toEqual([2])
   })
 })

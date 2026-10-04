@@ -5,13 +5,14 @@
 // Uses the framework-agnostic client from @elevenlabs/client (re-exported by @elevenlabs/react),
 // so this is a plain module, not a React hook. Call setDeps() once before start().
 
-import { emit, getDeps, mmss } from './deps';
+import { emit, getDeps, nowRel } from './deps';
 import { MOCK_WORK_MAP } from './mockWorkMap';
 import { startPauseLoop, type PauseInputs } from './pause';
 import { createQuestionPolicy, type DeliveryControl, type QuestionPolicy } from './policy';
 import { buildClientTools } from './tools';
+import { startScreenFeed } from './screenFeed';
 import { createTranscript, type TranscriptHandle } from './transcript';
-import { SCREEN_EVENT_TYPES, type AppEvent, type Deps, type Mode, type Quote, type Speaker } from './types';
+import type { Deps, Mode, Quote, Speaker } from './types';
 
 export { getPauseLog } from './pause';
 
@@ -155,7 +156,7 @@ export async function start(m: Mode, opts: { workMapMarkdown?: string } = {}): P
   deps.mascot.setState('listening');
   // Capture with Scribe listening: the agent must not hear (or answer) the narration; it only speaks on [ASK].
   if (m === 'capture' && deps.speech?.active()) conv.setMicMuted(true);
-  cleanup.push(startScreenFeed(deps));
+  cleanup.push(startAgentScreenFeed(deps));
 
   if (m === 'capture') {
     startCapture(deps, (q) => {
@@ -346,29 +347,18 @@ function startCapture(deps: Deps, deliver: Deliver): void {
 
 // ---------------------------------------------------------------- screen events -> agent context
 
-/** Merge screen events that arrive within 500 ms into one contextual update. */
-function startScreenFeed(deps: Deps): () => void {
-  let batch: AppEvent[] = [];
-  let timer: ReturnType<typeof setTimeout> | null = null;
-
-  const flush = () => {
-    timer = null;
-    const events = batch;
-    batch = [];
-    if (!conv || offRecord || !events.length) return;
-    const body = events.map((e) => e.text).filter(Boolean).join('; ');
-    if (body) conv.sendContextualUpdate(`[SCREEN ${mmss(events[0].t)}] ${body}`);
-  };
-
-  const off = deps.bus.on('*', (e) => {
-    if (!SCREEN_EVENT_TYPES.has(e.type) || offRecord) return;
-    batch.push(e);
-    if (!timer) timer = setTimeout(flush, 500);
+/** Screen events and the current screen go into the agent's context (see screenFeed.ts). */
+function startAgentScreenFeed(deps: Deps): () => void {
+  const feed = startScreenFeed({
+    send: (text) => conv?.sendContextualUpdate(text),
+    screen: deps.screen ? () => deps.screen!({ ages: false }) : undefined,
+    isOffRecord: () => offRecord,
+    now: () => nowRel(),
   });
-
+  const off = deps.bus.on('*', (e) => feed.onEvent(e));
   return () => {
     off();
-    if (timer) clearTimeout(timer);
+    feed.dispose();
   };
 }
 

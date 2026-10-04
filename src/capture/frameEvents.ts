@@ -1,8 +1,10 @@
 // Screenshots → screen events for the voice agent.
 // A tiny thumbnail diff decides whether the screen changed; only changed frames go to /api/frame (Haiku).
+// One request at a time, latest wins: while one frame is being described, only the newest changed frame
+// waits (no backlog of obsolete screenshots, and no change is lost because a request was in flight).
 // Vision events that repeat an ERP click event (±3 s) are marked as confirmations, not sent twice.
 import { emitEvent, getEventLog } from '../shared/bus'
-import { markFrameChange } from '../shared/frames'
+import { markScreenChanged, noteVisionScreen, resetScreen } from '../shared/screen'
 import { session } from '../shared/session'
 import type { AppEvent } from '../shared/types'
 
@@ -32,15 +34,56 @@ export function matchingDomEvent(log: readonly AppEvent[], kind: AppEvent['kind'
   )
 }
 
+/**
+ * Runs `work` for one item at a time. Items pushed while it runs replace each other: only the newest
+ * one runs next, the ones in between are dropped (they are obsolete by then).
+ */
+export function latestWins<T>(work: (item: T) => Promise<void>) {
+  let queued: { item: T } | null = null
+  let running = false
+  async function drain() {
+    running = true
+    try {
+      while (queued) {
+        const { item } = queued
+        queued = null
+        await work(item).catch((err: unknown) => console.warn('[frame]', err))
+      }
+    } finally {
+      running = false
+    }
+  }
+  return {
+    push(item: T) {
+      queued = { item }
+      if (!running) void drain()
+    },
+    clear() {
+      queued = null
+    },
+    busy: () => running || queued !== null,
+  }
+}
+
+interface Frame {
+  blob: Blob
+  capturedAt: number
+  offsetMs: number
+  sessionId: string
+}
+
 let previousThumb: Uint8ClampedArray | null = null
 let previousDescription = ''
 let previousOffset = -1
-let inFlight = false
+
+const describer = latestWins(describe)
 
 export function resetFrameEvents() {
   previousThumb = null
   previousDescription = ''
   previousOffset = -1
+  describer.clear()
+  resetScreen()
 }
 
 function canvas(w: number, h: number) {
@@ -63,6 +106,39 @@ async function toBase64Jpeg(bitmap: ImageBitmap): Promise<string> {
   return btoa(binary)
 }
 
+/** Sends one changed frame to the vision model and turns its answer into screen events. */
+async function describe(frame: Frame): Promise<void> {
+  if (session().sessionId !== frame.sessionId || session().offRecord) return
+  const bitmap = await createImageBitmap(frame.blob)
+  let image: string
+  try {
+    image = await toBase64Jpeg(bitmap)
+  } finally {
+    bitmap.close()
+  }
+  const res = await fetch('/api/frame', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image, previous: previousDescription }),
+  })
+  if (!res.ok) throw new Error(`/api/frame ${res.status}`)
+  const body = (await res.json()) as { description: string; events: { kind: AppEvent['kind']; invoiceId: string; text: string }[] }
+  if (session().sessionId !== frame.sessionId) return
+  previousDescription = body.description
+  noteVisionScreen(body.description, frame.capturedAt)
+  for (const ev of body.events) {
+    const dom = matchingDomEvent(getEventLog(), ev.kind, ev.invoiceId, frame.offsetMs)
+    emitEvent({
+      source: 'vision',
+      kind: ev.kind,
+      t: frame.offsetMs,
+      invoiceId: ev.invoiceId || undefined,
+      text: ev.text,
+      meta: { ...(dom ? { confirms: dom.id } : {}), capturedAt: frame.capturedAt },
+    })
+  }
+}
+
 /** Call with every (already PII-masked) screenshot. */
 export async function processFrame(blob: Blob, capturedAt: number, offsetMs: number): Promise<void> {
   const sessionId = session().sessionId
@@ -75,36 +151,9 @@ export async function processFrame(blob: Blob, capturedAt: number, offsetMs: num
     const thumb = ctx.getImageData(0, 0, THUMB_W, THUMB_H).data
     const changed = !previousThumb || changedRatio(previousThumb, thumb) >= CHANGE_RATIO
     previousThumb = thumb
-    if (!changed) return
-    markFrameChange(capturedAt)
-
-    // One request at a time; skipped frames are fine, the next change is described relative to the last one.
-    if (inFlight || session().offRecord) return
-    inFlight = true
-    try {
-      const res = await fetch('/api/frame', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: await toBase64Jpeg(bitmap), previous: previousDescription }),
-      })
-      if (!res.ok) throw new Error(`/api/frame ${res.status}`)
-      const body = (await res.json()) as { description: string; events: { kind: AppEvent['kind']; invoiceId: string; text: string }[] }
-      if (session().sessionId !== sessionId) return
-      previousDescription = body.description
-      for (const ev of body.events) {
-        const dom = matchingDomEvent(getEventLog(), ev.kind, ev.invoiceId, offsetMs)
-        emitEvent({
-          source: 'vision',
-          kind: ev.kind,
-          t: offsetMs,
-          invoiceId: ev.invoiceId || undefined,
-          text: ev.text,
-          meta: dom ? { confirms: dom.id } : {},
-        })
-      }
-    } finally {
-      inFlight = false
-    }
+    if (!changed || session().offRecord) return
+    markScreenChanged(capturedAt)
+    describer.push({ blob, capturedAt, offsetMs, sessionId })
   } finally {
     bitmap.close()
   }

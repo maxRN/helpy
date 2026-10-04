@@ -51,6 +51,8 @@ export interface PolicyRequest {
   budget: { questionsLeft: number; forceGuardrail: boolean };
   /** Language Helpy speaks with the expert (they can ask for German). Default English. */
   language?: 'de' | 'en';
+  /** What is visible right now, with the age of each source (see src/shared/screen.ts). */
+  screen?: string;
 }
 
 export interface PolicyResponse {
@@ -85,6 +87,8 @@ export interface Deps {
   isSpeaking?(): boolean;
   /** Optional: the language Helpy speaks with the expert ('de' after they asked for German). */
   language?(): 'de' | 'en';
+  /** Optional: what is on the user's screen right now, for the agent's context (every mode). ages: false = stable text. */
+  screen?(opts?: { ages?: boolean }): string;
   mascot: {
     // P4
     setState(s: 'idle' | 'listening' | 'speaking' | 'thinking'): void;
