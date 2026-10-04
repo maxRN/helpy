@@ -16,12 +16,12 @@ import { panel } from './panel/store'
 import { UNNAMED } from './recordName'
 import { askWaitingQuestion, setOffRecord, startVoice, wrapUpLiveQuestions } from './voice'
 
-// "Record what I do" without a window: Helpy asks in its bubble what to call the task (typed, so nothing
-// said to Helpy ends up as the name), then sharing the screen and the microphone starts. No spoken intro:
-// Helpy stays quiet until there is a real question. While recording, clicking the robot shows pause and
-// "I'm done" in the bubble.
+// "Record what I do" without a window and without deciding a name: one click starts sharing the screen and
+// the microphone. When the recording ends, Claude names the process from what was done (src/app/autoName.ts);
+// it can be renamed in Helpy's app. No spoken intro: Helpy stays quiet until there is a real question.
+// While recording, clicking the robot shows pause and "I'm done" in the bubble.
 
-/** Recording an existing process again keeps its name; a new one gets the name typed in the bubble. */
+/** Recording an existing process again keeps its name; a new one is named by Claude afterwards. */
 type Target = { projectId?: string; name?: string }
 type Step =
   | { kind: 'idle' }
@@ -46,22 +46,8 @@ export const recordFlow = {
     panel.close()
     helpyApp.close() // show the work, not Helpy's app
     mascot.pointTo(null)
-    if (process) return set({ kind: 'ready', target: { projectId: process.id, name: process.name }, auto: true })
-    // A new task: ask for its name first. Submitting (Enter or the button) is a fresh user gesture,
-    // so the browser still allows screen sharing afterwards.
-    mascot.setState('idle')
-    mascot.bubble('What should I call this task?', {
-      input: {
-        placeholder: 'e.g. Supplier invoices, month-end',
-        submitLabel: 'Start',
-        suggestions: ['Supplier invoices', 'Month-end close'],
-        onSubmit: (name) => {
-          mascot.bubble(null)
-          set({ kind: 'ready', target: { name: name.slice(0, 80) }, auto: true })
-        },
-      },
-      actions: [{ label: 'Not now', onClick: notNow }],
-    })
+    // A new task starts right away as "New recording"; Claude names it when the recording ends (autoName.ts).
+    set({ kind: 'ready', target: process ? { projectId: process.id, name: process.name } : {}, auto: true })
   },
   active: () => useRecordFlow.getState().step.kind !== 'idle',
   controls() {
@@ -119,7 +105,7 @@ export function RecordDialog() {
     mascot.setState('listening')
     mascot.bubble(
       speech.active()
-        ? `Recording “${target.name ?? 'your task'}”. Work as usual and tell me what you do. I only ask in real pauses. Click me when you’re done.`
+        ? target.name ? `Recording “${target.name}”. Work as usual and tell me what you do. I only ask in real pauses. Click me when you’re done.` : 'I’m watching and listening. Work as usual and tell me what you do. I only ask in real pauses, and I’ll name this task for you at the end. Click me when you’re done.'
         : 'I can’t hear you right now, but I’m watching your screen. Just start, and click me when you’re done.',
       { topic: 'notice' },
     )
