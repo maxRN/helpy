@@ -233,7 +233,7 @@ export function prefetchSpeech(text: string) {
 export interface SpeakOptions {
   /** Checked once the audio is ready, right before it plays: false = do not say it now. */
   gate?: () => boolean
-  /** Called right before the voice starts (`audio` true), or right away when it can only be shown (no TTS). */
+  /** Called after playback starts (`audio` true), or when the line can only be shown (no audio). */
   onStart?: (audio: boolean) => void
 }
 
@@ -242,40 +242,55 @@ export interface SpeakOptions {
  * the gate said no. Helpy shows "speaking" meanwhile, so Scribe does not hear it.
  */
 export async function speak(text: string, { gate, onStart }: SpeakOptions = {}): Promise<'spoken' | 'skipped'> {
-  if (!ttsAvailable) {
+  let audio: HTMLAudioElement | null = null
+  let url: string | null = null
+  let started = false
+
+  const releasePlayback = () => {
+    if (audio && playing === audio) {
+      playing = null
+      audio.onended = audio.onerror = audio.onpause = null
+      audio.pause()
+    }
+    if (!playing && useMascot.getState().state === 'speaking') mascot.setState('listening')
+  }
+  const showWithoutAudio = (): 'spoken' | 'skipped' => {
+    // Clear our own speaking state before checking the gate, so it cannot block the bubble fallback.
+    releasePlayback()
     if (gate && !gate()) return 'skipped'
     onStart?.(false)
+    if (!playing && useMascot.getState().state === 'speaking') mascot.setState('listening')
     return 'spoken'
   }
+  if (!ttsAvailable) return showWithoutAudio()
+
   try {
     const blob = await ttsAudio(text)
-    if (!blob) {
-      if (!ttsAvailable) return speak(text, { gate, onStart }) // no TTS (no keys): the bubble says it
-      throw new Error('TTS request failed')
-    }
+    if (!blob) return showWithoutAudio()
     // The expert may have started talking or typing while the audio was generated.
     if (gate && !gate()) return 'skipped'
-    const url = URL.createObjectURL(blob)
+    url = URL.createObjectURL(blob)
     playing?.pause()
-    const audio = new Audio(url)
+    const playback = new Audio(url)
+    audio = playback
     playing = audio
     mascot.setState('speaking')
-    onStart?.(true)
-    await new Promise<void>((resolve) => {
-      audio.onended = () => resolve()
-      audio.onerror = () => resolve()
-      audio.onpause = () => resolve() // replaced by the next line Helpy says
-      audio.play().catch(() => resolve())
+    await new Promise<void>((resolve, reject) => {
+      playback.onended = () => resolve()
+      playback.onerror = () => reject(new Error('Audio playback failed'))
+      playback.onpause = () => resolve() // replaced by the next line Helpy says
+      void playback.play().then(() => {
+        if (playing !== playback || playback.paused) return resolve()
+        started = true
+        onStart?.(true)
+      }).catch(reject)
     })
-    URL.revokeObjectURL(url)
-    if (playing === audio) {
-      playing = null
-      mascot.setState('listening')
-    }
+    return started ? 'spoken' : showWithoutAudio()
   } catch {
-    // Autoplay blocked or no network: the bubble still says it.
-    if (gate && !gate()) return 'skipped'
-    onStart?.(false)
+    // Autoplay blocked or no network: the bubble still says it, without counting it as audible.
+    return started ? 'spoken' : showWithoutAudio()
+  } finally {
+    releasePlayback()
+    if (url) URL.revokeObjectURL(url)
   }
-  return 'spoken'
 }

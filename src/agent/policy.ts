@@ -191,7 +191,7 @@ export function createQuestionPolicy(o: PolicyOpts) {
     answerWaiter?.();
     answerWaiter = null;
 
-    deps.mascot.setState('speaking');
+    deps.mascot.setState(voice ? 'speaking' : 'listening');
     deps.mascot.bubble(q.question);
     o.noteQuestion({ questionEventId: qe.id, eventId: q.eventId });
     logPause({ t: qe.t, pause: true, blockers: [], note: `asked (${q.kind}): ${q.question}` });
