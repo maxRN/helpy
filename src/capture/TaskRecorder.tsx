@@ -11,7 +11,6 @@ import { useSession } from '../shared/session'
 import { formatDuration, openScreenCapture } from './screen'
 import type { ScreenRecording } from './screen'
 import { loadOcrModel, useOcrModel } from './ocr'
-import { OCR_MODELS } from './ocr-contract'
 import { loadPiiModel, usePiiModel } from './pii'
 import { processScreenshot } from './pipeline'
 
@@ -198,7 +197,7 @@ function useRecordingController() {
 
 export function TaskRecorder({ project }: { project: Project }) {
   const { state, error, savedCount, start } = useTaskRecording()
-  const { state: model, modelId } = useOcrModel()
+  const { state: model } = useOcrModel()
   const { state: pii } = usePiiModel()
   const ready = model.kind === 'ready' && pii.kind === 'ready'
   const busy = state.kind !== 'idle'
@@ -237,7 +236,17 @@ export function TaskRecorder({ project }: { project: Project }) {
         <Link to="/" className="task-link">Example ERP</Link>
       </div>
       {error && <p className="error" role="alert">{error}</p>}
-      {!busy && ready && <p className="muted model-ready">{OCR_MODELS[modelId].label} and PII redaction are ready. Original and redacted screenshots will both be saved.</p>}
+      {!busy && model.kind === 'loading' && <p className="muted" role="status">{model.message} {Math.floor(model.progress)}%.</p>}
+      {!busy && model.kind === 'failed' && <>
+        <p className="error" role="alert">Text recognition could not start: {model.error}</p>
+        <button onClick={loadOcrModel}>Retry loading text recognition</button>
+      </>}
+      {!busy && pii.kind === 'loading' && <p className="muted" role="status">{pii.message} {Math.floor(pii.progress)}%.</p>}
+      {!busy && pii.kind === 'failed' && <>
+        <p className="error" role="alert">PII redaction could not start: {pii.error}</p>
+        <button onClick={() => { void loadPiiModel().catch(() => undefined) }}>Retry loading PII redaction</button>
+      </>}
+      {!busy && ready && <p className="muted model-ready">Tesseract.js and PII redaction are ready. Original and redacted screenshots will both be saved.</p>}
     </section>
   )
 }

@@ -1,7 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query'
 import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from '@tanstack/react-router'
 import { ActiveTaskBar, TaskRecordingProvider } from '../capture/TaskRecorder'
-import { OcrModelStatus } from '../capture/OcrModelStatus'
 
 import appCss from '../styles.css?url'
 
@@ -33,7 +32,6 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 function RootLayout() {
   return (
     <TaskRecordingProvider>
-      <OcrModelStatus />
       <ActiveTaskBar />
       <Outlet />
     </TaskRecordingProvider>

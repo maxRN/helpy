@@ -1,10 +1,8 @@
 import { create } from 'zustand'
-import { OCR_MODELS, ocrModelIdSchema, ocrResponseSchema } from './ocr-contract'
-import type { ModelState, OcrModelId, OcrRequest, OcrResult } from './ocr-contract'
+import { ocrResponseSchema } from './ocr-contract'
+import type { ModelState, OcrRequest, OcrResult } from './ocr-contract'
 
-export const useOcrModel = create<{ modelId: OcrModelId; state: ModelState }>(() => ({ modelId: 'tesseract', state: { kind: 'loading', message: 'Loading local text recognition…', progress: 0 } }))
-const selectionKey = 'sabine-ocr-model'
-let selectionLoaded = false
+export const useOcrModel = create<{ state: ModelState }>(() => ({ state: { kind: 'loading', message: 'Loading local text recognition…', progress: 0 } }))
 let worker: Worker | undefined
 let nextId = 0
 const pending = new Map<number, { resolve: (result: OcrResult) => void; reject: (error: Error) => void }>()
@@ -20,20 +18,8 @@ function fail(error: string) {
 export function loadOcrModel() {
   if (worker) return
   try {
-    if (!selectionLoaded) {
-      let saved = localStorage.getItem(selectionKey)
-      if (saved === 'smolvlm') {
-        saved = 'tesseract'
-        localStorage.setItem(selectionKey, saved)
-      }
-      if (saved !== null) useOcrModel.setState({ modelId: ocrModelIdSchema.parse(saved) })
-      selectionLoaded = true
-    }
-    const { modelId } = useOcrModel.getState()
-    useOcrModel.setState({ state: { kind: 'loading', message: `Loading ${OCR_MODELS[modelId].label} on this device…`, progress: 0 } })
-    worker = modelId === 'tesseract'
-      ? new Worker(new URL('./ocr.worker.ts', import.meta.url), { type: 'module' })
-      : new Worker(new URL('./florence.worker.ts', import.meta.url), { type: 'module' })
+    useOcrModel.setState({ state: { kind: 'loading', message: 'Loading Tesseract.js on this device…', progress: 0 } })
+    worker = new Worker(new URL('./ocr.worker.ts', import.meta.url), { type: 'module' })
     const activeWorker = worker
     worker.onmessage = ({ data }: MessageEvent<unknown>) => {
       if (worker !== activeWorker) return
@@ -53,20 +39,9 @@ export function loadOcrModel() {
     }
     worker.onerror = (event) => { if (worker === activeWorker) fail(event.message || 'The local text recognition worker stopped. Reload or retry loading the model.') }
     worker.onmessageerror = () => { if (worker === activeWorker) fail('Could not communicate with the local text recognition worker.') }
-    worker.postMessage({ kind: 'load', modelId } satisfies OcrRequest)
+    worker.postMessage({ kind: 'load' } satisfies OcrRequest)
     void navigator.storage?.persist?.().catch(() => false)
   } catch (error) { fail(error instanceof Error ? error.message : 'Could not start local text recognition.') }
-}
-
-export function selectOcrModel(modelId: OcrModelId) {
-  if (modelId === useOcrModel.getState().modelId) return
-  if (pending.size > 0) throw new Error('Finish text recognition before switching models.')
-  localStorage.setItem(selectionKey, modelId)
-  selectionLoaded = true
-  worker?.terminate()
-  worker = undefined
-  useOcrModel.setState({ modelId })
-  loadOcrModel()
 }
 
 export function analyzeScreenshot(blob: Blob): Promise<OcrResult> {

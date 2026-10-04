@@ -1,6 +1,6 @@
 import { useMutation } from '@tanstack/react-query'
 import type { Doc } from '../../convex/_generated/dataModel'
-import { SMOLVLM_MODEL, TESSERACT_MODEL } from './ocr-contract'
+import { TESSERACT_MODEL } from './ocr-contract'
 import { redactPii, usePiiModel } from './pii'
 
 export function ScreenshotNote({ ocr, redaction }: Pick<Doc<'screenshots'>, 'ocr' | 'redaction'>) {
@@ -57,7 +57,7 @@ function ExtractedTextNote({ result }: { result: NoteResult }) {
       )}
     </details>
   )
-  if (result.model === SMOLVLM_MODEL) return (
+  if (result.model === 'HuggingFaceTB/SmolVLM-500M-Instruct') return (
     <details className="screenshot-note">
       <summary>Text note</summary>
       <p className="muted">SmolVLM-500M-Instruct · {result.width} × {result.height} pixels.</p>

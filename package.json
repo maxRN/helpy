@@ -26,7 +26,6 @@
     "@convex-dev/react-query": "^0.1.0",
     "@desert-ant-labs/redact": "3.5.0",
     "@elevenlabs/client": "^1.26.0",
-    "@huggingface/transformers": "^4.3.0",
     "@litertjs/core": "2.5.3",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-query": "^5.104.1",

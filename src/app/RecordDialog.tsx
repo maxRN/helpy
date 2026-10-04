@@ -4,6 +4,7 @@ import { create } from 'zustand'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import { loadOcrModel, useOcrModel } from '../capture/ocr'
+import { loadPiiModel, usePiiModel } from '../capture/pii'
 import { useTaskRecording } from '../capture/TaskRecorder'
 import { useListener } from '../integration/listener'
 import { mascot } from '../mascot'
@@ -59,6 +60,7 @@ export function RecordDialog() {
   const step = useRecordFlow((s) => s.step)
   const controlsAt = useRecordFlow((s) => s.controlsAt)
   const model = useOcrModel((s) => s.state.kind)
+  const pii = usePiiModel((s) => s.state.kind)
   const processes = useProcesses()
   const { start, finish, state: recorder, error } = useTaskRecording()
   const createProject = useMutation(api.projects.create)
@@ -127,17 +129,17 @@ export function RecordDialog() {
       }
       case 'ready': {
         // Helpy reads the screen with a local model; it has to be loaded before a recording can start.
-        if (model === 'failed') {
+        if (model === 'failed' || pii === 'failed') {
           mascot.setState('idle')
           mascot.bubble('I can’t read your screen on this computer right now.', {
             actions: [
-              { label: 'Try again', primary: true, onClick: loadOcrModel },
+              { label: 'Try again', primary: true, onClick: () => { loadOcrModel(); void loadPiiModel().catch(() => undefined) } },
               { label: 'Not now', onClick: notNow },
             ],
           })
           return
         }
-        if (model !== 'ready') {
+        if (model !== 'ready' || pii !== 'ready') {
           mascot.setState('thinking')
           mascot.bubble('I’m still getting ready to read your screen. One moment…', { actions: [{ label: 'Not now', onClick: notNow }] })
           return
@@ -168,7 +170,7 @@ export function RecordDialog() {
         return
     }
     // `own` changes with every Convex update; the dialog only follows its step and the model.
-  }, [step, model])
+  }, [step, model, pii])
 
   const done = async () => {
     if (session().offRecord) await setOffRecord(false)

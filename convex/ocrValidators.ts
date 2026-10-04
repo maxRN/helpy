@@ -1,7 +1,7 @@
 import { v } from 'convex/values'
-import { OCR_MODEL, OCR_REVISION, SMOLVLM_MODEL, SMOLVLM_REVISION, TESSERACT_MODEL, TESSERACT_REVISION, OCR_LANGUAGE } from '../src/capture/ocr-contract'
+import { TESSERACT_MODEL, TESSERACT_REVISION, OCR_LANGUAGE } from '../src/capture/ocr-contract'
 
-export const ocrResult = v.union(v.object({
+const tesseractResult = v.object({
   model: v.literal(TESSERACT_MODEL),
   revision: v.literal(TESSERACT_REVISION),
   language: v.literal(OCR_LANGUAGE),
@@ -13,15 +13,17 @@ export const ocrResult = v.union(v.object({
     confidence: v.number(),
     bbox: v.object({ x0: v.number(), y0: v.number(), x1: v.number(), y1: v.number() }),
   })),
-}), v.object({
-  model: v.literal(OCR_MODEL),
-  revision: v.literal(OCR_REVISION),
+})
+
+export const ocrResult = v.union(tesseractResult, v.object({
+  model: v.literal('onnx-community/Florence-2-base-ft'),
+  revision: v.literal('e88a44eaf3791a35eae0c5a47b3dbcd36e67eb6f'),
   width: v.number(),
   height: v.number(),
   regions: v.array(v.object({ text: v.string(), quad: v.array(v.number()) })),
 }), v.object({
-  model: v.literal(SMOLVLM_MODEL),
-  revision: v.literal(SMOLVLM_REVISION),
+  model: v.literal('HuggingFaceTB/SmolVLM-500M-Instruct'),
+  revision: v.literal('a7da5b986cb59b408707209984f360a5f4ad7e47'),
   width: v.number(),
   height: v.number(),
   text: v.string(),
@@ -42,6 +44,6 @@ export const screenshotRedaction = v.object({
 })
 
 export const screenshotProcessing = v.union(
-  v.object({ kind: v.literal('completed'), result: ocrResult, redactedStorageId: v.string(), redaction: screenshotRedaction }),
+  v.object({ kind: v.literal('completed'), result: tesseractResult, redactedStorageId: v.string(), redaction: screenshotRedaction }),
   v.object({ kind: v.literal('failed'), error: v.string() }),
 )
