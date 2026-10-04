@@ -90,7 +90,7 @@ export function Helpy({ boundsRef }: { boundsRef?: RefObject<HTMLElement | null>
   }, [clipRequest])
 
   // End of a recording, from "I'm done" or the browser's "Stop sharing": thank, then ask the follow-up questions.
-  const { state: recorder } = useTaskRecording()
+  const { state: recorder, error } = useTaskRecording()
   const wasRecording = useRef(false)
   useEffect(() => {
     const recording = recorder.kind !== 'idle'
@@ -98,13 +98,19 @@ export function Helpy({ boundsRef }: { boundsRef?: RefObject<HTMLElement | null>
     if (wasRecording.current && !recording && current?.kind === 'recording') {
       panel.setActivity(null)
       sharedMascot.waiting(null)
-      mascot.setState('speaking')
-      mascot.pose('cheer', 2200)
-      mascot.bubble('Thank you! I have a few questions about what I saw.', { ttlMs: 5000 })
-      void stopVoice().then(() => setTimeout(askQuestions, 1500))
+      if (error) {
+        mascot.setState('idle')
+        mascot.bubble(`Recording stopped because of an error: ${error}`)
+        void stopVoice()
+      } else {
+        mascot.setState('speaking')
+        mascot.pose('cheer', 2200)
+        mascot.bubble('Thank you! I have a few questions about what I saw.', { ttlMs: 5000 })
+        void stopVoice().then(() => setTimeout(askQuestions, 1500))
+      }
     }
     wasRecording.current = recording
-  }, [recorder.kind])
+  }, [recorder.kind, error])
 
   // A question held back for a while: say so quietly, with "Ask me now". Never out loud, never over the expert.
   const waiting = useMascot((s) => s.waiting)

@@ -1,10 +1,10 @@
-import { createWorker, OEM, PSM } from 'tesseract.js'
 import type { Worker } from 'tesseract.js'
 import workerPath from 'tesseract.js/dist/worker.min.js?url'
 import { OCR_LANGUAGE, TESSERACT_MODEL, TESSERACT_REVISION, tesseractResultSchema } from './ocr-contract'
 import type { ModelState } from './ocr-contract'
 
 export async function loadTesseract(onState: (state: ModelState) => void) {
+  const { createWorker, OEM, PSM } = await import('tesseract.js')
   const worker = await createWorker(OCR_LANGUAGE, OEM.LSTM_ONLY, {
     workerPath: new URL(workerPath, globalThis.location.origin).href,
     workerBlobURL: false,

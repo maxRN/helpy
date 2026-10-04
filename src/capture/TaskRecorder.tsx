@@ -87,6 +87,7 @@ function useRecordingController() {
       useSession.getState().setT0(null)
       emitEvent({ source: 'system', kind: 'task_finished', t: result.durationMs, meta: { taskId: task.task.taskId } })
       active.current = null
+      setError(result.error ?? '')
       setState({ kind: 'idle' })
       if (!task.stay) await navigate({ to: '/projects/$projectId/tasks/$taskId', params: { projectId: task.task.project._id, taskId: task.task.taskId } })
     } catch (failure) {
