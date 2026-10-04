@@ -2,7 +2,7 @@ import { TITLE_BAR, TITLE_TEXT, TrafficLights, windowPlacement } from '../../des
 import { HelpyMark } from '../../mascot'
 import { useAuth } from '../auth'
 import { useProcess, useProcesses } from '../panel/processes'
-import { Avatar } from '../panel/SignInView'
+import { Avatar } from '../panel/Avatar'
 import { CompanyPage } from './CompanyPage'
 import { ProcessesPage } from './ProcessesPage'
 import { StepPage } from './StepPage'

@@ -1,4 +1,4 @@
-import { Avatar } from '../panel/SignInView'
+import { Avatar } from '../panel/Avatar'
 import { statusOf, useProcesses } from '../panel/processes'
 import { COMPANY } from './company'
 import { helpyApp } from './store'

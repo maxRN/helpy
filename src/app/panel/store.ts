@@ -1,9 +1,7 @@
 import { create } from 'zustand'
 import { mascot } from '../../mascot'
-import { auth } from '../auth'
 
 export type View =
-  | { name: 'signin' }
   | { name: 'home' }
   | { name: 'learning' }
   | { name: 'moment'; stepId: string }
@@ -25,8 +23,7 @@ const activityView = (a: Activity): View => (a?.kind === 'learning' ? { name: 'l
 export const panel = {
   show(view?: View) {
     mascot.pointTo(null)
-    // Nothing without signing in first.
-    usePanel.setState((s) => ({ open: true, view: !auth.user() ? { name: 'signin' } : (view ?? activityView(s.activity)) }))
+    usePanel.setState((s) => ({ open: true, view: view ?? activityView(s.activity) }))
   },
   close() {
     usePanel.setState({ open: false })

@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type RefObject } from 'react'
 import { HelpyMark, MASCOT_SIZE, REST_INSET, visibleBounds } from '../../mascot'
 import { HomeView } from './HomeView'
 import { LearningView, MomentView, ReportView } from './LearningViews'
-import { SignInView } from './SignInView'
 import { panel, usePanel, type View } from './store'
 
 const WIDTH = 368
@@ -12,7 +11,6 @@ const GAP = 12
 function backOf(view: View): View | null {
   switch (view.name) {
     case 'home':
-    case 'signin':
     case 'moment':
       return null
     case 'report':
@@ -100,7 +98,6 @@ export function HelpyPanel({ boundsRef }: { boundsRef?: RefObject<HTMLElement | 
         </button>
       </header>
       <div className="min-h-0 overflow-y-auto overscroll-contain px-5 pb-5 pt-2">
-        {view.name === 'signin' ? <SignInView /> : null}
         {view.name === 'home' ? <HomeView /> : null}
         {view.name === 'learning' ? <LearningView /> : null}
         {view.name === 'report' ? <ReportView /> : null}

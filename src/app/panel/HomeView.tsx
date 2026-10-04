@@ -1,12 +1,11 @@
 import { useSession } from '../../shared/session'
-import { auth, firstName, useAuth } from '../auth'
+import { firstName, useAuth } from '../auth'
 import { helpyApp } from '../helpy-app/store'
 import { recordFlow } from '../RecordDialog'
 import { askQuestions } from './questions'
-import { panel } from './store'
 import { statusOf, useProcesses } from './processes'
-import { Avatar } from './SignInView'
-import { primaryBtn, secondaryBtn, textBtn } from './ui'
+import { Avatar } from './Avatar'
+import { primaryBtn, secondaryBtn } from './ui'
 
 /** First thing Helpy shows: one main action (record), the way into what the team knows, and open questions if any. */
 export function HomeView() {
@@ -50,16 +49,6 @@ export function HomeView() {
         <div className="-mb-1 flex items-center gap-2.5 border-t border-helpy-line pt-3">
           <Avatar name={user.name} size={32} />
           <span className="min-w-0 flex-1 truncate text-[15px] text-muted">{user.name}</span>
-          <button
-            type="button"
-            className={`${textBtn} text-muted`}
-            onClick={() => {
-              auth.signOut()
-              panel.show({ name: 'signin' })
-            }}
-          >
-            Sign out
-          </button>
         </div>
       ) : null}
     </div>

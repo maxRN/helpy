@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clampInto, mascotMode, placeNextTo, REST_INSET, restPosition, type Box } from './placement'
+import { clampInto, mascotMode, placeBadge, placeNextTo, REST_INSET, restPosition, type Box } from './placement'
 
 const SIZE = { width: 84, height: 105 }
 // The fake screen between the menu bar and the dock on a 1440 × 900 viewport (Helpy's bounds are fixed to the viewport).
@@ -54,5 +54,29 @@ describe('mascot state', () => {
     expect(p.side).toBe('right')
     expect(p.x).toBeGreaterThanOrEqual(target.left + target.width)
     expect(restPosition(viewport(), SIZE)).toEqual(before)
+  })
+})
+
+describe('placeBadge (what Helpy hears, above the robot)', () => {
+  const screen = viewport()
+  const robotAt = (x: number, y: number): Box => ({ left: x, top: y, ...SIZE })
+
+  it('sits centered above the robot when there is room', () => {
+    expect(placeBadge(robotAt(600, 400), { width: 200, height: 40 }, screen)).toEqual({ left: 42 - 100, top: 12 - 40 })
+  })
+
+  it('at the resting spot in the bottom-right corner it moves left instead of leaving the screen', () => {
+    const robot = robotAt(1440 - REST_INSET.right - 84, 852 - REST_INSET.bottom - 105)
+    const p = placeBadge(robot, { width: 320, height: 60 }, screen)
+    expect(robot.left + p.left + 320).toBeLessThanOrEqual(1440 - 8)
+  })
+
+  it('never leaves the left edge either', () => {
+    expect(placeBadge(robotAt(10, 400), { width: 320, height: 40 }, screen).left + 10).toBe(8)
+  })
+
+  it('goes below the robot when there is no room above', () => {
+    const p = placeBadge(robotAt(600, 20), { width: 200, height: 60 }, screen)
+    expect(p.top).toBe(105 - 12)
   })
 })

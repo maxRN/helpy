@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { auth } from '../auth'
 import type { Category } from '../panel/processes'
 import { panel } from '../panel/store'
 
@@ -43,8 +42,7 @@ export const helpyApp = {
   /** Opens the window; without a page it shows the last one (Company info the first time). */
   open(page?: AppPage) {
     useHelpyApp.setState((s) => ({ open: true, page: page ?? s.page }))
-    if (auth.user()) panel.close()
-    else panel.show({ name: 'signin' })
+    panel.close()
   },
   go(page: AppPage) {
     useHelpyApp.setState({ page })

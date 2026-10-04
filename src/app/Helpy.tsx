@@ -7,7 +7,6 @@ import { mascot, MascotLayer, setMascotClickHandler } from '../mascot'
 import { mascot as sharedMascot, useMascot } from '../shared/mascot'
 import { useSession } from '../shared/session'
 import { TeachLayer } from '../teach-ui/TeachLayer'
-import { auth, useAuth } from './auth'
 import { nameRecording } from './autoName'
 import { installBubbleLifecycle } from './bubbleLifecycle'
 import { HelpyApp } from './helpy-app/HelpyApp'
@@ -59,19 +58,31 @@ function QuestionSign() {
   )
 }
 
-/** What Helpy hears right now (ElevenLabs Scribe v2 Realtime), live while the expert talks. */
+/** The end of a long sentence, cut at a word: the newest words are the ones worth reading. */
+function tailOf(text: string, max = 140) {
+  const clean = text.trim().replace(/\s+/g, ' ')
+  if (clean.length <= max) return clean
+  const cut = clean.slice(-max)
+  const space = cut.indexOf(' ')
+  return `…${space > 0 && space < 30 ? cut.slice(space + 1) : cut}`
+}
+
+/** What Helpy hears right now (ElevenLabs Scribe v2 Realtime), live while the expert talks. Wraps, never runs off screen. */
 function HearingCaption() {
   const { speaking, partial } = useListener()
   if (!speaking || !partial) return null
-  return <span className="block max-w-[240px] truncate rounded-full bg-helpy-ink/85 px-2.5 py-0.5 text-[12px] text-white shadow-soft">I hear: “{partial}”</span>
+  return (
+    <span className="block max-w-[320px] rounded-2xl bg-helpy-ink/85 px-3 py-1 text-center text-[12px] leading-snug break-words text-white shadow-soft">
+      I hear: “{tailOf(partial)}”
+    </span>
+  )
 }
 
 /** After this long with a question held back, Helpy says so quietly in its bubble (it never speaks over you). */
 const NUDGE_AFTER_MS = 40_000
 
-/** Robot click: sign in first; while recording, the controls in the bubble; otherwise the panel. */
+/** Robot click: while recording, the controls in the bubble; otherwise the panel. */
 function onRobotClick() {
-  if (!auth.user()) return panel.toggle()
   // While recording or in the debrief the controls show in the bubble; a second click puts them away.
   const busy = usePanel.getState().activity?.kind === 'recording' || voiceDebrief.active()
   if (busy && mascot.resolve('prompt')) return
@@ -96,15 +107,7 @@ export function Helpy({ boundsRef }: { boundsRef?: RefObject<HTMLElement | null>
     const uninstallBubbles = installBubbleLifecycle()
     // Dev console: helpy.mascot.pointTo('field-costCenter'), helpy.panel.show(), helpy.question('Why 0400?')
     if (import.meta.env.DEV) Object.assign(window, { helpy: { mascot, panel, question: sharedMascot.waiting } })
-    // Helpy just started on this computer: say hello and ask who is working.
-    const hello = auth.user()
-      ? undefined
-      : setTimeout(() => {
-          mascot.pose('wave', 2600)
-          panel.show({ name: 'signin' })
-        }, 600)
     return () => {
-      clearTimeout(hello)
       setMascotClickHandler(null)
       uninstallBubbles()
     }
@@ -157,12 +160,6 @@ export function Helpy({ boundsRef }: { boundsRef?: RefObject<HTMLElement | null>
     )
     return () => clearTimeout(timer)
   }, [waiting, activity?.kind])
-
-  // Signed out (e.g. "Sign out" in the panel): back to the sign-in.
-  const signedIn = useAuth((s) => s.user !== null)
-  useEffect(() => {
-    if (!signedIn) mascot.reset()
-  }, [signedIn])
 
   // Teach mode can start from Helpy or from P3's debrief panel; the guidance runs in both cases.
   const teaching = useSession((s) => s.mode === 'teach' && s.workMap !== null)

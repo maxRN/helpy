@@ -3,7 +3,7 @@ import { useMascot } from '../shared/mascot'
 import { registry } from '../shared/registry'
 import { useSession } from '../shared/session'
 import { mascot } from './api'
-import { clampInto, mascotMode, placeBubble, placeNextTo, restPosition, type Box, type Side } from './placement'
+import { clampInto, mascotMode, placeBadge, placeBubble, placeNextTo, restPosition, type Box, type Side } from './placement'
 import { Robot } from './Robot'
 import { useHelpyExtras, type BubbleAction, type BubbleInput } from './store'
 
@@ -99,6 +99,8 @@ export function MascotLayer({ boundsRef, hideBubble = false, badge }: { boundsRe
   const [dragged, setDragged] = useState<{ x: number; y: number; bubble: string | null } | null>(null)
   const [bubbleSize, setBubbleSize] = useState(BUBBLE_GUESS)
   const bubbleRef = useRef<HTMLDivElement>(null)
+  const [badgeSize, setBadgeSize] = useState({ width: 0, height: 0 })
+  const badgeRef = useRef<HTMLDivElement>(null)
   const showBubble = !!bubbleText && !hideBubble
   const dragStart = useRef<{ px: number; py: number; x: number; y: number; moved: boolean } | null>(null)
   /** The field the user is typing in, measured when it got focus (not on every scroll). */
@@ -208,6 +210,19 @@ export function MascotLayer({ boundsRef, hideBubble = false, badge }: { boundsRe
     setBubbleSize((prev) => (prev.width === next.width && prev.height === next.height ? prev : next))
   }, [showBubble, bubbleText, actionCount, layout?.bounds.width])
 
+  // The badge's content (e.g. what Helpy hears) re-renders on its own, so its size is observed, not measured per render.
+  const hasBadge = !!badge
+  useEffect(() => {
+    const el = badgeRef.current
+    if (!el) return
+    const observer = new ResizeObserver(() => {
+      const next = { width: el.offsetWidth, height: el.offsetHeight }
+      setBadgeSize((prev) => (prev.width === next.width && prev.height === next.height ? prev : next))
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [hasBadge, !!layout])
+
   if (!layout) return null
 
   const mode = mascotMode({ pointingAt: !!layout.ring, dragging: !!drag, dragged: !!dragged })
@@ -218,6 +233,8 @@ export function MascotLayer({ boundsRef, hideBubble = false, badge }: { boundsRe
   const flip = layout.side === 'right' || (layout.side === 'below' || layout.side === 'above' ? (layout.ring?.left ?? 0) + (layout.ring?.width ?? 0) / 2 < x + SIZE.width / 2 : false)
   // Around the robot, but never on the thing it points at and never off screen.
   const bubble = placeBubble({ left: x, top: y, ...SIZE }, bubbleSize, drag ? null : layout.ring, layout.bounds, layout.avoid)
+  // Above the robot, but always fully on screen (it rests in the bottom-right corner).
+  const badgeAt = placeBadge({ left: x, top: y, ...SIZE }, badgeSize, layout.bounds)
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return
@@ -301,7 +318,15 @@ export function MascotLayer({ boundsRef, hideBubble = false, badge }: { boundsRe
         >
           <Robot state={state} pose={pose ?? (waiting ? 'question' : null)} pointing={!!layout.ring && !drag} off={offRecord} size={SIZE.width} />
         </div>
-        {badge ? <div className="pointer-events-none absolute bottom-[calc(100%-12px)] left-1/2 -translate-x-1/2">{badge}</div> : null}
+        {badge ? (
+          <div
+            ref={badgeRef}
+            className="pointer-events-none absolute flex w-max flex-col items-center"
+            style={{ left: badgeAt.left, top: badgeAt.top, maxWidth: Math.max(0, layout.bounds.width - 16), visibility: badgeSize.width ? 'visible' : 'hidden' }}
+          >
+            {badge}
+          </div>
+        ) : null}
       </div>
     </div>
   )

@@ -172,6 +172,17 @@ export function clampInto(pos: { x: number; y: number }, size: { width: number; 
 }
 
 /**
+ * Where the small label above the robot goes (what Helpy hears, its recording light), relative to the robot's box:
+ * centered above it, shifted sideways so it never leaves the bounds, and below the robot when there is no room above.
+ */
+export function placeBadge(robot: Box, badge: { width: number; height: number }, bounds: Box, overlap = 12) {
+  const left = clamp(robot.left + robot.width / 2 - badge.width / 2, bounds.left + MARGIN, right(bounds) - MARGIN - badge.width)
+  const above = robot.top + overlap - badge.height
+  const top = above >= bounds.top + MARGIN ? above : robot.top + robot.height - overlap
+  return { left: left - robot.left, top: top - robot.top }
+}
+
+/**
  * Where Helpy is, as an explicit state:
  * - pointing: next to the target it explains (flies there, ring around the target);
  * - dragging: follows the user's pointer;
