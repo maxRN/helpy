@@ -2,6 +2,7 @@ import { useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import { FIXTURE_WORKMAP } from '../../erp/fixtures'
 import type { WorkMap } from '../../shared/types'
+import { UNNAMED } from '../recordName'
 
 export const EXAMPLE_ID = 'example'
 
@@ -50,14 +51,16 @@ export function useProcesses(): Process[] | undefined {
   if (data === undefined) return undefined
   const own = data.map((p): Process => {
     const withMap = p.recordings.find((r) => r.workMap)
+    const workMap = (withMap?.workMap as WorkMap | undefined) ?? null
     return {
       id: p.id,
-      name: p.name,
+      // Nobody said what it was: the Work Map's task name, once there is one.
+      name: p.name === UNNAMED && workMap?.task ? workMap.task : p.name,
       example: false,
       recordings: p.recordings,
       people: [...new Set([...p.recordings.map((r) => r.recordedBy), p.createdBy].filter((n): n is string => !!n))],
       sessionId: (withMap ?? p.recordings[0])?.taskId ?? null,
-      workMap: (withMap?.workMap as WorkMap | undefined) ?? null,
+      workMap,
     }
   })
   return [...own, EXAMPLE]

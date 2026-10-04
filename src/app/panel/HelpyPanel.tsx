@@ -1,6 +1,7 @@
 import { useEffect, useState, type RefObject } from 'react'
 import { HelpyMark, MASCOT_SIZE, useHelpyExtras, visibleBounds } from '../../mascot'
 import { HomeView } from './HomeView'
+import { LibraryView } from './LibraryView'
 import { LearningView, MomentView, ReportView } from './LearningViews'
 import { ProcessView } from './ProcessView'
 import { SignInView } from './SignInView'
@@ -19,6 +20,8 @@ function backOf(view: View): View | null {
       return view.processId ? { name: 'process', processId: view.processId } : null
     case 'report':
       return { name: 'learning' }
+    case 'process':
+      return { name: 'library' }
     default:
       return { name: 'home' }
   }
@@ -91,6 +94,7 @@ export function HelpyPanel({ boundsRef }: { boundsRef?: RefObject<HTMLElement | 
       <div className="min-h-0 overflow-y-auto overscroll-contain px-5 pb-5 pt-2">
         {view.name === 'signin' ? <SignInView /> : null}
         {view.name === 'home' ? <HomeView /> : null}
+        {view.name === 'library' ? <LibraryView /> : null}
         {view.name === 'process' ? <ProcessView processId={view.processId} /> : null}
         {view.name === 'learning' ? <LearningView /> : null}
         {view.name === 'report' ? <ReportView /> : null}
