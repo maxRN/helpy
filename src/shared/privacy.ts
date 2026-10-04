@@ -1,6 +1,7 @@
 // Answer to judge question 5: "Trust".
-// 1. Off the record: nothing that happens between "off the record" and "back on the record" is stored,
-//    put into the debrief log or sent to a model (screenshots and hearing stop at the source as well).
+// 1. Off the record: no screenshots are taken, the microphone stream to Scribe is muted (src/integration/
+//    listener.ts), and screen changes from that time are neither stored (ConvexSync) nor put into the
+//    debrief log or any model request (they stay only in this tab's memory, and are filtered from there).
 // 2. Personal data in what people say or type is replaced before it is stored or sent to a model
 //    (screenshots are redacted separately, see src/capture/pii.ts).
 import type { AppEvent } from './types'

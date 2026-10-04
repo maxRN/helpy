@@ -146,7 +146,9 @@ export async function setOffRecord(on: boolean) {
   else if (voice.isActive()) {
     // Capture without an agent: the question policy must pause too, and Helpy confirms with TTS.
     voice.setOffRecord(on, 'ui')
-    void speak(on ? 'Okay, off the record.' : 'Back on the record.')
+    // Off the record Helpy's ears are off (no audio leaves the computer), so coming back is a click.
+    if (on) mascot.bubble('Off the record: I’m not looking or listening. Click me and choose “Continue recording” when you’re ready.', { topic: 'notice' })
+    void speak(on ? 'Okay, off the record. Click me when you want to continue.' : 'Back on the record.')
   } else session().setOffRecord(on)
 }
 

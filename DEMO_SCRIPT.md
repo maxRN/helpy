@@ -23,7 +23,7 @@ The exact sequence for the live or recorded product demo: Capture → Map → Te
 | 5 | 1:10 | | Answers: “Equipment over five thousand is always capex.” | Records the answer and lowers the question sign. | |
 | 6 | 1:30 | Invoice 4472 (Kramer) | Clicks **Hold**, types “Kramer double-bills at quarter-end”, saves. Pauses. | At the next pause (at least 30 s after the last question) asks about the hold. If the first question was not about a guardrail, the second one is (a limit, an exception, when to stop and ask). | Q2 guardrail |
 | 7 | 2:00 | Invoice 4473 (Brno) | Clicks **Request 2nd approval**. | Questions only at pauses; never two within 30 s. | |
-| 8 | 2:20 | | **Trust:** clicks the robot → **Pause**, and opens another invoice. Then clicks **Continue recording**. | The light shows **PAUSED**, Helpy says “Okay, off the record.” Nothing done while paused is stored, logged or sent to a model. Saying “off the record” / “back on the record” works too. | Q5 trust |
+| 8 | 2:20 | | **Trust:** clicks the robot → **Pause** (or says “off the record”), and opens another invoice. Then clicks the robot → **Continue recording**. | The light shows **PAUSED** and Helpy says “Okay, off the record.” While paused no screenshots are taken, the microphone stream to Scribe is muted, and nothing done is stored or sent to a model. Coming back is a click, because Helpy cannot hear meanwhile. Replays only ever show redacted screenshots. | Q5 trust |
 | 9 | 2:40 | | Clicks the robot → **I’m done**. | If fewer than three questions were asked, or none about a guardrail, it first says “Before you stop: N quick questions about what I saw” and asks them at pauses, about decisions it saw but nobody explained. A second **I’m done** (shown as **Skip and finish**) skips them. Then: “Thank you! I have a few questions about what I saw.” | Required: ≥ 3 live questions, ≥ 1 guardrail |
 
 ## 2. Map: debrief and Work Map (about 2 minutes)
@@ -57,7 +57,7 @@ Optional honest check: 5105 (bench grinder, €1,900, equipment) may stay opex; 
 | 2. What to ask | Steps 4–9: questions about changes on screen, a guardrail by the third, never a repeat, owed questions about unexplained decisions. | `src/agent/coverage.ts`, `src/routes/api/policy.ts`, `src/agent/policy.test.ts`, `src/agent/coverage.test.ts` |
 | 3. When it has understood | Steps 10–14: three new questions, the spoken reason it stops, a teach-back confirmed after a correction, all on the process page. | `src/server/debrief.ts` (`findGaps`), `src/app/debriefFlow.ts`, `src/app/debriefFlow.test.ts` |
 | 4. Whether the new hire learned | Steps 16–20: an unseen €7,200 case, the wrong opex decision caught before posting, the report. | `src/erp/store.ts`, `src/teach-ui/TeachLayer.tsx`, `src/teach-ui/teachCase.test.ts` |
-| 5. Trust | Step 8 (Pause / “off the record”), redacted screenshots, personal data replaced in what people say. | `src/shared/privacy.ts`, `src/capture/pii.ts`, `src/shared/privacy.test.ts`, `src/debrief/sessionLog.test.ts`, `src/shared/bus.test.ts` |
+| 5. Trust | Step 8 (Pause / “off the record”: no screenshots, microphone muted, nothing stored), replays of redacted screenshots only, emails/IBANs/card and phone numbers replaced in what people say. Names in speech are not redacted. | `src/shared/privacy.ts`, `src/capture/pii.ts`, `src/shared/privacy.test.ts`, `src/debrief/sessionLog.test.ts`, `src/shared/bus.test.ts` |
 
 ## If something is slow or fails
 

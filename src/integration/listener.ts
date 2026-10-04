@@ -97,6 +97,14 @@ async function handleTurn(u: Utterance) {
 
 const MAX_MUTED_MS = 30_000 // Helpy never talks this long; if its "speaking" state sticks, listen again anyway
 let muteTimer: ReturnType<typeof setTimeout> | undefined
+// Why the microphone is muted: Helpy is talking (never for long), or the expert went off the record
+// (until they click "Continue recording": no audio leaves the computer meanwhile).
+let helpySpeaking = false
+let offRecord = false
+
+function applyMute() {
+  setMuted(helpySpeaking || offRecord)
+}
 
 function setMuted(muted: boolean) {
   if (!connection || useListener.getState().muted === muted) return
@@ -111,7 +119,11 @@ function setMuted(muted: boolean) {
   }
   if (muted) {
     tracker.dropTurn()
-    muteTimer = setTimeout(() => setMuted(false), MAX_MUTED_MS)
+    if (!offRecord)
+      muteTimer = setTimeout(() => {
+        helpySpeaking = false
+        applyMute()
+      }, MAX_MUTED_MS)
   }
   useListener.setState({ muted, speaking: false, partial: '' })
 }
@@ -198,9 +210,23 @@ export async function startListening(callbacks: ListenerCallbacks = {}): Promise
     })
 
     // While Helpy talks, do not transcribe its own voice from the speakers.
-    cleanups.push(useMascot.subscribe((s) => setMuted(s.state === 'speaking')))
-    // Off the record: nothing is heard or kept.
-    cleanups.push(useSession.subscribe((s) => (s.offRecord ? tracker.dropTurn() : undefined)))
+    cleanups.push(
+      useMascot.subscribe((s) => {
+        helpySpeaking = s.state === 'speaking'
+        applyMute()
+      }),
+    )
+    // Off the record: the microphone is muted, so no audio is sent to Scribe until the recording continues
+    // ("off the record" can be said; coming back is a click on the robot, as Helpy cannot hear meanwhile).
+    offRecord = session().offRecord
+    cleanups.push(
+      useSession.subscribe((s) => {
+        if (s.offRecord === offRecord) return
+        offRecord = s.offRecord
+        if (offRecord) tracker.dropTurn()
+        applyMute()
+      }),
+    )
     // The agent's question decides which next turn counts as the answer.
     const onEvent = (e: AppEvent) => {
       if (e.kind === 'question_asked') tracker.questionAsked(String(e.meta?.agentId ?? e.id), e.meta?.eventId as string | undefined, Date.now())
