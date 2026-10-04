@@ -11,16 +11,20 @@ import {
   type Speaker,
 } from './types';
 
-// "Ask less, later": 3-5 live questions per ten minutes, the rest waits for the debrief.
+// "Ask less, later": a handful of live questions, the rest waits for the debrief.
+// A demo recording lasts a few minutes, so the gap between two questions is 30 s, not minutes.
 export const POLICY_LIMITS = {
   maxQuestions: 5,
-  minGapMs: 90_000,
+  minGapMs: 30_000,
   guardrailByQuestion: 2, // if none of the first 2 was a guardrail question, the 3rd must be
 } as const;
 
 const MAX_PENDING = 40;
 const PREPARE_EVERY_MS = 8000;
-const FALLBACK_GUARDRAIL = ['Is there a limit on this step?', 'When would you stop and ask someone?'];
+const FALLBACK_GUARDRAIL = {
+  en: ['Is there a limit on this step?', 'When would you stop and ask someone?'],
+  de: ['Gibt es bei diesem Schritt eine Grenze?', 'Wann würdest du aufhören und jemanden fragen?'],
+};
 
 type ReadyQuestion = { question: string; kind: QuestionKind; eventId?: string };
 
@@ -72,7 +76,7 @@ export function createQuestionPolicy(o: PolicyOpts) {
         const last = req.events[req.events.length - 1];
         return {
           ask: true,
-          question: FALLBACK_GUARDRAIL[asked % FALLBACK_GUARDRAIL.length],
+          question: FALLBACK_GUARDRAIL[req.language ?? 'en'][asked % 2],
           eventId: last?.id,
           kind: 'guardrail',
           reason: 'fallback',
@@ -98,6 +102,7 @@ export function createQuestionPolicy(o: PolicyOpts) {
       history,
       transcriptTail: o.tail(8),
       budget: { questionsLeft: POLICY_LIMITS.maxQuestions - asked, forceGuardrail: force },
+      language: deps.language?.() ?? 'en',
     };
     const res = await fetchPolicy(req);
     if (!res.ask || !res.question) {

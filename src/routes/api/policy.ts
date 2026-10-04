@@ -18,10 +18,13 @@ Rules:
 - The question must be about something in the screen events. Max 15 words. Spoken style, no preamble, one question only.
 - Sound like a curious colleague pointing at the concrete moment, e.g. "You moved that one to capex. What made you do that?" or "You held the Kramer invoice. Why that one?"
 - Use words, not codes: "capex", "the cost center", "the Kramer invoice", never "0400", "SUP-1007" or event ids. It will be spoken aloud.
+- Write the question in the request's "language": "de" = natural spoken German with "du" (e.g. "Du hast die auf Capex umgebucht. Warum?"), "en" = English.
 - kind: "why" = reason for a decision; "guardrail" = a limit, a rule, or when they would stop and ask someone; "exception" = when the default does not apply.
 - If budget.forceGuardrail is true, kind MUST be "guardrail".
 - eventId: the id of the screen event the question is about.
 - If nothing is worth asking now, set ask to false, leave question and eventId empty, and give the reason.`;
+
+const GUARDRAIL_FALLBACK = { en: 'Is there a limit on this step?', de: 'Gibt es bei diesem Schritt eine Grenze?' };
 
 const PolicySchema = z.object({
   ask: z.boolean(),
@@ -68,7 +71,7 @@ export const Route = createFileRoute('/api/policy')({
           // Hard requirement: at least one guardrail question. Enforce it even if the model drifts.
           if (body.budget?.forceGuardrail && out.kind !== 'guardrail') {
             out.kind = 'guardrail';
-            out.question = 'Is there a limit on this step?';
+            out.question = GUARDRAIL_FALLBACK[body.language ?? 'en'];
           }
           if (out.question!.split(/\s+/).length > 20) console.warn('[policy] long question:', out.question);
 
