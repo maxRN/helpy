@@ -34,11 +34,13 @@ export function matchingDomEvent(log: readonly AppEvent[], kind: AppEvent['kind'
 
 let previousThumb: Uint8ClampedArray | null = null
 let previousDescription = ''
+let previousOffset = -1
 let inFlight = false
 
 export function resetFrameEvents() {
   previousThumb = null
   previousDescription = ''
+  previousOffset = -1
 }
 
 function canvas(w: number, h: number) {
@@ -63,8 +65,11 @@ async function toBase64Jpeg(bitmap: ImageBitmap): Promise<string> {
 
 /** Call with every (already PII-masked) screenshot. */
 export async function processFrame(blob: Blob, capturedAt: number, offsetMs: number): Promise<void> {
+  const sessionId = session().sessionId
   const bitmap = await createImageBitmap(blob)
   try {
+    if (session().sessionId !== sessionId || offsetMs <= previousOffset) return
+    previousOffset = offsetMs
     const { ctx } = canvas(THUMB_W, THUMB_H)
     ctx.drawImage(bitmap, 0, 0, THUMB_W, THUMB_H)
     const thumb = ctx.getImageData(0, 0, THUMB_W, THUMB_H).data
@@ -84,6 +89,7 @@ export async function processFrame(blob: Blob, capturedAt: number, offsetMs: num
       })
       if (!res.ok) throw new Error(`/api/frame ${res.status}`)
       const body = (await res.json()) as { description: string; events: { kind: AppEvent['kind']; invoiceId: string; text: string }[] }
+      if (session().sessionId !== sessionId) return
       previousDescription = body.description
       for (const ev of body.events) {
         const dom = matchingDomEvent(getEventLog(), ev.kind, ev.invoiceId, offsetMs)

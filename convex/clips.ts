@@ -10,7 +10,7 @@ async function framesFor(ctx: QueryCtx, taskId: Id<'tasks'>) {
   if (!task) return null
   const screenshots = await ctx.db.query('screenshots').withIndex('by_task', (q) => q.eq('taskId', taskId)).collect()
   const frames = await Promise.all(
-    screenshots.map(async (s) => ({ offsetMs: s.offsetMs, url: await ctx.storage.getUrl(s.storageId) })),
+    screenshots.map(async (s) => ({ offsetMs: s.offsetMs, url: s.storageId ? await ctx.storage.getUrl(s.storageId) : null })),
   )
   return {
     taskId,

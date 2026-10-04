@@ -7,7 +7,7 @@ export type Screenshot = {
 }
 
 export type RecordingResult = { durationMs: number; error: string | null; audio: Blob | null }
-export type ScreenRecording = { finish: () => Promise<RecordingResult> }
+export type ScreenRecording = { finish: () => { durationMs: number; audio: Promise<Blob | null>; completed: Promise<RecordingResult> } }
 
 export async function openScreenCapture() {
   if (!navigator.mediaDevices?.getDisplayMedia) {
@@ -73,7 +73,7 @@ export async function openScreenCapture() {
         const timer = new Worker(new URL('./screenshot-timer.worker.ts', import.meta.url), { type: 'module' })
         const pending = new Set<Promise<void>>()
         let error: string | null = null
-        let finished: Promise<RecordingResult> | null = null
+        let finished: ReturnType<ScreenRecording['finish']> | null = null
         let stopped = false
         const chunks: Blob[] = []
         const audio = new Promise<Blob | null>((resolve) => {
@@ -152,7 +152,7 @@ export async function openScreenCapture() {
               microphoneTrack.onended = null
               if (audioRecorder.state !== 'inactive') audioRecorder.stop()
               close()
-              finished = Promise.all([Promise.all(pending), audio]).then(([, audio]) => ({ durationMs, error, audio }))
+              finished = { durationMs, audio, completed: Promise.all([Promise.all(pending), audio]).then(([, audio]) => ({ durationMs, error, audio })) }
             }
             return finished
           },

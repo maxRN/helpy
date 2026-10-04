@@ -13,6 +13,7 @@ import type { ScreenRecording } from './screen'
 import { loadOcrModel, useOcrModel } from './ocr'
 import { loadPiiModel, usePiiModel } from './pii'
 import { processScreenshot } from './pipeline'
+import { addPreview, releasePreviews, updatePreview, usePendingScreenshots } from './pendingScreenshots'
 
 const uploadResponse = z.object({ storageId: z.string() })
 type Project = Pick<Doc<'projects'>, '_id' | 'name'>
@@ -22,7 +23,7 @@ type RecordingState =
   | { kind: 'starting'; project: Project }
   | { kind: 'recording' | 'saving' | 'save-failed'; task: Task }
 /** `stay`: after finishing, keep the user where they are instead of opening the task summary (Helpy). */
-type ActiveTask = { task: Task; recording: ScreenRecording; audioStorageId: string | null; saving: boolean; stay: boolean }
+type ActiveTask = { task: Task; recording: ScreenRecording; audioStorageId: string | null; saving: boolean; processing: boolean; stay: boolean }
 const TaskRecordingContext = createContext<ReturnType<typeof useRecordingController> | null>(null)
 
 export function TaskRecordingProvider({ children }: { children: ReactNode }) {
@@ -41,18 +42,24 @@ function useRecordingController() {
   const generateUploadUrl = useMutation(api.tasks.generateUploadUrl)
   const addScreenshot = useMutation(api.tasks.addScreenshot)
   const finishTask = useMutation(api.tasks.finish)
+  const updateScreenshot = useMutation(api.tasks.updateScreenshot)
+  const completeProcessing = useMutation(api.tasks.completeProcessing)
+  const failProcessing = useMutation(api.tasks.failProcessing)
   const navigate = useNavigate()
   const [state, setState] = useState<RecordingState>({ kind: 'idle' })
   const [error, setError] = useState('')
   const [savedCount, setSavedCount] = useState(0)
   const active = useRef<ActiveTask | null>(null)
+  const background = useRef(new Map<Id<'tasks'>, ActiveTask>())
+  const failedScreenshots = useRef(new Map<Id<'tasks'>, Map<number, () => Promise<void>>>())
+  const [processingTasks, setProcessingTasks] = useState<{ task: Task; error: string | null }[]>([])
   const pendingCapture = useRef<Awaited<ReturnType<typeof openScreenCapture>> | null>(null)
   const mounted = useRef(true)
   const busy = state.kind !== 'idle'
 
   useBlocker({
     shouldBlockFn: () => false,
-    enableBeforeUnload: busy,
+    enableBeforeUnload: busy || processingTasks.length > 0,
   })
 
   const upload = useCallback(async (taskId: Id<'tasks'>, blob: Blob) => {
@@ -65,15 +72,41 @@ function useRecordingController() {
     return uploadResponse.parse(data).storageId
   }, [generateUploadUrl])
 
-  const saveRecording = useCallback(async (task: ActiveTask) => {
-    const { durationMs, error, audio } = await task.recording.finish()
-    if (audio && !task.audioStorageId) {
-      task.audioStorageId = await upload(task.task.taskId, audio)
-      emitEvent({ source: 'system', kind: 'audio_saved', t: durationMs, meta: { taskId: task.task.taskId, storageId: task.audioStorageId } })
+  const processRecording = useCallback(async (task: ActiveTask, retry = false) => {
+    if (task.processing) return
+    task.processing = true
+    background.current.set(task.task.taskId, task)
+    setProcessingTasks((tasks) => [...tasks.filter((entry) => entry.task.taskId !== task.task.taskId), { task: task.task, error: null }])
+    const stopped = task.recording.finish()
+    try {
+      const retryJobs = retry ? [...(failedScreenshots.current.get(task.task.taskId)?.values() ?? [])] : []
+      const retries = Promise.allSettled(retryJobs.map((job) => job()))
+      const audioUpload = stopped.audio.then(async (audio) => {
+        if (audio && !task.audioStorageId) {
+          task.audioStorageId = await upload(task.task.taskId, audio)
+          if (useSession.getState().sessionId === task.task.taskId) emitEvent({ source: 'system', kind: 'audio_saved', t: stopped.durationMs, meta: { taskId: task.task.taskId, storageId: task.audioStorageId } })
+        }
+      })
+      const [result, audioResult] = await Promise.allSettled([stopped.completed, audioUpload, retries])
+      if (result.status === 'rejected') throw result.reason
+      if (audioResult.status === 'rejected') throw audioResult.reason
+      const failed = failedScreenshots.current.get(task.task.taskId)
+      if (failed?.size) throw new Error(result.value.error ?? 'Some screenshots could not be processed or uploaded.')
+      await completeProcessing({ taskId: task.task.taskId, error: retryJobs.length ? null : result.value.error, ...(task.audioStorageId ? { audioStorageId: task.audioStorageId } : {}) })
+      background.current.delete(task.task.taskId)
+      failedScreenshots.current.delete(task.task.taskId)
+      if (!window.location.pathname.endsWith(`/tasks/${task.task.taskId}`)) {
+        releasePreviews(task.task.taskId, usePendingScreenshots.getState().screenshots.filter((shot) => shot.taskId === task.task.taskId).map((shot) => shot.offsetMs))
+      }
+      setProcessingTasks((tasks) => tasks.filter((entry) => entry.task.taskId !== task.task.taskId))
+    } catch (failure) {
+      const message = failure instanceof Error ? failure.message : 'Could not finish processing the task.'
+      setProcessingTasks((tasks) => tasks.map((entry) => entry.task.taskId === task.task.taskId ? { ...entry, error: message } : entry))
+      await failProcessing({ taskId: task.task.taskId, error: message }).catch((error: unknown) => console.error('Could not report the processing failure.', error))
+    } finally {
+      task.processing = false
     }
-    await finishTask({ taskId: task.task.taskId, durationMs, error, ...(task.audioStorageId ? { audioStorageId: task.audioStorageId } : {}) })
-    return { durationMs, error }
-  }, [finishTask, upload])
+  }, [upload, completeProcessing, failProcessing])
 
   const finish = useCallback(async () => {
     const task = active.current
@@ -82,12 +115,15 @@ function useRecordingController() {
     setState({ kind: 'saving', task: task.task })
     setError('')
     try {
-      const result = await saveRecording(task)
+      const stopped = task.recording.finish()
+      await finishTask({ taskId: task.task.taskId, durationMs: stopped.durationMs, error: null, processing: true })
       useSession.getState().setT0(null)
-      emitEvent({ source: 'system', kind: 'task_finished', t: result.durationMs, meta: { taskId: task.task.taskId } })
+      emitEvent({ source: 'system', kind: 'task_finished', t: stopped.durationMs, meta: { taskId: task.task.taskId } })
       active.current = null
-      setError(result.error ?? '')
+      setError('')
       setState({ kind: 'idle' })
+      task.saving = false
+      void processRecording(task)
       if (!task.stay) await navigate({ to: '/projects/$projectId/tasks/$taskId', params: { projectId: task.task.project._id, taskId: task.task.taskId } })
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Could not save the task.')
@@ -95,7 +131,7 @@ function useRecordingController() {
     } finally {
       task.saving = false
     }
-  }, [saveRecording, navigate])
+  }, [finishTask, processRecording, navigate])
 
   useEffect(() => {
     mounted.current = true
@@ -106,12 +142,16 @@ function useRecordingController() {
       pendingCapture.current?.close()
       const task = active.current
       if (task) {
-        if (!task.saving) void saveRecording(task)
-          .catch((error: unknown) => console.error('Could not finish the task after closing the app.', error))
+        if (!task.saving) {
+          const stopped = task.recording.finish()
+          void finishTask({ taskId: task.task.taskId, durationMs: stopped.durationMs, error: null, processing: true })
+            .then(() => processRecording(task))
+            .catch((error: unknown) => console.error('Could not finish the task after closing the app.', error))
+        }
         useSession.getState().setT0(null)
       }
     }
-  }, [saveRecording])
+  }, [finishTask, processRecording])
 
   async function start(project: Project, { stay = false, recordedBy }: { stay?: boolean; recordedBy?: string } = {}) {
     if (busy) return
@@ -138,36 +178,75 @@ function useRecordingController() {
         return
       }
       const recording = capture.start({
-        onScreenshot: async ({ blob, ...timestamps }) => {
-          let processed: Awaited<ReturnType<typeof processScreenshot>>
-          try { processed = await processScreenshot(blob) }
-          catch (failure) {
-            const storageId = await upload(createdTaskId, blob)
-            const screenshotId = await addScreenshot({ taskId: createdTaskId, storageId, ...timestamps, processing: {
-              kind: 'failed', error: failure instanceof Error ? failure.message : 'Screenshot processing failed.',
-            } })
-            if (mounted.current) setSavedCount((count) => count + 1)
-            emitEvent({ source: 'system', kind: 'screenshot_saved', t: timestamps.offsetMs, meta: { taskId: createdTaskId, screenshotId, storageId, processingFailed: true } })
-            throw failure
+        onScreenshot: async (screenshot) => {
+          const { blob, ...timestamps } = screenshot
+          addPreview(createdTaskId, screenshot)
+          let screenshotId: Id<'screenshots'> | undefined
+          let originalStorageId: string | undefined
+          let redactedStorageId: string | undefined
+          let uploadMs = 0
+          let processed: Awaited<ReturnType<typeof processScreenshot>> | undefined
+          const jobs = failedScreenshots.current.get(createdTaskId) ?? new Map<number, () => Promise<void>>()
+          failedScreenshots.current.set(createdTaskId, jobs)
+          async function saveScreenshot() {
+            updatePreview(createdTaskId, timestamps.offsetMs, { kind: 'processing' })
+            try {
+              screenshotId ??= await addScreenshot({ taskId: createdTaskId, ...timestamps })
+              const registeredId = screenshotId
+              const originalUpload = (async () => {
+                if (!originalStorageId) {
+                  const started = performance.now()
+                  originalStorageId = await upload(createdTaskId, blob)
+                  uploadMs += performance.now() - started
+                }
+                await updateScreenshot({ screenshotId: registeredId, storageId: originalStorageId, processing: { kind: 'pending' } })
+                return originalStorageId
+              })()
+              const processing = (async () => {
+                processed ??= await processScreenshot(blob)
+                updatePreview(createdTaskId, timestamps.offsetMs, { kind: 'uploading' }, processed.redacted)
+                return processed
+              })()
+              const [analysis, original] = await Promise.allSettled([processing, originalUpload])
+              if (original.status === 'rejected') throw original.reason
+              if (analysis.status === 'rejected') throw analysis.reason
+              const result = analysis.value
+              if (active.current?.task.taskId === createdTaskId && !active.current.saving) {
+                void processFrame(result.redacted, timestamps.capturedAt, timestamps.offsetMs).catch((failure: unknown) => console.warn('[frame]', failure))
+              }
+              if (!redactedStorageId) {
+                const started = performance.now()
+                redactedStorageId = result.redacted === result.original ? original.value : await upload(createdTaskId, result.redacted)
+                uploadMs += performance.now() - started
+              }
+              await updateScreenshot({ screenshotId: registeredId, storageId: original.value, processing: { kind: 'completed', redactedStorageId,
+                result: result.ocr, redaction: { ...result.redaction, timings: {
+                  ...result.redaction.timings, uploadMs,
+                } } } })
+              updatePreview(createdTaskId, timestamps.offsetMs, { kind: 'saved' })
+              jobs.delete(timestamps.offsetMs)
+              if (mounted.current && active.current?.task.taskId === createdTaskId) setSavedCount((count) => count + 1)
+              if (useSession.getState().sessionId === createdTaskId) {
+                emitEvent({ source: 'system', kind: 'screenshot_saved', t: timestamps.offsetMs, meta: { taskId: createdTaskId, storageId: original.value } })
+                emitEvent({ source: 'system', kind: 'screenshot_analyzed', t: timestamps.offsetMs, meta: {
+                  taskId: createdTaskId, screenshotId, model: result.ocr.model, regions: result.ocr.regions.length,
+                  redactions: result.redaction.spans.length, ...result.redaction.timings,
+                } })
+              }
+            } catch (failure) {
+              jobs.set(timestamps.offsetMs, saveScreenshot)
+              const message = failure instanceof Error ? failure.message : 'Screenshot processing failed.'
+              updatePreview(createdTaskId, timestamps.offsetMs, { kind: 'failed', error: message })
+              if (screenshotId) await updateScreenshot({ screenshotId, processing: { kind: 'failed', error: message } })
+              throw failure
+            }
           }
-          void processFrame(processed.redacted, timestamps.capturedAt, timestamps.offsetMs).catch((failure: unknown) => console.warn('[frame]', failure))
-          const uploadStarted = performance.now()
-          const [storageId, redactedStorageId] = await Promise.all([upload(createdTaskId, processed.original), upload(createdTaskId, processed.redacted)])
-          const screenshotId = await addScreenshot({ taskId: createdTaskId, storageId, ...timestamps, processing: { kind: 'completed', redactedStorageId,
-            result: processed.ocr, redaction: { ...processed.redaction, timings: {
-              ...processed.redaction.timings, uploadMs: performance.now() - uploadStarted,
-            } } } })
-          if (mounted.current) setSavedCount((count) => count + 1)
-          emitEvent({ source: 'system', kind: 'screenshot_saved', t: timestamps.offsetMs, meta: { taskId: createdTaskId, storageId } })
-          emitEvent({ source: 'system', kind: 'screenshot_analyzed', t: timestamps.offsetMs, meta: {
-            taskId: createdTaskId, screenshotId, model: processed.ocr.model, regions: processed.ocr.regions.length,
-            redactions: processed.redaction.spans.length, ...processed.redaction.timings,
-          } })
+          await saveScreenshot()
         },
         onStopped: () => { void finish() },
       })
       const task = { project, taskId, startedAt: capture.startedAt }
-      active.current = { task, recording, audioStorageId: null, saving: false, stay }
+      active.current = { task, recording, audioStorageId: null, saving: false, processing: false, stay }
       useSession.getState().newSession(taskId)
       useSession.getState().setMode('capture')
       useSession.getState().setT0(capture.startedAt)
@@ -192,7 +271,12 @@ function useRecordingController() {
     }
   }
 
-  return { state, error, savedCount, start, finish }
+  function retryProcessing(taskId: Id<'tasks'>) {
+    const task = background.current.get(taskId)
+    if (task) void processRecording(task, true)
+  }
+
+  return { state, error, savedCount, start, finish, processingTasks, retryProcessing }
 }
 
 export function TaskRecorder({ project }: { project: Project }) {
@@ -223,7 +307,7 @@ export function TaskRecorder({ project }: { project: Project }) {
         </div>
       ) : (
         <p className="muted">
-          {state.kind === 'saving' ? 'Recording stopped. Saving audio and finishing PII redaction and screenshot uploads…'
+          {state.kind === 'saving' ? 'Recording stopped. Finishing the task…'
             : state.kind === 'save-failed' ? 'Recording stopped. Retry saving to open your summary.'
               : 'Share an entire screen and allow microphone access. We save screenshots every 2 seconds and record your narration. Click Done when you finish.'}
         </p>

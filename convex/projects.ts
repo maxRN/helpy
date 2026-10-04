@@ -44,6 +44,7 @@ export const remove = mutation({
   handler: async (ctx, { projectId }) => {
     const tasks = await ctx.db.query('tasks')
       .withIndex('by_project', (q) => q.eq('projectId', projectId)).collect()
+    if (tasks.some((task) => !task.completion || task.processing?.kind === 'processing')) throw new ConvexError('Finish recording and processing all tasks before deleting this project.')
     for (const task of tasks) await deleteTask(ctx, task._id)
     await ctx.db.delete('projects', projectId)
     return null

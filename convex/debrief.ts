@@ -11,6 +11,6 @@ export const clipFrames = query({
       .query('screenshots')
       .withIndex('by_task', (q) => q.eq('taskId', id).gte('offsetMs', from).lte('offsetMs', to))
       .collect()
-    return Promise.all(shots.map(async (s) => ({ offsetMs: s.offsetMs, url: await ctx.storage.getUrl(s.storageId) })))
+    return Promise.all(shots.map(async (s) => ({ offsetMs: s.offsetMs, url: s.storageId ? await ctx.storage.getUrl(s.storageId) : null })))
   },
 })

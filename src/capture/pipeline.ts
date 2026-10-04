@@ -89,13 +89,15 @@ async function process(original: Blob) {
   } } }
 }
 
-let queue = Promise.resolve()
+const lanes = [Promise.resolve(), Promise.resolve()]
+let nextLane = 0
 let pending = 0
 
 export function processScreenshot(original: Blob) {
   if (pending >= 30) return Promise.reject(new Error('Screenshot processing cannot keep up. Recording stopped to finish the queued screenshots.'))
   pending++
-  const job = queue.then(() => process(original)).finally(() => { pending-- })
-  queue = job.then(() => undefined, () => undefined)
+  const lane = nextLane++ % lanes.length
+  const job = lanes[lane].then(() => process(original)).finally(() => { pending-- })
+  lanes[lane] = job.then(() => undefined, () => undefined)
   return job
 }

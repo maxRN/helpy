@@ -12,7 +12,7 @@ function Project() {
   const { projectId } = Route.useParams()
   const { data: project } = useSuspenseQuery(convexQuery(api.projects.get, { projectId }))
   const { data: tasks } = useSuspenseQuery(convexQuery(api.tasks.list, { projectId }))
-  const { state } = useTaskRecording()
+  const { state, processingTasks } = useTaskRecording()
   const isRecording = state.kind === 'starting' ? state.project._id === projectId
     : 'task' in state && state.task.project._id === projectId
   const navigate = Route.useNavigate()
@@ -44,7 +44,7 @@ function Project() {
                   <li key={task._id}>
                     <Link to="/projects/$projectId/tasks/$taskId" params={{ projectId, taskId: task._id }}>
                       <RecordedTime timestamp={task.startedAt} />
-                      <span className="task-duration">{task.completion ? formatDuration(task.completion.durationMs) : 'Unfinished'}</span>
+                      <span className="task-duration">{task.processing?.kind === 'processing' ? 'In processing' : task.processing?.kind === 'failed' ? 'Processing failed' : task.completion ? formatDuration(task.completion.durationMs) : 'Unfinished'}</span>
                     </Link>
                   </li>
                 ))}
@@ -59,7 +59,7 @@ function Project() {
             </dl>
             <button
               className="danger"
-              disabled={isRecording || removeProject.isPending}
+              disabled={isRecording || tasks.some((task) => task.processing?.kind === 'processing') || processingTasks.some((entry) => entry.task.project._id === projectId) || removeProject.isPending}
               onClick={() => removeProject.mutate({ projectId: project._id })}
             >
               {removeProject.isPending ? 'Deleting…' : 'Delete project'}

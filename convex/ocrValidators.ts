@@ -44,6 +44,7 @@ export const screenshotRedaction = v.object({
 })
 
 export const screenshotProcessing = v.union(
+  v.object({ kind: v.literal('pending') }),
   v.object({ kind: v.literal('completed'), result: tesseractResult, redactedStorageId: v.string(), redaction: screenshotRedaction }),
   v.object({ kind: v.literal('failed'), error: v.string() }),
 )

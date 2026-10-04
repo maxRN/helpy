@@ -23,6 +23,7 @@ export default defineSchema({
     startedAt: v.number(),
     recordedBy: v.optional(v.string()),
     audioStorageId: v.optional(v.id('_storage')),
+    processing: v.optional(v.union(v.object({ kind: v.literal('processing') }), v.object({ kind: v.literal('completed') }), v.object({ kind: v.literal('failed'), error: v.string() }))),
     completion: v.union(v.null(), v.object({
       durationMs: v.number(),
       error: v.union(v.null(), v.string()),
@@ -30,7 +31,7 @@ export default defineSchema({
   }).index('by_project', ['projectId']),
   screenshots: defineTable({
     taskId: v.id('tasks'),
-    storageId: v.id('_storage'),
+    storageId: v.optional(v.id('_storage')),
     redactedStorageId: v.optional(v.id('_storage')),
     redaction: v.optional(screenshotRedaction),
     capturedAt: v.number(),

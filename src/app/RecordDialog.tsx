@@ -203,11 +203,11 @@ export function RecordDialog() {
   const done = async () => {
     if (session().offRecord) await setOffRecord(false)
     mascot.setState('thinking')
-    mascot.bubble('Saving…')
+    mascot.bubble('Finishing the recording…')
     await finish()
   }
 
-  // Saving failed (upload, network): say so and offer to try again; the recording is still there.
+  // Finishing failed (network): say so and offer to try again; the recording is still there.
   useEffect(() => {
     if (recorder.kind !== 'save-failed') return
     mascot.setState('idle')

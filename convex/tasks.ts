@@ -30,7 +30,7 @@ export const get = query({
       audioUrl: task.audioStorageId ? await ctx.storage.getUrl(task.audioStorageId) : null,
       screenshots: await Promise.all(screenshots.map(async (screenshot) => ({
         ...screenshot,
-        url: await ctx.storage.getUrl(screenshot.storageId),
+        url: screenshot.storageId ? await ctx.storage.getUrl(screenshot.storageId) : null,
         redactedUrl: screenshot.redactedStorageId ? await ctx.storage.getUrl(screenshot.redactedStorageId) : null,
       }))),
     }
@@ -53,7 +53,7 @@ export const remove = mutation({
   handler: async (ctx, { taskId }) => {
     const task = await ctx.db.get('tasks', taskId)
     if (!task) throw new ConvexError('Task not found.')
-    if (!task.completion) throw new ConvexError('Finish this task before deleting it.')
+    if (!task.completion || task.processing?.kind === 'processing') throw new ConvexError('Finish processing this task before deleting it.')
     await deleteTask(ctx, taskId)
     return null
   },
@@ -64,32 +64,42 @@ export const generateUploadUrl = mutation({
   returns: v.string(),
   handler: async (ctx, { taskId }) => {
     const task = await ctx.db.get('tasks', taskId)
-    if (!task || task.completion) throw new ConvexError('This task is not recording.')
+    if (!task || (task.completion && (!task.processing || task.processing.kind === 'completed'))) throw new ConvexError('This task is not accepting uploads.')
     return ctx.storage.generateUploadUrl()
   },
 })
 
 export const addScreenshot = mutation({
-  args: {
-    taskId: v.id('tasks'),
-    storageId: v.string(),
-    processing: screenshotProcessing,
-    capturedAt: v.number(),
-    offsetMs: v.number(),
-  },
+  args: { taskId: v.id('tasks'), capturedAt: v.number(), offsetMs: v.number() },
   returns: v.id('screenshots'),
-  handler: async (ctx, { taskId, storageId: rawStorageId, processing, capturedAt, offsetMs }) => {
+  handler: async (ctx, { taskId, capturedAt, offsetMs }) => {
     const task = await ctx.db.get('tasks', taskId)
-    if (!task || task.completion) throw new ConvexError('This task is not recording.')
-    if (!Number.isFinite(offsetMs) || offsetMs < 0 || !Number.isFinite(capturedAt) || capturedAt < 0) {
+    if (!task || (task.completion && (!task.processing || task.processing.kind === 'completed'))) throw new ConvexError('This task is not accepting screenshots.')
+    if (!Number.isFinite(offsetMs) || offsetMs < 0 || !Number.isFinite(capturedAt) || capturedAt < 0 || (task.completion && offsetMs > task.completion.durationMs)) {
       throw new ConvexError('Invalid screenshot timestamp.')
     }
-    const storageId = ctx.db.system.normalizeId('_storage', rawStorageId)
-    const file = storageId ? await ctx.db.system.get('_storage', storageId) : null
-    if (!storageId || !file || file.contentType !== 'image/jpeg') {
-      throw new ConvexError('A JPEG screenshot is required.')
+    const existing = await ctx.db.query('screenshots').withIndex('by_task', (q) => q.eq('taskId', taskId).eq('offsetMs', offsetMs)).unique()
+    return existing?._id ?? ctx.db.insert('screenshots', { taskId, capturedAt, offsetMs, ocr: { kind: 'pending' } })
+  },
+})
+
+export const updateScreenshot = mutation({
+  args: { screenshotId: v.id('screenshots'), storageId: v.optional(v.string()), processing: screenshotProcessing },
+  returns: v.null(),
+  handler: async (ctx, { screenshotId, storageId: rawStorageId, processing }) => {
+    const screenshot = await ctx.db.get('screenshots', screenshotId)
+    if (!screenshot) throw new ConvexError('Screenshot not found.')
+    const task = await ctx.db.get('tasks', screenshot.taskId)
+    if (!task || (task.completion && (!task.processing || task.processing.kind === 'completed'))) throw new ConvexError('This task is not accepting screenshots.')
+    const storageId = rawStorageId === undefined ? screenshot.storageId : ctx.db.system.normalizeId('_storage', rawStorageId)
+    if (rawStorageId !== undefined || processing.kind === 'completed') {
+      const file = storageId ? await ctx.db.system.get('_storage', storageId) : null
+      if (!storageId || !file || file.contentType !== 'image/jpeg') throw new ConvexError('A JPEG screenshot is required.')
     }
-    if (processing.kind === 'failed') return ctx.db.insert('screenshots', { taskId, storageId, capturedAt, offsetMs, ocr: processing })
+    if (processing.kind !== 'completed') {
+      await ctx.db.patch('screenshots', screenshotId, { ...(storageId ? { storageId } : {}), ocr: processing })
+      return null
+    }
     const { result, redaction } = processing
     const redactedStorageId = ctx.db.system.normalizeId('_storage', processing.redactedStorageId)
     const redactedFile = redactedStorageId ? await ctx.db.system.get('_storage', redactedStorageId) : null
@@ -108,7 +118,9 @@ export const addScreenshot = mutation({
       if (!Number.isInteger(span.start) || !Number.isInteger(span.end) || span.start < 0 || span.start >= span.end || span.end > text.length) throw new ConvexError('Invalid PII text offsets.')
     }
     if (Object.values(redaction.timings).some((ms) => !Number.isFinite(ms) || ms < 0)) throw new ConvexError('Invalid pipeline timings.')
-    return ctx.db.insert('screenshots', { taskId, storageId, redactedStorageId, redaction, capturedAt, offsetMs, ocr: { kind: 'completed', result } })
+    if (!storageId) throw new ConvexError('A JPEG screenshot is required.')
+    await ctx.db.patch('screenshots', screenshotId, { storageId, redactedStorageId, redaction, ocr: { kind: 'completed', result } })
+    return null
   },
 })
 
@@ -117,10 +129,10 @@ export const finish = mutation({
     taskId: v.id('tasks'),
     durationMs: v.number(),
     error: v.union(v.null(), v.string()),
-    audioStorageId: v.optional(v.string()),
+    processing: v.optional(v.boolean()),
   },
   returns: v.null(),
-  handler: async (ctx, { taskId, durationMs, error, audioStorageId: rawAudioStorageId }) => {
+  handler: async (ctx, { taskId, durationMs, error, processing }) => {
     const task = await ctx.db.get('tasks', taskId)
     if (!task) throw new ConvexError('Task not found.')
     if (task.completion) return null
@@ -130,6 +142,25 @@ export const finish = mutation({
     if (lastScreenshot && durationMs < lastScreenshot.offsetMs) {
       throw new ConvexError('Task duration cannot end before its last screenshot.')
     }
+    if (!processing) {
+      const screenshots = await ctx.db.query('screenshots').withIndex('by_task', (q) => q.eq('taskId', taskId)).collect()
+      for (const screenshot of screenshots) {
+        if (screenshot.ocr?.kind === 'pending') await ctx.db.patch('screenshots', screenshot._id, { ocr: { kind: 'failed', error: 'Screenshot processing was interrupted.' } })
+      }
+    }
+    await ctx.db.patch('tasks', taskId, { completion: { durationMs, error }, ...(processing ? { processing: { kind: 'processing' as const } } : {}) })
+    return null
+  },
+})
+
+export const completeProcessing = mutation({
+  args: { taskId: v.id('tasks'), error: v.union(v.null(), v.string()), audioStorageId: v.optional(v.string()) },
+  returns: v.null(),
+  handler: async (ctx, { taskId, error, audioStorageId: rawAudioStorageId }) => {
+    const task = await ctx.db.get('tasks', taskId)
+    if (!task?.completion) throw new ConvexError('Finish the recording before completing processing.')
+    const screenshots = await ctx.db.query('screenshots').withIndex('by_task', (q) => q.eq('taskId', taskId)).collect()
+    if (screenshots.some((shot) => shot.ocr?.kind === 'pending')) throw new ConvexError('Screenshots are still processing.')
     const audioStorageId = rawAudioStorageId === undefined ? undefined : ctx.db.system.normalizeId('_storage', rawAudioStorageId)
     if (audioStorageId !== undefined) {
       const file = audioStorageId ? await ctx.db.system.get('_storage', audioStorageId) : null
@@ -137,7 +168,22 @@ export const finish = mutation({
         throw new ConvexError('A microphone audio recording is required.')
       }
     }
-    await ctx.db.patch('tasks', taskId, { completion: { durationMs, error }, ...(audioStorageId ? { audioStorageId } : {}) })
+    await ctx.db.patch('tasks', taskId, {
+      processing: error ? { kind: 'failed', error } : screenshots.some((shot) => shot.ocr?.kind === 'failed')
+        ? { kind: 'failed', error: 'Some screenshots could not be processed or uploaded.' } : { kind: 'completed' },
+      ...(audioStorageId ? { audioStorageId } : {}),
+    })
+    return null
+  },
+})
+
+export const failProcessing = mutation({
+  args: { taskId: v.id('tasks'), error: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { taskId, error }) => {
+    const task = await ctx.db.get('tasks', taskId)
+    if (!task?.completion) throw new ConvexError('Finish the recording before reporting a processing failure.')
+    await ctx.db.patch('tasks', taskId, { processing: { kind: 'failed', error } })
     return null
   },
 })
