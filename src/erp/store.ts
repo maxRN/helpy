@@ -29,6 +29,15 @@ interface ErpState {
   replaceFromServer: (invoices: Invoice[]) => void
 }
 
+/**
+ * Invoices changed on this device that the database has not confirmed yet. A database snapshot taken
+ * before the change (it arrives a moment later) must not undo it, e.g. right after a practice reset.
+ */
+const unconfirmed = new Map<string, number>() // invoice id -> until (epoch ms)
+const UNCONFIRMED_MS = 5000
+
+export const markLocalChange = (invoiceId: string) => void unconfirmed.set(invoiceId, Date.now() + UNCONFIRMED_MS)
+
 const initialInvoices = () => Object.fromEntries(ALL_INVOICES.map((i) => [i.id, structuredClone(i)]))
 
 /** Fields a change of `field` affects (the GL account follows the cost center). */
@@ -89,6 +98,7 @@ function applyAction(inv: Invoice, action: ErpAction, note: string): Invoice {
 export const useErp = create<ErpState>()((set, get) => {
   /** Local first (the guardrail check needs it synchronously), then the database. */
   const save = (before: Invoice, after: Invoice) => {
+    markLocalChange(after.id)
     set({ invoices: { ...get().invoices, [after.id]: after } })
     const changes = diffInvoice(before, after)
     if (Object.keys(changes).length > 0) erpSync()?.patchInvoice(after.id, changes)
@@ -158,13 +168,26 @@ export const useErp = create<ErpState>()((set, get) => {
     dismissBlocked: () => set({ blocked: null }),
 
     reset: () => {
+      unconfirmed.clear()
       set({ invoices: initialInvoices(), openId: null, blocked: null })
       erpSync()?.resetInvoices()
     },
 
     replaceFromServer: (invoices) => {
       if (invoices.length === 0) return
-      set({ invoices: Object.fromEntries(invoices.map((i) => [i.id, i])) })
+      const local = get().invoices
+      const now = Date.now()
+      const next = invoices.map((server) => {
+        const mine = local[server.id]
+        const until = unconfirmed.get(server.id)
+        if (!mine || until === undefined) return server
+        if (Object.keys(diffInvoice(mine, server)).length === 0 || now > until) {
+          unconfirmed.delete(server.id) // confirmed (or another device changed it since): the database wins
+          return server
+        }
+        return mine // a snapshot from before our own change
+      })
+      set({ invoices: Object.fromEntries(next.map((i) => [i.id, i])) })
     },
   }
 })

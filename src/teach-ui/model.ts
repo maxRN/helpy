@@ -61,8 +61,8 @@ export function predictionFor(g: Guardrail): Prediction {
  * words (the reason she gave), what the rule is, and what to do instead.
  */
 export function explainIntervention(wm: WorkMap, g: Guardrail): string {
-  const fix = g.require[0] ? actionPhrase(g.require[0]) : 'Fix it'
-  return `${wm.expert} said: “${g.quote.text}” ${g.text.replace(/\.?$/, '.')} ${fix.replace(/\.?$/, '.')}`
+  const fix = g.require[0] ? actionPhrase(g.require[0]) : 'Fix it before you post'
+  return `${wm.expert} said: “${g.quote.text}” Here that means: ${fix.charAt(0).toLowerCase()}${fix.slice(1).replace(/\.?$/, '.')}`
 }
 
 // ---------- report ----------

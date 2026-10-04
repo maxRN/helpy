@@ -28,6 +28,8 @@ export function TeachLayer({ onCaseDone }: { onCaseDone?: () => void }) {
     let pendingFix: { invoiceId: string; guardrail: Guardrail } | null = null
     let lastViolationAt = 0
     let guideTimer: ReturnType<typeof setTimeout> | undefined
+    // Praise for a fix stays readable: the next step is not said before this time.
+    let quietUntil = 0
     // Invoices the trainee finished (post, hold, 2nd approval): known at the click, before the ERP saved the new status.
     const done = new Set<string>()
     const finished = (id: string) => done.has(id) || erp().invoices[id]?.status !== 'open'
@@ -48,7 +50,7 @@ export function TeachLayer({ onCaseDone }: { onCaseDone?: () => void }) {
         }
         mascot.pointTo(step.targetId)
         mascot.bubble(step.isJudgmentCall ? `${step.title}. Your call: what would ${wm.expert} do here?` : `Next: ${step.title}.`, { topic: 'step' })
-      }, delay)
+      }, Math.max(delay, quietUntil - Date.now()))
     }
 
     // Clicking into a field is not doing the step: Helpy moves on once the trainee changed something
@@ -110,6 +112,7 @@ export function TeachLayer({ onCaseDone }: { onCaseDone?: () => void }) {
         mascot.pointTo(null)
         mascot.pose('cheer', 1800)
         mascot.bubble(`That’s it. ${wm.expert} would do the same.`, { topic: 'step' })
+        quietUntil = Date.now() + 2500
         guide(invoice.id, 2500)
         return
       }

@@ -101,3 +101,15 @@ describe('step tracker', () => {
     expect(getNextStep('5102')?.id).toBe('S4')
   })
 })
+
+describe('database snapshots', () => {
+  it('a snapshot from before a local change does not undo it; a matching one confirms it', () => {
+    const stale = structuredClone(erp().invoices['5102'])
+    erp().update('5102', 'costCenter', '0400')
+    erp().replaceFromServer(Object.values({ ...erp().invoices, '5102': stale }))
+    expect(erp().invoices['5102'].costCenter).toBe('0400') // kept
+    erp().replaceFromServer(Object.values(erp().invoices)) // the database now has it
+    erp().replaceFromServer(Object.values({ ...erp().invoices, '5102': { ...stale, costCenter: '4100' } }))
+    expect(erp().invoices['5102'].costCenter).toBe('4100') // a later change from another device wins
+  })
+})
