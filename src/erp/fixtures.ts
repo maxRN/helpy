@@ -77,7 +77,7 @@ export const FIXTURE_STEPS: Step[] = [
 
 export const FIXTURE_WORKMAP: WorkMap = {
   sessionId: 'fixture',
-  task: 'Process supplier invoices before the December month-end close',
+  task: 'Process Supplier Invoices',
   expert: 'Sabine',
   language: 'en',
   steps: FIXTURE_STEPS,

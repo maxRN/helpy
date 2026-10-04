@@ -1,6 +1,7 @@
 // Server only. Debrief: find what is still unclear, build the Work Map, write the teach-back.
 import { z } from 'zod'
 import { catalogForPrompt, TARGET_IDS } from '../erp/catalog'
+import { conciseProcessName } from '../shared/processName'
 import type { Gap, Guardrail, Quote, Step, WorkMap } from '../shared/types'
 import { generateJson, MODELS } from './anthropic'
 
@@ -144,6 +145,8 @@ const WorkMapDraftSchema = z.object({
 const WORKMAP_SYSTEM = `You turn an apprentice's session log into a Work Map: the steps a new hire follows, in order, with the expert's reasons and guardrails.
 Only the work counts: ignore chatter with colleagues, talk about the recording tool and remarks to the apprentice.
 
+- task: a short process name for a list, 3 to 5 words, at most 48 characters, Title Case, verb first when natural.
+  No sentence, no explanation, no "Process for …" or "How to …". Examples: "Approve Supplier Invoice", "Handle Quarter-End Duplicates", "Code Equipment Invoice".
 - steps: the generic procedure for one invoice, in order (not one entry per invoice). Include the judgment calls as their own steps.
   targetId: the screen element of the step, one of the listed ids, or "" if none fits.
   startT / endT: t values (ms) from the log of the clearest moment where the expert did this step (10–20 s apart).
@@ -203,7 +206,8 @@ export async function buildWorkMap(sessionId: string, log: LogLine[], expert = '
   for (const g of guardrails) g.stepId = steps.find((s) => s.guardrailIds.includes(g.id))?.id
 
   return {
-    workMap: { sessionId, task: draft.task.trim(), expert, language: 'en', steps, guardrails, openQuestions: draft.openQuestions },
+    // A verbose model output never becomes a huge title in "Recorded processes".
+    workMap: { sessionId, task: conciseProcessName(draft.task) || 'Recorded Process', expert, language: 'en', steps, guardrails, openQuestions: draft.openQuestions },
     warnings,
   }
 }

@@ -1,8 +1,12 @@
 import { useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import { FIXTURE_WORKMAP } from '../../erp/fixtures'
+import { conciseProcessName, PROCESS_NAME_MAX } from '../../shared/processName'
 import type { WorkMap } from '../../shared/types'
 import { UNNAMED } from '../recordName'
+
+/** Names in the list stay short: anything longer than the limit (older recordings) is shortened. */
+export const displayName = (name: string) => (name.length > PROCESS_NAME_MAX ? conciseProcessName(name) || name.slice(0, PROCESS_NAME_MAX) : name)
 
 export const EXAMPLE_ID = 'example'
 
@@ -60,8 +64,9 @@ export function useProcesses(): Process[] | undefined {
     const workMap = (withMap?.workMap as WorkMap | undefined) ?? null
     return {
       id: p.id,
-      // Nobody said what it was: the Work Map's task name, once there is one.
-      name: p.name === UNNAMED && workMap?.task ? workMap.task : p.name,
+      // Nobody said what it was: the Work Map's task name, once there is one. Long names saved before
+      // names were kept short are shortened for the list.
+      name: displayName(p.name === UNNAMED && workMap?.task ? workMap.task : p.name),
       category: 'ERP' as const, // every recording so far is in ProcureFlow
       example: false,
       recordings: p.recordings,

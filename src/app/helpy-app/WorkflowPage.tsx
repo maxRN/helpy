@@ -2,6 +2,7 @@ import { useMutation } from 'convex/react'
 import { useState } from 'react'
 import { api } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
+import { PROCESS_NAME_MAX } from '../../shared/processName'
 import { useSession } from '../../shared/session'
 import { downloadWorkMapMarkdown } from '../../workmap/exportMarkdown'
 import { STATUS, statusOf, useProcess, type Process } from '../panel/processes'
@@ -104,6 +105,7 @@ function Title({ process }: { process: Process }) {
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => e.key === 'Escape' && setEditing(false)}
+          maxLength={PROCESS_NAME_MAX}
           className={`${field} h-12 min-w-[min(100%,320px)] flex-1 text-[19px] font-semibold`}
         />
         <button type="submit" className={appPrimary} disabled={!name.trim() || saving}>
