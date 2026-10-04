@@ -103,7 +103,7 @@ export const addScreenshot = mutation({
         throw new ConvexError('Invalid redaction coordinates.')
       }
     }
-    const text = parsed.data.model === 'tesseract.js' ? parsed.data.text : parsed.data.regions.map((region) => region.text).join('\n')
+    const text = parsed.data.text
     for (const span of redaction.spans) {
       if (!Number.isInteger(span.start) || !Number.isInteger(span.end) || span.start < 0 || span.start >= span.end || span.end > text.length) throw new ConvexError('Invalid PII text offsets.')
     }
