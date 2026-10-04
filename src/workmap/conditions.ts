@@ -67,7 +67,7 @@ export function describeCondition(c: Condition): string {
   }
 }
 
-/** "When category is equipment and amount is over $5,000 → GL account must be capex." */
+/** "When category is equipment and amount is over €5,000 → GL account must be capex." */
 export function describeGuardrailLogic(g: Guardrail): { when: string; require: string } {
   return {
     when: g.when.length ? g.when.map(describeCondition).join(' and ') : 'always',

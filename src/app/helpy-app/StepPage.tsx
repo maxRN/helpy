@@ -10,7 +10,7 @@ import { helpyApp } from './store'
 import { appPrimary, appSecondary, card, pageTitle, sectionTitle } from './ui'
 
 /**
- * The step's rules as a decision tree: one question per rule ("Is the amount over $5,000?"),
+ * The step's rules as a decision tree: one question per rule ("Is the amount over €5,000?"),
  * yes leads to what the rule demands, no to the next question; if no rule applies, the usual way.
  */
 function DecisionTree({ wm, step, rules, next }: { wm: WorkMap; step: Step; rules: Guardrail[]; next: Step | null }) {
