@@ -111,7 +111,10 @@ describe('live question timing', () => {
 
     turnOpen = false; // Scribe committed the turn (its own VAD silence)
     lastSpeechAt = Date.now();
-    await vi.advanceTimersByTimeAsync(1_500);
+    // A breath after the sentence (PAUSE_THRESHOLDS.afterTurnMs), so Helpy does not jump in mid-thought.
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(spoken).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1_000);
     expect(spoken).toHaveLength(1);
   });
 

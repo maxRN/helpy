@@ -4,7 +4,7 @@ import type { LogLine } from './debrief'
 const generateJson = vi.fn()
 vi.mock('./anthropic', () => ({ generateJson: (...args: unknown[]) => generateJson(...args), MODELS: { deep: 'claude-opus-5-5' } }))
 
-const { buildWorkMap, clipAround, findExpertQuote, findGaps, MAX_DEBRIEF_QUESTIONS, NotEnoughWorkError } = await import('./debrief')
+const { buildWorkMap, clipAround, FALLBACK_GUARDRAIL_GAP, findExpertQuote, findGaps, MAX_DEBRIEF_QUESTIONS, NotEnoughWorkError } = await import('./debrief')
 
 const log: LogLine[] = [
   { t: 30_000, who: 'screen', text: 'Opened invoice 4471 from Neckartal Werkzeugmaschinen GmbH (€6,800.00, equipment)' },
@@ -58,6 +58,28 @@ describe('findGaps', () => {
     const res = await findGaps(log, MAX_DEBRIEF_QUESTIONS)
     expect(res.done).toBe(true)
     expect(generateJson).not.toHaveBeenCalled()
+  })
+
+  const why = (aboutT: number) => ({ question: 'Why that cost center?', kind: 'why', aboutT })
+
+  it('starts with a guardrail question when none was asked live: moves the model\'s one first', async () => {
+    generateJson.mockResolvedValueOnce({ gaps: [why(41_000), { question: 'Is there a limit?', kind: 'guardrail', aboutT: 41_000 }], done: false, doneReason: '' })
+    const res = await findGaps(log, 0, true)
+    expect(res.gaps.map((g) => g.kind)).toEqual(['guardrail', 'why'])
+  })
+
+  it('starts with a fixed guardrail question when the model gives none', async () => {
+    generateJson.mockResolvedValueOnce({ gaps: [why(41_000)], done: false, doneReason: '' })
+    const res = await findGaps(log, 0, true)
+    expect(res.gaps[0]).toMatchObject({ kind: 'guardrail', question: FALLBACK_GUARDRAIL_GAP })
+    expect(res.gaps[0].clip.start).toBe(52_000) // around the last screen change (60 s)
+  })
+
+  it('does not stop before three debrief questions, even if the model says done', async () => {
+    generateJson.mockResolvedValueOnce({ gaps: [why(41_000)], done: true, doneReason: 'all clear' })
+    expect((await findGaps(log, 0)).done).toBe(false)
+    generateJson.mockResolvedValueOnce({ gaps: [why(41_000)], done: true, doneReason: 'all clear' })
+    expect((await findGaps(log, 2)).done).toBe(true)
   })
 })
 

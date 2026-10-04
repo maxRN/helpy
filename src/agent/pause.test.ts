@@ -35,10 +35,17 @@ describe('isPause', () => {
     expect(isPause(base({ userSilentForMs: 300 })).pause).toBe(false);
   });
 
-  it('with Scribe endpointing, an open turn blocks and a committed one does not, without extra delay', () => {
+  it('with Scribe endpointing, an open turn blocks; after a committed one Helpy waits a short breath', () => {
     expect(isPause(base({ endpointing: true, turnOpen: true, userSilentForMs: 200 })).pause).toBe(false);
-    // Scribe just committed the turn (its own VAD silence): a pause right away.
-    expect(isPause(base({ endpointing: true, turnOpen: false, userSilentForMs: 0 })).pause).toBe(true);
+    // Scribe just committed the turn after 0.8 s silence: often only a breath between sentences (user feedback:
+    // asking right then interrupts). Helpy waits afterTurnMs.
+    expect(isPause(base({ endpointing: true, turnOpen: false, userSilentForMs: 0 })).pause).toBe(false);
+    expect(isPause(base({ endpointing: true, turnOpen: false, userSilentForMs: TH.afterTurnMs })).pause).toBe(true);
+  });
+
+  it('holds questions while the expert clicks into fields (mid-step), not afterwards', () => {
+    expect(isPause(base({ lastFieldAt: 100_000 - 1000 })).blockers[0]).toMatch(/working in a field/);
+    expect(isPause(base({ lastFieldAt: 100_000 - TH.sinceFieldMs })).pause).toBe(true);
   });
 
   it('an open turn without speech for a long time is stale and does not block forever', () => {

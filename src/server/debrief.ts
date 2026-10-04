@@ -96,23 +96,53 @@ export const hasEnoughWork = (log: LogLine[]) => log.filter((l) => l.who === 'sc
 export const NOT_ENOUGH_WORK =
   'I saw too little work on screen to ask good questions. Record the task again and work through a few invoices while you explain.'
 
+/** The brief: "The debrief asks at least three follow-up questions that were not answered during the task." */
+export const MIN_DEBRIEF_QUESTIONS = 3
+
+export const FALLBACK_GUARDRAIL_GAP = 'Is there a limit, or a case where you would stop and ask someone before doing this?'
+
+/**
+ * needGuardrail: no guardrail question was asked during the task (the brief requires one), so the
+ * debrief's first question must be one. If the model does not deliver it, a fixed one is put first.
+ */
 export async function findGaps(
   log: LogLine[],
   askedSoFar: number,
+  needGuardrail = false,
 ): Promise<{ gaps: Gap[]; done: boolean; doneReason: string; notEnoughWork?: boolean }> {
   if (!hasEnoughWork(log)) return { gaps: [], done: true, doneReason: NOT_ENOUGH_WORK, notEnoughWork: true }
   if (askedSoFar >= MAX_DEBRIEF_QUESTIONS) return { gaps: [], done: true, doneReason: `Question budget of ${MAX_DEBRIEF_QUESTIONS} used.` }
+  const mustGuardrail = needGuardrail && askedSoFar === 0
+  const rules = [
+    `Questions left in the budget: ${MAX_DEBRIEF_QUESTIONS - askedSoFar}.`,
+    askedSoFar < MIN_DEBRIEF_QUESTIONS
+      ? `Debrief questions asked so far: ${askedSoFar}. At least ${MIN_DEBRIEF_QUESTIONS} are required in total, so do not set done before that.`
+      : '',
+    mustGuardrail
+      ? 'No guardrail question was asked during the task. Your FIRST question MUST be kind "guardrail": a limit, a threshold, or when they would stop and ask someone, about the most important decision on screen.'
+      : '',
+  ].filter(Boolean)
   const out = await generateJson({
     model: MODELS.deep,
     schema: GapsSchema,
     system: GAPS_SYSTEM,
-    content: `Session log:\n${formatLog(log)}\n\nQuestions left in the budget: ${MAX_DEBRIEF_QUESTIONS - askedSoFar}.`,
+    content: `Session log:\n${formatLog(log)}\n\n${rules.join('\n')}`,
     effort: 'medium',
   })
-  const gaps = out.gaps.slice(0, Math.min(3, MAX_DEBRIEF_QUESTIONS - askedSoFar)).map(
-    (g, i): Gap => ({ id: `gap-${askedSoFar + i + 1}`, question: g.question.trim(), kind: g.kind, clip: clipAround(g.aboutT) }),
+  let found = out.gaps.map((g) => ({ question: g.question.trim(), kind: g.kind, aboutT: g.aboutT }))
+  if (mustGuardrail) {
+    const g = found.findIndex((x) => x.kind === 'guardrail')
+    if (g > 0) found = [found[g], ...found.filter((_, i) => i !== g)]
+    if (g < 0) {
+      const lastScreen = [...log].reverse().find((l) => l.who === 'screen')
+      found = [{ question: FALLBACK_GUARDRAIL_GAP, kind: 'guardrail', aboutT: lastScreen?.t ?? 0 }, ...found]
+    }
+  }
+  const gaps = found.slice(0, Math.min(3, MAX_DEBRIEF_QUESTIONS - askedSoFar)).map(
+    (g, i): Gap => ({ id: `gap-${askedSoFar + i + 1}`, question: g.question, kind: g.kind, clip: clipAround(g.aboutT) }),
   )
-  return { gaps, done: out.done || gaps.length === 0, doneReason: out.doneReason }
+  const minimumReached = askedSoFar + gaps.length >= MIN_DEBRIEF_QUESTIONS
+  return { gaps, done: gaps.length === 0 || (out.done && minimumReached), doneReason: out.doneReason }
 }
 
 // ------------------------------------------------------------------ Work Map

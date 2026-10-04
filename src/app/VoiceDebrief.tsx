@@ -2,7 +2,7 @@ import { useConvex, type ConvexReactClient } from 'convex/react'
 import { useEffect } from 'react'
 import { create } from 'zustand'
 import { api } from '../../convex/_generated/api'
-import { toLogLines } from '../debrief/sessionLog'
+import { needsGuardrailQuestion, toLogLines } from '../debrief/sessionLog'
 import { erpSync } from '../erp/sync'
 import { mascot } from '../mascot'
 import { activity } from '../shared/activity'
@@ -105,12 +105,15 @@ async function waitForQuiet(question: string) {
 async function debrief(convex: ConvexReactClient) {
   const sessionId = session().sessionId
   // Answers just given may not be stored yet, and after a reload only Convex has the session: use both.
-  const log = async () => {
+  const events = async () => {
     const stored = ((await convex.query(api.events.list, { sessionId }).catch(() => [])) ?? []) as AppEvent[]
     const byId = new Map<string, AppEvent>()
     for (const e of [...stored, ...getEventLog()]) byId.set(e.id, e)
-    return toLogLines([...byId.values()].sort((a, b) => a.t - b.t))
+    return [...byId.values()].sort((a, b) => a.t - b.t)
   }
+  const log = async () => toLogLines(await events())
+  // The brief requires a guardrail question: if none came during the task, the debrief starts with one.
+  const needGuardrail = needsGuardrailQuestion(await events())
   const relNow = () => {
     const t0 = session().t0
     return t0 === null ? 0 : Date.now() - t0
@@ -133,7 +136,7 @@ async function debrief(convex: ConvexReactClient) {
   let asked = 0
   while (asked < MAX_QUESTIONS && !run?.stopped) {
     setPhase('finding')
-    const res = await post<{ gaps: Gap[]; done: boolean; doneReason?: string; notEnoughWork?: boolean }>('/api/debrief/gaps', { log: await log(), asked })
+    const res = await post<{ gaps: Gap[]; done: boolean; doneReason?: string; notEnoughWork?: boolean }>('/api/debrief/gaps', { log: await log(), asked, needGuardrail })
     // Too little of the task was recorded: say so instead of inventing questions or a Work Map.
     if (res.notEnoughWork) {
       setPhase('idle')

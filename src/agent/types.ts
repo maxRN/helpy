@@ -75,7 +75,7 @@ export interface Deps {
   };
   session: { t0: number };
   /** P1. Typing only: pointer movement, clicks and scrolling never hold a question back. */
-  activity: { lastTypingAt(): number };
+  activity: { lastTypingAt(): number; /** Optional: last click or focus in a form control (epoch ms). */ lastFieldAt?(): number };
   /**
    * Optional: Scribe v2 Realtime listening in Capture mode (src/integration/listener.ts).
    * When active, the agent's own mic is muted in Capture, and speech activity comes from Scribe's VAD.

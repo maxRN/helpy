@@ -311,11 +311,12 @@ function startCapture(deps: Deps, deliver: Deliver): void {
     const now = Date.now();
     // Scribe's VAD (when listening) and the agent's own VAD: whichever heard speech last.
     const lastSpeech = Math.max(lastUserSpeechAt, deps.speech?.lastSpeechAt() ?? 0);
-    // Scribe's endpointing: the expert is talking until Scribe commits the turn (no extra delay after that).
+    // Scribe endpointing: the expert is talking until Scribe commits the turn, then a short breath (afterTurnMs).
     const endpointing = (deps.speech?.active() ?? false) && !!deps.speech?.turnOpen;
     return {
       now,
       lastTypingAt: deps.activity.lastTypingAt(),
+      lastFieldAt: deps.activity.lastFieldAt?.(),
       userSilentForMs: now - lastSpeech,
       endpointing,
       turnOpen: endpointing ? deps.speech!.turnOpen!() : undefined,

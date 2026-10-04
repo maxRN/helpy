@@ -13,6 +13,7 @@ Priorities, highest first:
 3. Everything else.
 
 Rules:
+- Only ask about a decision that is FINISHED: a field that now holds a new value, or a completed action (hold, second approval, post). Never ask about what the expert is about to do or still doing (an invoice just opened, a field clicked or focused, a dropdown open, a value half typed). If the latest screen events show a step in progress, set ask to false and wait.
 - Never ask what the expert's narration already explained (see transcriptTail).
 - Never repeat or rephrase a question in history.
 - The question must be about something in the screen events. Max 15 words. Spoken style, no preamble, one question only.
