@@ -10,7 +10,7 @@ import { Helpy } from '#/app'
 <Helpy boundsRef={screenRef} /> // boundsRef: the fake screen Helpy may move in; default is the whole window
 ```
 
-`src/routes/index.tsx` mounts it on top of Max's mock desktop (bounds: the screen above the taskbar).
+`src/routes/index.tsx` mounts it on top of Max's mock desktop (bounds: the screen between the macOS-style menu bar and the dock).
 
 ## What the robot does
 

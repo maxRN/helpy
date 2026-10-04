@@ -16,8 +16,8 @@ function Home() {
       {/* Database sync, saved session and tracking run even while the ERP window is closed. */}
       <ErpServices />
       <Desktop app={<ErpApp />} />
-      {/* Helpy moves anywhere on the screen except over the taskbar (h-12). */}
-      <div ref={screen} className="pointer-events-none fixed inset-x-0 top-0 bottom-12" aria-hidden />
+      {/* Helpy moves anywhere on the screen except over the menu bar (h-7) and the dock (h-12). */}
+      <div ref={screen} className="pointer-events-none fixed inset-x-0 top-7 bottom-12" aria-hidden />
       <Helpy boundsRef={screen} />
       {/* P1's event log and Teach shortcuts: add ?debug to the URL (dev only). */}
       {import.meta.env.DEV && new URLSearchParams(window.location.search).has('debug') ? <DebugPanel /> : null}

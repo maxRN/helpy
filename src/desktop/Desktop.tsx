@@ -1,7 +1,8 @@
 import { Link } from '@tanstack/react-router'
 import { useEffect, useState, type ReactNode } from 'react'
-import { helpyApp } from '../app/helpy-app/store'
+import { helpyApp, useHelpyApp } from '../app/helpy-app/store'
 import { HelpyMark } from '../mascot'
+import { TITLE_BAR, TITLE_TEXT, TrafficLights, windowPlacement } from './TrafficLights'
 
 // A mock desktop for the demo: it makes clear that Sabine AI sits on top of any desktop app,
 // and that the ERP is only the example app.
@@ -54,34 +55,37 @@ function WindowFrame({
   onClose: () => void
   children: ReactNode
 }) {
-  const ctl = 'flex h-full w-11 items-center justify-center text-slate-600 hover:bg-slate-200'
   return (
     <section
       aria-label={title}
       hidden={hidden}
-      className={`absolute z-10 flex min-w-0 flex-col overflow-hidden bg-white shadow-2xl ring-1 ring-black/10 ${
-        maximized ? 'inset-x-0 top-0 bottom-12' : 'top-[3%] right-[3%] bottom-[calc(3rem+3%)] left-[3%] rounded-lg'
-      }`}
+      className={`absolute z-10 flex min-w-0 flex-col overflow-hidden bg-white shadow-2xl ring-1 ring-black/15 ${windowPlacement(maximized)}`}
     >
-      <header className="flex h-9 shrink-0 items-center border-b border-slate-200 bg-slate-50 select-none" onDoubleClick={onToggleMaximize}>
-        <span className="ml-3 flex items-center gap-2 text-[12px] text-slate-700">
+      <header className={TITLE_BAR} onDoubleClick={onToggleMaximize}>
+        <TrafficLights onClose={onClose} onMinimize={onMinimize} onZoom={onToggleMaximize} zoomed={maximized} />
+        <span className={TITLE_TEXT}>
           <LedgerIcon size={16} />
           {title}
-        </span>
-        <span className="ml-auto flex h-full">
-          <button type="button" aria-label="Minimize" className={ctl} onClick={onMinimize}>
-            <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden><path d="M0 5h10" stroke="currentColor" /></svg>
-          </button>
-          <button type="button" aria-label={maximized ? 'Restore' : 'Maximize'} className={ctl} onClick={onToggleMaximize}>
-            <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden><rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" /></svg>
-          </button>
-          <button type="button" aria-label="Close" className={`${ctl} hover:bg-red-600 hover:text-white`} onClick={onClose}>
-            <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden><path d="M0 0l10 10M10 0L0 10" stroke="currentColor" /></svg>
-          </button>
         </span>
       </header>
       <div className="min-h-0 flex-1 overflow-auto">{children}</div>
     </section>
+  )
+}
+
+/** An app in the dock: icon, name on hover, a dot while it runs. */
+function DockItem({ label, running, onClick, children }: { label: string; running: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className="relative flex size-10 items-center justify-center rounded-xl outline-none transition-transform duration-150 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-white/70"
+    >
+      {children}
+      {running ? <span className="absolute -bottom-1 size-1 rounded-full bg-white/85" aria-hidden /> : null}
+    </button>
   )
 }
 
@@ -90,10 +94,11 @@ export function Desktop({ app }: { app: ReactNode }) {
   const [win, setWin] = useState<WindowState>('closed')
   const [maximized, setMaximized] = useState(false)
   const now = useStoryClock()
+  const helpyOpen = useHelpyApp((s) => s.open)
 
   const open = () => setWin('open')
-  const time = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-  const date = now.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })
+  const clock = `${now.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} ${now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`
+  const activeApp = helpyOpen ? 'Helpy' : win === 'open' ? 'ProcureFlow' : 'Finder'
 
   return (
     <div
@@ -106,10 +111,32 @@ export function Desktop({ app }: { app: ReactNode }) {
         <path d="M0 320 C 260 260, 520 360, 760 300 S 1060 270, 1200 320 L1200 400 L0 400 Z" fill="#163742" opacity="0.9" />
       </svg>
 
+      {/* Menu bar */}
+      <header className="absolute inset-x-0 top-0 z-20 flex h-7 items-center gap-5 bg-black/25 px-4 text-[13px] text-white backdrop-blur-xl select-none">
+        <span className="flex items-center gap-5" aria-hidden>
+          <svg width="14" height="14" viewBox="0 0 14 14">
+            <circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" strokeWidth="1.4" />
+            <circle cx="7" cy="7" r="2.2" fill="currentColor" />
+          </svg>
+          <span className="font-semibold">{activeApp}</span>
+          {['File', 'Edit', 'View', 'Window', 'Help'].map((m) => (
+            <span key={m} className="hidden text-white/90 sm:inline">
+              {m}
+            </span>
+          ))}
+        </span>
+        <span className="ml-auto flex items-center gap-4 tabular-nums">
+          <Link to="/projects" className="text-white/80 hover:text-white hover:underline">
+            Sabine AI · Projects
+          </Link>
+          <span>{clock}</span>
+        </span>
+      </header>
+
       <button
         type="button"
         onClick={open}
-        className="absolute top-5 left-5 flex w-24 flex-col items-center gap-1.5 rounded-md p-2 text-center text-white outline-none hover:bg-white/15 focus-visible:bg-white/20 focus-visible:ring-1 focus-visible:ring-white/60"
+        className="absolute top-12 left-5 flex w-24 flex-col items-center gap-1.5 rounded-lg p-2 text-center text-white outline-none hover:bg-white/15 focus-visible:bg-white/20 focus-visible:ring-1 focus-visible:ring-white/60"
       >
         <LedgerIcon />
         <span className="text-[12px] leading-tight [text-shadow:0_1px_2px_rgba(0,0,0,0.6)]">ProcureFlow</span>
@@ -118,7 +145,7 @@ export function Desktop({ app }: { app: ReactNode }) {
         type="button"
         title="Open Helpy"
         onClick={() => helpyApp.open()}
-        className="absolute top-28 left-5 flex w-24 flex-col items-center gap-1.5 rounded-md p-2 text-center text-white outline-none hover:bg-white/15 focus:bg-white/20 focus-visible:ring-1 focus-visible:ring-white/60"
+        className="absolute top-36 left-5 flex w-24 flex-col items-center gap-1.5 rounded-lg p-2 text-center text-white outline-none hover:bg-white/15 focus:bg-white/20 focus-visible:ring-1 focus-visible:ring-white/60"
       >
         <span className="flex h-11 items-center"><HelpyMark size={44} /></span>
         <span className="text-[12px] leading-tight [text-shadow:0_1px_2px_rgba(0,0,0,0.6)]">Helpy</span>
@@ -137,38 +164,16 @@ export function Desktop({ app }: { app: ReactNode }) {
         </WindowFrame>
       ) : null}
 
-      {/* Taskbar */}
-      <footer className="absolute inset-x-0 bottom-0 z-20 flex h-12 items-center border-t border-white/10 bg-[#0f2129]/85 px-2 text-white backdrop-blur-md">
-        <div className="flex flex-1 items-center justify-center gap-1">
-          <span className="flex h-9 w-9 items-center justify-center rounded-md" aria-label="Start" role="img">
-            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden>
-              <rect x="1" y="1" width="7" height="7" rx="1.5" fill="#9fd3e6" />
-              <rect x="10" y="1" width="7" height="7" rx="1.5" fill="#9fd3e6" />
-              <rect x="1" y="10" width="7" height="7" rx="1.5" fill="#9fd3e6" />
-              <rect x="10" y="10" width="7" height="7" rx="1.5" fill="#9fd3e6" />
-            </svg>
-          </span>
-          {win !== 'closed' ? (
-            <button
-              type="button"
-              aria-label="ProcureFlow"
-              onClick={() => setWin(win === 'minimized' ? 'open' : 'minimized')}
-              className="relative flex h-9 w-10 items-center justify-center rounded-md hover:bg-white/10"
-            >
-              <LedgerIcon size={22} />
-              <span className={`absolute bottom-0.5 h-0.5 rounded-full bg-sky-300 ${win === 'open' ? 'w-4' : 'w-1.5'}`} />
-            </button>
-          ) : null}
-        </div>
-        <div className="flex items-center gap-4 pr-2 text-[11px] text-slate-200">
-          <Link to="/projects" className="text-slate-300 hover:text-white hover:underline">
-            Sabine AI · Projects
-          </Link>
-          <span className="flex flex-col items-end leading-tight tabular-nums">
-            <span>{time}</span>
-            <span>{date}</span>
-          </span>
-        </div>
+      {/* Dock, in the same strip the windows and Helpy keep clear of (h-12) */}
+      <footer className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex h-12 items-center justify-center">
+        <nav aria-label="Dock" className="pointer-events-auto flex h-11 items-center gap-1.5 rounded-2xl border border-white/25 bg-white/20 px-2 shadow-lg backdrop-blur-xl">
+          <DockItem label="ProcureFlow" running={win !== 'closed'} onClick={open}>
+            <LedgerIcon size={32} />
+          </DockItem>
+          <DockItem label="Helpy" running onClick={() => helpyApp.open()}>
+            <HelpyMark size={30} />
+          </DockItem>
+        </nav>
       </footer>
     </div>
   )

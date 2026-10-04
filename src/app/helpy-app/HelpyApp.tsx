@@ -1,3 +1,4 @@
+import { TITLE_BAR, TITLE_TEXT, TrafficLights, windowPlacement } from '../../desktop/TrafficLights'
 import { HelpyMark } from '../../mascot'
 import { useAuth } from '../auth'
 import { useProcess, useProcesses } from '../panel/processes'
@@ -104,32 +105,18 @@ export function HelpyApp() {
   const count = useProcesses()?.length
   if (!open || !user) return null
 
-  const ctl = 'flex h-full w-11 items-center justify-center text-slate-600 hover:bg-slate-200'
   const onProcesses = page.name !== 'company'
 
   return (
     <section
       aria-label="Helpy"
-      className={`fixed z-30 flex min-w-0 flex-col overflow-hidden bg-white font-helpy shadow-2xl ring-1 ring-black/10 ${
-        maximized ? 'inset-x-0 top-0 bottom-12' : 'top-[3%] right-[3%] bottom-[calc(3rem+3%)] left-[3%] rounded-lg'
-      }`}
+      className={`fixed z-30 flex min-w-0 flex-col overflow-hidden bg-white font-helpy shadow-2xl ring-1 ring-black/15 ${windowPlacement(maximized)}`}
     >
-      <header className="flex h-9 shrink-0 items-center border-b border-slate-200 bg-slate-50 select-none" onDoubleClick={helpyApp.toggleMaximize}>
-        <span className="ml-3 flex items-center gap-2 text-[12px] text-slate-700">
+      <header className={TITLE_BAR} onDoubleClick={helpyApp.toggleMaximize}>
+        <TrafficLights onClose={helpyApp.close} onZoom={helpyApp.toggleMaximize} zoomed={maximized} />
+        <span className={TITLE_TEXT}>
           <HelpyMark size={16} />
           Helpy — Hartmann Machine Works
-        </span>
-        <span className="ml-auto flex h-full">
-          <button type="button" aria-label={maximized ? 'Restore' : 'Maximize'} className={ctl} onClick={helpyApp.toggleMaximize}>
-            <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden>
-              <rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" />
-            </svg>
-          </button>
-          <button type="button" aria-label="Close" className={`${ctl} hover:bg-red-600 hover:text-white`} onClick={helpyApp.close}>
-            <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden>
-              <path d="M0 0l10 10M10 0L0 10" stroke="currentColor" />
-            </svg>
-          </button>
         </span>
       </header>
 

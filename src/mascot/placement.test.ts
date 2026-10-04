@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { clampInto, mascotMode, placeNextTo, REST_INSET, restPosition, type Box } from './placement'
 
 const SIZE = { width: 84, height: 105 }
-// The fake screen above the taskbar on a 1440 × 900 viewport (Helpy's bounds are fixed to the viewport).
+// The fake screen between the menu bar and the dock on a 1440 × 900 viewport (Helpy's bounds are fixed to the viewport).
 const viewport = (width = 1440, height = 900 - 48): Box => ({ left: 0, top: 0, width, height })
 
 describe('restPosition', () => {
