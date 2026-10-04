@@ -277,6 +277,25 @@ describe('live question coverage', () => {
     expect(asked[0].meta?.kind).toBe('guardrail'); // the guardrail question is owed first
   });
 
+  it('records whether a question was heard or only shown, and marks the wrap-up ones', async () => {
+    stubPolicy([{ ask: true, question: 'You held the Kramer invoice. Why that one?', eventId: '', kind: 'why' }]);
+    deliver.mockImplementation(async (q, c) => {
+      c.started({ voice: false }); // no audio could be played: bubble only
+      spoken.push(q);
+      return true;
+    });
+    startCaptureWithoutAgent(deliver);
+    decisionEvent({ kind: 'action', action: 'hold' }, 'Invoice 4472: put on hold');
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(askedEvents()[0].meta).toMatchObject({ voice: false });
+    expect(askedEvents()[0].meta?.wrapUp).toBeUndefined();
+    const { wrapUpCapture } = await import('./voice');
+    const done = wrapUpCapture();
+    await vi.advanceTimersByTimeAsync(3 * 31_000);
+    await done;
+    expect(askedEvents().slice(1).every((e) => e.meta?.wrapUp === true)).toBe(true);
+  });
+
   it('wrap-up: never speaks while the expert types', async () => {
     stubPolicy([]);
     startCaptureWithoutAgent(deliver);

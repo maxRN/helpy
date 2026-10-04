@@ -85,7 +85,7 @@ export async function startVoice(mode: AgentMode) {
       })
     }
     voice.startCaptureWithoutAgent(async (question, control) => {
-      const said = await speak(question, { gate: control.stillQuiet, onStart: control.started })
+      const said = await speak(question, { gate: control.stillQuiet, onStart: (audio) => control.started({ voice: audio }) })
       return said === 'spoken'
     })
     useVoice.setState({ mode, error: '' })
@@ -126,7 +126,7 @@ export async function answerIfForHelpy(text: string, mode: AgentMode): Promise<b
   const reply = unknown.length ? (session().language === 'de' ? 'Welche Rechnung meinst du genau?' : 'Which invoice do you mean exactly?') : turn.reply
   mascot.bubble(reply)
   // Resolve once Helpy starts answering, so no live question slips in between (see speech.replyPending).
-  await new Promise<void>((resolve) => void speak(reply, { onStart: resolve }).finally(resolve))
+  await new Promise<void>((resolve) => void speak(reply, { onStart: () => resolve() }).finally(resolve))
   return true
 }
 
@@ -233,8 +233,8 @@ export function prefetchSpeech(text: string) {
 export interface SpeakOptions {
   /** Checked once the audio is ready, right before it plays: false = do not say it now. */
   gate?: () => boolean
-  /** Called right before the voice starts (or right away when there is no TTS). */
-  onStart?: () => void
+  /** Called right before the voice starts (`audio` true), or right away when it can only be shown (no TTS). */
+  onStart?: (audio: boolean) => void
 }
 
 /**
@@ -244,7 +244,7 @@ export interface SpeakOptions {
 export async function speak(text: string, { gate, onStart }: SpeakOptions = {}): Promise<'spoken' | 'skipped'> {
   if (!ttsAvailable) {
     if (gate && !gate()) return 'skipped'
-    onStart?.()
+    onStart?.(false)
     return 'spoken'
   }
   try {
@@ -260,7 +260,7 @@ export async function speak(text: string, { gate, onStart }: SpeakOptions = {}):
     const audio = new Audio(url)
     playing = audio
     mascot.setState('speaking')
-    onStart?.()
+    onStart?.(true)
     await new Promise<void>((resolve) => {
       audio.onended = () => resolve()
       audio.onerror = () => resolve()
@@ -275,7 +275,7 @@ export async function speak(text: string, { gate, onStart }: SpeakOptions = {}):
   } catch {
     // Autoplay blocked or no network: the bubble still says it.
     if (gate && !gate()) return 'skipped'
-    onStart?.()
+    onStart?.(false)
   }
   return 'spoken'
 }
