@@ -7,7 +7,7 @@ export function ScreenshotNote({ ocr, redaction }: Pick<Doc<'screenshots'>, 'ocr
   if (redaction) return (
     <details className="screenshot-note">
       <summary>Redacted text · {redaction.spans.length} PII spans</summary>
-      <p className="muted">Desert Ant Labs Redact · {redaction.boxes.length} word boxes painted.</p>
+      <p className="muted">Desert Ant Labs Redact · {redaction.boxes.length} word boxes replaced.</p>
       <p className="ocr-text">{redaction.text || 'No text detected.'}</p>
       <p className="muted">
         OCR {Math.round(redaction.timings.ocrMs)} ms · PII {Math.round(redaction.timings.piiMs)} ms · Mask {Math.round(redaction.timings.maskMs)} ms · Upload {Math.round(redaction.timings.uploadMs)} ms

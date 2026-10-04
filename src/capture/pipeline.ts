@@ -1,9 +1,9 @@
 import { analyzeScreenshot } from './ocr'
 import type { OcrResult } from './ocr-contract'
 import { detectPii } from './pii'
+import { paintSyntheticPii, syntheticPii } from './synthetic-pii'
 
 type Span = { start: number; end: number; label: string }
-type Box = { x0: number; y0: number; x1: number; y1: number }
 
 function textPositions(result: OcrResult) {
   const text = result.text
@@ -25,7 +25,7 @@ function encode(canvas: HTMLCanvasElement, type: string) {
 export async function redactScreenshot({ original, ocr }: { original: Blob; ocr: OcrResult }) {
   const started = performance.now()
   const { text, regions } = textPositions(ocr)
-  const { redactedText, items } = await detectPii(text)
+  const { items } = await detectPii(text)
   const detected = performance.now()
   const spans: Span[] = items.map(({ start, end, label, original }) => {
     if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end <= start || text.slice(start, end) !== original) {
@@ -34,13 +34,31 @@ export async function redactScreenshot({ original, ocr }: { original: Blob; ocr:
     if (!regions.some((region) => region.start < end && region.end > start)) throw new Error('PII text has no screenshot coordinates.')
     return { start, end, label }
   })
+  const edits = new Map<typeof regions[number], { start: number; end: number; text: string }[]>()
+  let redactedText = text
+  for (const span of [...spans].reverse()) {
+    const replacement = syntheticPii(span.label)
+    redactedText = redactedText.slice(0, span.start) + replacement + redactedText.slice(span.end)
+    const words = replacement.split(' ')
+    const matched = regions.filter(({ start, end }) => start < span.end && end > span.start)
+    matched.forEach((region, index) => {
+      const value = words.slice(Math.ceil(index * words.length / matched.length), Math.ceil((index + 1) * words.length / matched.length)).join(' ')
+      const changes = edits.get(region) ?? []
+      changes.push({ start: Math.max(0, span.start - region.start), end: Math.min(region.region.text.length, span.end - region.start), text: value })
+      edits.set(region, changes)
+    })
+  }
+  const replacements = regions.flatMap((region) => {
+    const changes = edits.get(region)
+    if (!changes) return []
+    let value = region.region.text
+    for (const change of changes) value = value.slice(0, change.start) + change.text + value.slice(change.end)
+    return [{ box: region.region.bbox, text: value }]
+  })
   const image = await createImageBitmap(original)
-  const boxes: Box[] = []
+  const boxes = replacements.map(({ box }) => box)
   let redacted: Blob
   try {
-    for (const { region, start, end } of regions) {
-      if (spans.some((span) => span.start < end && span.end > start)) boxes.push(region.bbox)
-    }
     if (!boxes.length) redacted = original
     else {
       const canvas = document.createElement('canvas')
@@ -49,8 +67,7 @@ export async function redactScreenshot({ original, ocr }: { original: Blob; ocr:
       const context = canvas.getContext('2d')
       if (!context) throw new Error('This browser cannot paint screenshot redactions.')
       context.drawImage(image, 0, 0)
-      context.fillStyle = '#000'
-      for (const box of boxes) context.fillRect(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0)
+      paintSyntheticPii(context, replacements)
       redacted = await encode(canvas, 'image/png')
     }
   } finally { image.close() }
