@@ -82,7 +82,8 @@ export async function askWaitingQuestion() {
 let ttsAvailable = true
 let playing: HTMLAudioElement | null = null
 
-export async function speak(text: string) {
+/** Says `text` out loud; resolves when it was said (or right away without TTS). Helpy shows "speaking" meanwhile, so Scribe does not hear it. */
+export async function speak(text: string): Promise<void> {
   if (!ttsAvailable) return
   try {
     const res = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) })
@@ -95,11 +96,17 @@ export async function speak(text: string) {
     const audio = new Audio(url)
     playing = audio
     mascot.setState('speaking')
-    audio.onended = () => {
-      URL.revokeObjectURL(url)
-      if (playing === audio) mascot.setState('listening')
+    await new Promise<void>((resolve) => {
+      audio.onended = () => resolve()
+      audio.onerror = () => resolve()
+      audio.onpause = () => resolve() // replaced by the next line Helpy says
+      audio.play().catch(() => resolve())
+    })
+    URL.revokeObjectURL(url)
+    if (playing === audio) {
+      playing = null
+      mascot.setState('listening')
     }
-    await audio.play()
   } catch {
     // Autoplay blocked or no network: the bubble still says it.
   }

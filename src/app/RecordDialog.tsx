@@ -1,28 +1,32 @@
 import { useMutation } from 'convex/react'
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { create } from 'zustand'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import { loadOcrModel, useOcrModel } from '../capture/ocr'
 import { loadPiiModel, usePiiModel } from '../capture/pii'
 import { useTaskRecording } from '../capture/TaskRecorder'
-import { useListener } from '../integration/listener'
+import { speech, useListener } from '../integration/listener'
 import { mascot } from '../mascot'
-import { session } from '../shared/session'
+import { bus } from '../shared/bus'
 import { useMascot } from '../shared/mascot'
+import { session } from '../shared/session'
+import type { AppEvent } from '../shared/types'
 import { auth } from './auth'
-import { useProcesses } from './panel/processes'
 import { panel } from './panel/store'
+import { titleFromAnswer, UNNAMED } from './recordName'
 import { askWaitingQuestion, setOffRecord, speak, startVoice } from './voice'
 
-// "Record what I do" without a window: Helpy asks in its speech bubble, you answer there,
-// then it watches. While recording, clicking the robot shows pause and "I'm done" in the bubble.
+// "Record what I do" without a window and without typing: one click starts sharing the screen and the
+// microphone, then Helpy asks out loud what you are going to show and names the process from your answer.
+// While recording, clicking the robot shows pause and "I'm done" in the bubble.
 
-type Target = { name: string; projectId?: string }
+/** Recording an existing process again keeps its name; a new one is named from the spoken answer. */
+type Target = { projectId?: string; name?: string }
 type Step =
   | { kind: 'idle' }
-  | { kind: 'what' }
-  | { kind: 'ready'; target: Target }
+  /** Waiting for the screen-reading model; `auto` starts right away when it is ready (still inside the click). */
+  | { kind: 'ready'; target: Target; auto: boolean }
   | { kind: 'starting'; target: Target }
   | { kind: 'failed'; target: Target }
 
@@ -37,11 +41,11 @@ export const useRecordFlow = create<RecordFlow>()(() => ({ step: { kind: 'idle' 
 const set = (step: Step) => useRecordFlow.setState({ step })
 
 export const recordFlow = {
-  /** Start the dialog; with a process, skip "what do you want to show me?". */
+  /** Start recording (from a click: the browser only allows screen sharing right after one). */
   open(process?: { name: string; id: string }) {
     panel.close()
     mascot.pointTo(null)
-    set(process ? { kind: 'ready', target: { name: process.name, projectId: process.id } } : { kind: 'what' })
+    set({ kind: 'ready', target: process ? { projectId: process.id, name: process.name } : {}, auto: true })
   },
   active: () => useRecordFlow.getState().step.kind !== 'idle',
   controls() {
@@ -55,39 +59,50 @@ function notNow() {
   mascot.bubble('Okay, another time.', { ttlMs: 3000 })
 }
 
+const ASK_NAME = 'What are you going to show me today?'
+const ANSWER_WAIT_MS = 25_000
+
+/** The first spoken turn (Scribe) that makes a usable process name, or null after `ms`. */
+function nextTitle(ms: number): Promise<string | null> {
+  return new Promise((resolve) => {
+    const finish = (title: string | null) => {
+      clearTimeout(timer)
+      bus.off('event', onEvent)
+      resolve(title)
+    }
+    const onEvent = (e: AppEvent) => {
+      if (e.kind !== 'utterance' || e.speaker !== 'expert') return
+      const title = titleFromAnswer(e.text ?? '')
+      if (title) finish(title)
+    }
+    const timer = setTimeout(() => finish(null), ms)
+    bus.on('event', onEvent)
+  })
+}
+
 /** Runs the dialog. Mounted once by Helpy (it needs the recorder and Convex hooks). */
 export function RecordDialog() {
   const step = useRecordFlow((s) => s.step)
   const controlsAt = useRecordFlow((s) => s.controlsAt)
   const model = useOcrModel((s) => s.state.kind)
   const pii = usePiiModel((s) => s.state.kind)
-  const processes = useProcesses()
   const { start, finish, state: recorder, error } = useTaskRecording()
   const createProject = useMutation(api.projects.create)
+  const renameProject = useMutation(api.projects.rename)
   const removeProject = useMutation(api.projects.remove)
-  const spoken = useRef('')
-
-  // Ask once out loud per question (silent without ElevenLabs keys).
-  const ask = (text: string) => {
-    if (spoken.current === text) return
-    spoken.current = text
-    void speak(text)
-  }
-
-  const own = (processes ?? []).filter((p) => !p.example)
 
   const begin = async (target: Target) => {
+    if (useRecordFlow.getState().step.kind === 'starting') return // one start per click
     set({ kind: 'starting', target })
     const user = auth.user()
-    const known = target.projectId ?? own.find((p) => p.name.toLowerCase() === target.name.toLowerCase())?.id
-    let projectId = known as Id<'projects'> | undefined
+    let projectId = target.projectId as Id<'projects'> | undefined
     let created = false
     try {
       if (!projectId) {
-        projectId = await createProject({ name: target.name, ...(user ? { createdBy: user.name } : {}) })
+        projectId = await createProject({ name: UNNAMED, ...(user ? { createdBy: user.name } : {}) })
         created = true
       }
-      await start({ _id: projectId, name: target.name }, { stay: true, ...(user ? { recordedBy: user.name } : {}) })
+      await start({ _id: projectId, name: target.name ?? UNNAMED }, { stay: true, ...(user ? { recordedBy: user.name } : {}) })
     } catch (err) {
       console.warn('[helpy] recording did not start', err)
     }
@@ -99,34 +114,40 @@ export function RecordDialog() {
     }
     set({ kind: 'idle' })
     panel.setActivity({ kind: 'recording', processId: projectId! })
+    mascot.setState('thinking')
+    mascot.bubble('One moment, I’m turning on my ears…')
+    await startVoice('capture')
+
+    if (target.name) {
+      const again = `Let’s record “${target.name}”. Work as usual and tell me what you do.`
+      mascot.bubble(again, { ttlMs: 9000 })
+      await speak(again)
+      mascot.setState('listening')
+      return
+    }
+    if (!speech.active()) {
+      mascot.setState('listening')
+      mascot.bubble('I can’t hear you right now, but I’m watching your screen. Just start, and click me when you’re done.', { ttlMs: 10_000 })
+      return
+    }
+
+    // Everything by voice: Helpy asks, the first real answer names the process.
+    mascot.setState('speaking')
+    mascot.bubble(ASK_NAME)
+    await speak(ASK_NAME)
     mascot.setState('listening')
-    mascot.bubble('I’m watching and listening. Work as usual and tell me what you do. Click me when you’re done.', { ttlMs: 8000 })
-    void startVoice('capture')
+    const title = await nextTitle(ANSWER_WAIT_MS)
+    if (title) await renameProject({ projectId: projectId!, name: title }).catch(() => undefined)
+    const go = title ? `“${title}”, got it. Work as usual and tell me what you do. Click me when you’re done.` : 'Just start. I’m watching and listening. Click me when you’re done.'
+    mascot.bubble(go, { ttlMs: 9000 })
+    if (title) await speak('Got it. Work as usual and tell me what you do.')
+    mascot.setState('listening')
   }
 
   useEffect(() => {
     switch (step.kind) {
       case 'idle':
-        spoken.current = ''
         return
-      case 'what': {
-        const text = 'What do you want to show me today?'
-        mascot.setState('listening')
-        mascot.bubble(text, {
-          input: {
-            placeholder: 'e.g. Pay supplier invoices',
-            submitLabel: 'OK',
-            suggestions: [...new Set(own.map((p) => p.name))].slice(0, 3),
-            onSubmit: (name) => {
-              const match = own.find((p) => p.name.toLowerCase() === name.toLowerCase())
-              set({ kind: 'ready', target: { name: match?.name ?? name, projectId: match?.id } })
-            },
-          },
-          actions: [{ label: 'Not now', onClick: notNow }],
-        })
-        ask(text)
-        return
-      }
       case 'ready': {
         // Helpy reads the screen with a local model; it has to be loaded before a recording can start.
         if (model === 'failed' || pii === 'failed') {
@@ -144,15 +165,18 @@ export function RecordDialog() {
           mascot.bubble('I’m still getting ready to read your screen. One moment…', { actions: [{ label: 'Not now', onClick: notNow }] })
           return
         }
-        const text = `“${step.target.name}”, got it. Work like you always do and tell me what you’re doing. I’ll only ask when you pause. Ready?`
-        mascot.setState('listening')
-        mascot.bubble(text, {
+        if (step.auto) {
+          void begin(step.target)
+          return
+        }
+        // Ready later than the click: the browser needs a new click to share the screen.
+        mascot.setState('idle')
+        mascot.bubble('I’m ready now.', {
           actions: [
             { label: 'Start recording', primary: true, onClick: () => void begin(step.target) },
             { label: 'Not now', onClick: notNow },
           ],
         })
-        ask('Got it. Work like you always do and tell me what you’re doing. I’ll only ask when you pause. Ready?')
         return
       }
       case 'starting':
@@ -169,7 +193,11 @@ export function RecordDialog() {
         })
         return
     }
-    // `own` changes with every Convex update; the dialog only follows its step and the model.
+  }, [step, model, pii])
+
+  // The models finished loading after the click: the next start needs its own click.
+  useEffect(() => {
+    if (step.kind === 'ready' && step.auto && (model !== 'ready' || pii !== 'ready')) set({ ...step, auto: false })
   }, [step, model, pii])
 
   const done = async () => {

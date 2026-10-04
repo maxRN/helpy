@@ -25,6 +25,19 @@ export const create = mutation({
   },
 })
 
+/** Helpy names a recording from the expert's spoken answer ("What are you going to show me?"). */
+export const rename = mutation({
+  args: { projectId: v.id('projects'), name: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { projectId, name }) => {
+    const trimmedName = name.trim()
+    if (!trimmedName) throw new ConvexError('Project name is required.')
+    if (!await ctx.db.get('projects', projectId)) throw new ConvexError('Project not found.')
+    await ctx.db.patch('projects', projectId, { name: trimmedName })
+    return null
+  },
+})
+
 export const remove = mutation({
   args: { projectId: v.id('projects') },
   returns: v.null(),
