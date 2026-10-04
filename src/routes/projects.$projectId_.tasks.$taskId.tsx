@@ -42,7 +42,7 @@ function TaskSummary() {
     <main className="projects-page task-summary">
       <Link to="/projects/$projectId" params={{ projectId }} className="back-link">← Back to project</Link>
       <header>
-        <p className="eyebrow">Sabine AI / {task?.projectName ?? 'Task'}</p>
+        <p className="eyebrow">Helpy / {task?.projectName ?? 'Task'}</p>
         <h1>{task ? isActiveTask ? 'Current task' : 'Task summary' : 'Task not found'}</h1>
       </header>
       {task ? (

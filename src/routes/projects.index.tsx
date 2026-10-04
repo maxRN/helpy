@@ -16,9 +16,9 @@ function Projects() {
 
   return (
     <main className="projects-page">
-      <Link to="/" className="back-link">← Sabine AI</Link>
+      <Link to="/" className="back-link">← Helpy</Link>
       <header>
-        <p className="eyebrow">Sabine AI</p>
+        <p className="eyebrow">Helpy</p>
         <h1>Projects</h1>
         <p className="muted">Create a project to keep your work together.</p>
       </header>

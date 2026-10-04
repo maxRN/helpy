@@ -100,7 +100,7 @@ const skipTurn = {
 function agentBody(name, prompt, toolIds, dynamicVariables) {
   return {
     name,
-    tags: ['sabine-ai', 'hack-nation'],
+    tags: ['helpy', 'hack-nation'],
     conversation_config: {
       agent: {
         first_message: '', // Helpy stays silent until there is something to say
@@ -155,13 +155,13 @@ async function upsert(role, envId, body) {
 const interviewer = await upsert(
   'interviewer',
   process.env.ELEVENLABS_AGENT_INTERVIEWER,
-  agentBody('Helpy – Interviewer (Sabine AI)', prompt('interviewer.md'), [ids.set_off_record, ids.confirm_teachback]),
+  agentBody('Helpy – Interviewer', prompt('interviewer.md'), [ids.set_off_record, ids.confirm_teachback]),
 )
 
 const tutor = await upsert(
   'tutor',
   process.env.ELEVENLABS_AGENT_TUTOR,
-  agentBody('Helpy – Tutor (Sabine AI)', prompt('tutor.md'), [ids.get_next_step, ids.point_to, ids.show_expert_clip], {
+  agentBody('Helpy – Tutor', prompt('tutor.md'), [ids.get_next_step, ids.point_to, ids.show_expert_clip], {
     work_map: '(No Work Map loaded yet.)',
   }),
 )

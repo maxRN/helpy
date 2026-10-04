@@ -1,4 +1,4 @@
-# Sabine AI
+# Helpy
 
 This is a helpful AI agent that watches you work and records your workflows.
 
@@ -122,8 +122,8 @@ The production Railway service has a sealed `CONVEX_DEPLOY_KEY`, scoped to the p
 
 To deploy manually, provide `CONVEX_DEPLOY_KEY` through the deployment environment and run `npm run deploy:prod`, then `npm start`. Keep the key out of Git and browser-prefixed variables. Development and production data are separate; deployment does not copy development records.
 
-The app is live at [sabine-ai-production.up.railway.app](https://sabine-ai-production.up.railway.app).
-Railway automatically deploys pushes to `main` in [maxRN/sabine-ai](https://github.com/maxRN/sabine-ai). Manage the service in the [Railway dashboard](https://railway.com/project/ebd389b6-7753-4899-a19c-a4a8f9444f9e/service/f32ebfc7-df13-454c-8493-dd019170435a?environmentId=77184c62-0bf5-4208-b595-e1768dca5688).
+The app is live at [Helpy](https://sabine-ai-production.up.railway.app).
+Railway automatically deploys pushes to `main` in the [Helpy repository](https://github.com/maxRN/sabine-ai). Manage the service in the [Railway dashboard](https://railway.com/project/ebd389b6-7753-4899-a19c-a4a8f9444f9e/service/f32ebfc7-df13-454c-8493-dd019170435a?environmentId=77184c62-0bf5-4208-b595-e1768dca5688).
 
 Pull requests, including bot PRs, get a temporary Railway preview environment with its own URL. Railway posts the preview link on the PR and removes the environment when the PR is merged or closed.
 
