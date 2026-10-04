@@ -1,23 +1,49 @@
+import { useMutation } from '@tanstack/react-query'
 import type { Doc } from '../../convex/_generated/dataModel'
 import { SMOLVLM_MODEL } from './ocr-contract'
+import { redactPii, usePiiModel } from './pii'
 
 export function ScreenshotNote({ ocr }: { ocr: Doc<'screenshots'>['ocr'] }) {
   if (!ocr) return <p className="screenshot-note muted">This screenshot was captured before text recognition was added.</p>
   if (ocr.kind === 'pending') return <p className="screenshot-note muted" role="status">Text recognition pending.</p>
   if (ocr.kind === 'failed') return <p className="screenshot-note error">Text recognition failed: {ocr.error}</p>
-  const { result } = ocr
+  return <ExtractedTextNote result={ocr.result} />
+}
+
+type NoteResult = Extract<NonNullable<Doc<'screenshots'>['ocr']>, { kind: 'completed' }>['result']
+
+function ExtractedTextNote({ result }: { result: NoteResult }) {
+  const text = 'text' in result ? result.text : result.regions.map((region) => region.text).join('\n')
+  const redaction = useMutation({ mutationFn: () => redactPii(text) })
+  const { state } = usePiiModel()
+  const controls = text.trim() && (
+    <div className="pii-actions" aria-busy={redaction.isPending}>
+      <button type="button" disabled={redaction.isPending || redaction.isSuccess} onClick={() => redaction.mutate()}>
+        {redaction.isPending ? 'Redacting…' : redaction.isSuccess ? 'PII checked' : 'Redact PII'}
+      </button>
+      {redaction.isPending && <p className="muted" role="status">
+        {state.kind === 'loading' ? `${state.message} ${Math.floor(state.progress)}%.` : 'Checking text on this device…'}
+      </p>}
+      {redaction.isSuccess && <p className="muted" role="status">
+        {redaction.data !== text ? 'PII redacted.' : 'No PII detected.'} Changes are not saved.
+      </p>}
+      {redaction.error && <p className="error" role="alert">PII redaction failed: {redaction.error.message}</p>}
+    </div>
+  )
   if (result.model === SMOLVLM_MODEL) return (
     <details className="screenshot-note">
       <summary>Text note</summary>
       <p className="muted">SmolVLM-500M-Instruct · {result.width} × {result.height} pixels.</p>
-      {result.text ? <p className="ocr-text">{result.text}</p> : <p className="muted">No text detected.</p>}
+      {controls}
+      {result.text ? <p className="ocr-text">{redaction.data ?? result.text}</p> : <p className="muted">No text detected.</p>}
     </details>
   )
   return (
     <details className="screenshot-note">
       <summary>Text note · {result.regions.length} regions</summary>
       <p className="muted">Florence-2-base-ft · {result.width} × {result.height} pixels. Positions are the four text corners, measured from the image's top left.</p>
-      {result.regions.length === 0 ? <p className="muted">No text detected.</p> : (
+      {controls}
+      {redaction.isSuccess ? <p className="ocr-text">{redaction.data}</p> : result.regions.length === 0 ? <p className="muted">No text detected.</p> : (
         <dl className="ocr-regions">
           {result.regions.map((region, index) => (
             <div key={index}>
