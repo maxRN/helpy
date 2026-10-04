@@ -6,6 +6,7 @@ import { mascot as sharedMascot, useMascot } from '../shared/mascot'
 import { useSession } from '../shared/session'
 import { TeachLayer } from '../teach-ui/TeachLayer'
 import { auth, useAuth } from './auth'
+import { installBubbleLifecycle } from './bubbleLifecycle'
 import { HelpyApp } from './helpy-app/HelpyApp'
 import { HelpyPanel } from './panel/HelpyPanel'
 import { panel, usePanel } from './panel/store'
@@ -53,6 +54,9 @@ const NUDGE_AFTER_MS = 40_000
 /** Robot click: sign in first; while recording, the controls in the bubble; otherwise the panel. */
 function onRobotClick() {
   if (!auth.user()) return panel.toggle()
+  // While recording or in the debrief the controls show in the bubble; a second click puts them away.
+  const busy = usePanel.getState().activity?.kind === 'recording' || voiceDebrief.active()
+  if (busy && mascot.resolve('prompt')) return
   if (usePanel.getState().activity?.kind === 'recording') return recordFlow.controls()
   if (voiceDebrief.active()) return voiceDebrief.controls()
   if (recordFlow.active()) return
@@ -71,6 +75,7 @@ export function Helpy({ boundsRef }: { boundsRef?: RefObject<HTMLElement | null>
 
   useEffect(() => {
     setMascotClickHandler(onRobotClick)
+    const uninstallBubbles = installBubbleLifecycle()
     // Dev console: helpy.mascot.pointTo('field-costCenter'), helpy.panel.show(), helpy.question('Why 0400?')
     if (import.meta.env.DEV) Object.assign(window, { helpy: { mascot, panel, question: sharedMascot.waiting } })
     // Helpy just started on this computer: say hello and ask who is working.
@@ -83,6 +88,7 @@ export function Helpy({ boundsRef }: { boundsRef?: RefObject<HTMLElement | null>
     return () => {
       clearTimeout(hello)
       setMascotClickHandler(null)
+      uninstallBubbles()
     }
   }, [])
 
@@ -107,7 +113,7 @@ export function Helpy({ boundsRef }: { boundsRef?: RefObject<HTMLElement | null>
       } else {
         mascot.setState('speaking')
         mascot.pose('cheer', 2200)
-        mascot.bubble('Thank you! I have a few questions about what I saw.', { ttlMs: 5000 })
+        mascot.bubble('Thank you! I have a few questions about what I saw.')
         void stopVoice().then(() => setTimeout(askQuestions, 1500))
       }
     }
@@ -122,7 +128,7 @@ export function Helpy({ boundsRef }: { boundsRef?: RefObject<HTMLElement | null>
       () => {
         if (useMascot.getState().bubble) return // something else is being said
         mascot.bubble('I have a question for you. No rush, I’ll ask when you pause.', {
-          ttlMs: 15_000,
+          topic: 'waiting',
           actions: [{ label: 'Ask me now', primary: true, onClick: () => void askWaitingQuestion() }],
         })
       },

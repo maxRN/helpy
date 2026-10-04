@@ -115,7 +115,7 @@ export async function answerIfForHelpy(text: string, mode: AgentMode): Promise<b
   const unknown = ungroundedInvoiceRefs(turn.reply)
   if (unknown.length) console.warn('[helpy] reply named an invoice that does not exist:', unknown.join(', '))
   const reply = unknown.length ? (session().language === 'de' ? 'Welche Rechnung meinst du genau?' : 'Which invoice do you mean exactly?') : turn.reply
-  mascot.bubble(reply, { ttlMs: 9000 })
+  mascot.bubble(reply)
   // Resolve once Helpy starts answering, so no live question slips in between (see speech.replyPending).
   await new Promise<void>((resolve) => void speak(reply, { onStart: resolve }).finally(resolve))
   return true

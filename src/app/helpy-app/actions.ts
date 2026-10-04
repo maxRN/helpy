@@ -26,5 +26,5 @@ export function recordAgain(process: Process) {
 export function showWhere(targetId: string, title: string) {
   helpyApp.close()
   mascot.pointTo(targetId)
-  mascot.bubble(title, { ttlMs: 6000 })
+  mascot.bubble(title)
 }

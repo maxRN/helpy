@@ -20,9 +20,28 @@ export interface BubbleInput {
 /** Gestures on top of the state: wave hello, cheer, raise a hand (has a question). */
 export type Pose = 'wave' | 'cheer' | 'question'
 
+/**
+ * What ends a bubble, besides the next bubble replacing it. Never a timeout: a bubble stays until
+ * something meaningful happened (see src/app/bubbleLifecycle.ts).
+ * - notice:   plain information. Ends when the user engages Helpy, works in the app or speaks.
+ * - prompt:   has buttons or an answer field. Ends by its own action, or when Helpy's panel opens.
+ * - question: a question Helpy asked aloud. Ends with the answer.
+ * - step:     Teach guidance for the open invoice. Ends with the next step, or when the invoice is closed.
+ * - waiting:  "I have a question for you". Ends when that question is asked or dropped.
+ */
+export type BubbleTopic = 'notice' | 'prompt' | 'question' | 'step' | 'waiting'
+
 interface HelpyExtras {
-  /** Buttons and tone for one bubble text; ignored once the text changes (e.g. the agent speaks). */
-  bubbleExtras: { text: string; tone: 'default' | 'alert'; actions: BubbleAction[]; input: BubbleInput | null } | null
+  /** Buttons, tone and topic for one bubble text; ignored once the text changes (e.g. the agent speaks). */
+  bubbleExtras: {
+    text: string
+    tone: 'default' | 'alert'
+    actions: BubbleAction[]
+    input: BubbleInput | null
+    topic: BubbleTopic
+    /** What Helpy pointed at when this bubble appeared: the bubble explains it, so they end together. */
+    pointedAt: string | null
+  } | null
   tone: 'default' | 'alert'
   pose: Pose | null
 }

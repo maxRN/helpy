@@ -69,7 +69,7 @@ export function SignInView() {
         panel.close()
         mascot.pose('wave', 2600)
         mascot.setState('speaking')
-        mascot.bubble(`Hi ${firstName(user)}! Click me whenever you need me.`, { ttlMs: 6000 })
+        mascot.bubble(`Hi ${firstName(user)}! Click me whenever you need me.`)
         setTimeout(() => mascot.setState('idle'), 2600)
       }}
     >

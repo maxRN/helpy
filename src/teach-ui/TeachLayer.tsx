@@ -43,11 +43,11 @@ export function TeachLayer({ onCaseDone }: { onCaseDone?: () => void }) {
         mascot.setState('speaking')
         if (!step?.targetId) {
           mascot.pointTo(actionTarget('post'))
-          mascot.bubble(`That’s everything ${wm.expert} checks. Now decide: post it, hold it or ask for a second approval?`, { ttlMs: 12_000 })
+          mascot.bubble(`That’s everything ${wm.expert} checks. Now decide: post it, hold it or ask for a second approval?`, { topic: 'step' })
           return
         }
         mascot.pointTo(step.targetId)
-        mascot.bubble(step.isJudgmentCall ? `${step.title}. Your call: what would ${wm.expert} do here?` : `Next: ${step.title}.`, { ttlMs: 12_000 })
+        mascot.bubble(step.isJudgmentCall ? `${step.title}. Your call: what would ${wm.expert} do here?` : `Next: ${step.title}.`, { topic: 'step' })
       }, delay)
     }
 
@@ -80,7 +80,7 @@ export function TeachLayer({ onCaseDone }: { onCaseDone?: () => void }) {
         if (!step) return
         mascot.setState('thinking')
         mascot.pointTo(step.targetId ?? null)
-        mascot.bubble(`${wm.expert} always does “${step.title}” first.`, { ttlMs: 8000 })
+        mascot.bubble(`${wm.expert} always does “${step.title}” first.`, { topic: 'step' })
         return
       }
 
@@ -99,7 +99,7 @@ export function TeachLayer({ onCaseDone }: { onCaseDone?: () => void }) {
         mascot.setState('speaking')
         mascot.pointTo(null)
         mascot.pose('cheer', 1800)
-        mascot.bubble(`That’s it. ${wm.expert} would do the same.`, { ttlMs: 5000 })
+        mascot.bubble(`That’s it. ${wm.expert} would do the same.`, { topic: 'step' })
         guide(invoice.id, 2500)
         return
       }
@@ -117,7 +117,7 @@ export function TeachLayer({ onCaseDone }: { onCaseDone?: () => void }) {
         mascot.setState('speaking')
         mascot.pointTo(null)
         mascot.pose('cheer', 2200)
-        mascot.bubble(`Invoice ${invoice.number} is done. Click me to see how you did.`, { ttlMs: 10_000 })
+        mascot.bubble(`Invoice ${invoice.number} is done. Click me to see how you did.`, { topic: 'step' })
         onCaseDone?.()
       }
     }

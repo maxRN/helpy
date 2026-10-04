@@ -55,7 +55,6 @@ export const voiceDebrief = {
   controls() {
     const asking = useVoiceDebrief.getState().phase === 'asking'
     mascot.bubble(asking ? 'Shall I skip this question?' : 'I’m still working on your questions.', {
-      ttlMs: 10_000,
       actions: [
         ...(asking ? [{ label: 'Skip this question', primary: true, onClick: skip }] : []),
         { label: 'Stop for now', onClick: () => voiceDebrief.stop() },
@@ -70,7 +69,7 @@ export const voiceDebrief = {
     setPhase('idle')
     void stopVoice()
     mascot.setState('idle')
-    mascot.bubble('Okay, we’ll continue later. Click me and choose “Answer my questions”.', { ttlMs: 8000 })
+    mascot.bubble('Okay, we’ll continue later. Click me and choose “Answer my questions”.')
   },
 }
 
@@ -126,7 +125,7 @@ async function debrief(convex: ConvexReactClient) {
   if (!voice.isConnected()) {
     setPhase('idle')
     mascot.setState('idle')
-    mascot.bubble('I have a few questions, but I can’t talk right now. Click me later and choose “Answer my questions”.', { ttlMs: 10_000 })
+    mascot.bubble('I have a few questions, but I can’t talk right now. Click me later and choose “Answer my questions”.')
     return
   }
 
@@ -139,7 +138,7 @@ async function debrief(convex: ConvexReactClient) {
     if (res.notEnoughWork) {
       setPhase('idle')
       mascot.setState('idle')
-      mascot.bubble(res.doneReason ?? 'I saw too little work on screen. Record the task again.', { ttlMs: 12_000 })
+      mascot.bubble(res.doneReason ?? 'I saw too little work on screen. Record the task again.')
       if (voice.isConnected()) void voice.say(res.doneReason ?? 'I saw too little work on screen. Please record the task again.').catch(() => undefined)
       return
     }
@@ -201,10 +200,10 @@ async function debrief(convex: ConvexReactClient) {
   if (confirmed) {
     mascot.setState('speaking')
     mascot.pose('cheer', 2200)
-    mascot.bubble(`Got it, thank you! Now your team can learn “${final.task}” from you.`, { ttlMs: 8000 })
+    mascot.bubble(`Got it, thank you! Now your team can learn “${final.task}” from you.`)
   } else {
     mascot.setState('idle')
-    mascot.bubble('I wrote it down. Some parts still need your okay: click me later and choose “Answer my questions”.', { ttlMs: 10_000 })
+    mascot.bubble('I wrote it down. Some parts still need your okay: click me later and choose “Answer my questions”.')
   }
 }
 
@@ -224,7 +223,7 @@ export function VoiceDebrief() {
         setPhase('idle')
         void stopVoice()
         mascot.setState('idle')
-        mascot.bubble('Something went wrong while I was thinking. Click me later and choose “Answer my questions”.', { ttlMs: 10_000 })
+        mascot.bubble('Something went wrong while I was thinking. Click me later and choose “Answer my questions”.')
       })
       .finally(() => {
         sharedMascot.waiting(null)

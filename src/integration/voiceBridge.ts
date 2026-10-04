@@ -152,6 +152,7 @@ export function installVoiceBridge() {
     ungroundedRefs: (text) => ungroundedInvoiceRefs(text),
     mascot: {
       setState: (s) => mascot.setState(s),
+      // The agent's bubbles are its questions (no P4 topic): they end with the answer or the next bubble.
       bubble: (text) => mascot.bubble(text),
       pointTo: (targetId) => mascot.pointTo(targetId),
       waiting: (question) => mascot.waiting(question),

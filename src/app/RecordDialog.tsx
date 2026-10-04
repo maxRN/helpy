@@ -58,7 +58,7 @@ export const recordFlow = {
 function notNow() {
   set({ kind: 'idle' })
   mascot.setState('idle')
-  mascot.bubble('Okay, another time.', { ttlMs: 3000 })
+  mascot.bubble('Okay, another time.')
 }
 
 const ASK_NAME = 'What are you going to show me today?'
@@ -123,14 +123,14 @@ export function RecordDialog() {
 
     if (target.name) {
       const again = `Let’s record “${target.name}”. Work as usual and tell me what you do.`
-      mascot.bubble(again, { ttlMs: 9000 })
+      mascot.bubble(again)
       await speak(again)
       mascot.setState('listening')
       return
     }
     if (!speech.active()) {
       mascot.setState('listening')
-      mascot.bubble('I can’t hear you right now, but I’m watching your screen. Just start, and click me when you’re done.', { ttlMs: 10_000 })
+      mascot.bubble('I can’t hear you right now, but I’m watching your screen. Just start, and click me when you’re done.')
       return
     }
 
@@ -142,7 +142,7 @@ export function RecordDialog() {
     const title = await nextTitle(ANSWER_WAIT_MS)
     if (title) await renameProject({ projectId: projectId!, name: title }).catch(() => undefined)
     const go = title ? `“${title}”, got it. Work as usual and tell me what you do. Click me when you’re done.` : 'Just start. I’m watching and listening. Click me when you’re done.'
-    mascot.bubble(go, { ttlMs: 9000 })
+    mascot.bubble(go)
     if (title) await speak('Got it. Work as usual and tell me what you do.')
     mascot.setState('listening')
   }
@@ -233,7 +233,6 @@ export function RecordDialog() {
         ? 'I’m not looking or listening. Continue when you’re ready.'
         : `I’m watching and listening.${hearing}${waiting ? ' I also have a question for you.' : ''}`,
       {
-        ttlMs: 12_000,
         actions: [
           { label: 'I’m done', primary: true, onClick: () => void done() },
           offRecord
