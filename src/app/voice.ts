@@ -9,6 +9,7 @@ import { screenSummary } from '../shared/screen'
 import { startListening, stopListening } from '../integration/listener'
 import { installVoiceBridge, resetVoiceClock } from '../integration/voiceBridge'
 import { mascot } from '../mascot'
+import { useMascot } from '../shared/mascot'
 import { session } from '../shared/session'
 
 export type AgentMode = 'capture' | 'debrief' | 'teach'
@@ -21,6 +22,7 @@ interface VoiceState {
 export const useVoice = create<VoiceState>()(() => ({ mode: null, error: '' }))
 
 let installed = false
+let stopPrefetch: (() => void) | null = null
 const load = () => import('../agent/voice')
 
 const NUDGE_AFTER_MS = 4_000
@@ -75,6 +77,13 @@ export async function startVoice(mode: AgentMode) {
       'Listening',
     ).catch((err) => console.warn('[helpy] Scribe not started', err))
     // A live question is only said if it is still a pause once its audio is ready; otherwise it waits.
+    if (!stopPrefetch) {
+      // A held question (raised hand): fetch its audio now, so it is said without delay at the pause.
+      stopPrefetch = useMascot.subscribe((s, prev) => {
+        // Only in Capture: there Helpy's own TTS says the question (the debrief's agent speaks for itself).
+        if (s.waiting && s.waiting.text !== prev.waiting?.text && useVoice.getState().mode === 'capture') prefetchSpeech(s.waiting.text)
+      })
+    }
     voice.startCaptureWithoutAgent(async (question, control) => {
       const said = await speak(question, { gate: control.stillQuiet, onStart: control.started })
       return said === 'spoken'
@@ -122,6 +131,8 @@ export async function answerIfForHelpy(text: string, mode: AgentMode): Promise<b
 }
 
 export async function stopVoice() {
+  stopPrefetch?.()
+  stopPrefetch = null
   stopListening()
   const voice = await load()
   if (voice.isActive()) await voice.stop()
@@ -166,6 +177,34 @@ export async function askWaitingQuestion() {
 let ttsAvailable = true
 let playing: HTMLAudioElement | null = null
 
+// Audio for the last few lines, by text. A question Helpy holds back is fetched while it waits, so at
+// the pause it plays at once instead of after another TTS round trip.
+const TTS_CACHE_MAX = 4
+const ttsCache = new Map<string, Promise<Blob | null>>()
+
+/** The spoken audio for `text` (null when TTS failed); fetched once, shared by prefetch and speak. */
+export function ttsAudio(text: string): Promise<Blob | null> {
+  const hit = ttsCache.get(text)
+  if (hit) return hit
+  const audio = fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) })
+    .then((res) => {
+      if (!res.ok) ttsAvailable = false
+      return res.ok ? res.blob() : null
+    })
+    .catch(() => null)
+  ttsCache.set(text, audio)
+  if (ttsCache.size > TTS_CACHE_MAX) ttsCache.delete(ttsCache.keys().next().value!)
+  void audio.then((blob) => {
+    if (!blob && ttsCache.get(text) === audio) ttsCache.delete(text) // never keep a failure
+  })
+  return audio
+}
+
+/** Fetches the audio for a line Helpy is about to say (e.g. a held question). */
+export function prefetchSpeech(text: string) {
+  if (ttsAvailable) void ttsAudio(text)
+}
+
 export interface SpeakOptions {
   /** Checked once the audio is ready, right before it plays: false = do not say it now. */
   gate?: () => boolean
@@ -184,12 +223,11 @@ export async function speak(text: string, { gate, onStart }: SpeakOptions = {}):
     return 'spoken'
   }
   try {
-    const res = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) })
-    if (!res.ok) {
-      ttsAvailable = false
-      return speak(text, { gate, onStart })
+    const blob = await ttsAudio(text)
+    if (!blob) {
+      if (!ttsAvailable) return speak(text, { gate, onStart }) // no TTS (no keys): the bubble says it
+      throw new Error('TTS request failed')
     }
-    const blob = await res.blob()
     // The expert may have started talking or typing while the audio was generated.
     if (gate && !gate()) return 'skipped'
     const url = URL.createObjectURL(blob)

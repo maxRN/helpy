@@ -20,6 +20,9 @@ export const POLICY_LIMITS = {
 } as const;
 
 const MAX_PENDING = 40;
+// Thinking ahead: shortly after new screen events (so a question is ready by the pause; one model call
+// takes 1.5-2.5 s), with a slow periodic check as a fallback.
+const PREPARE_AFTER_EVENT_MS = 1200;
 const PREPARE_EVERY_MS = 8000;
 const FALLBACK_GUARDRAIL = {
   en: ['Is there a limit on this step?', 'When would you stop and ask someone?'],
@@ -62,11 +65,14 @@ export function createQuestionPolicy(o: PolicyOpts) {
   let ready: ReadyQuestion | null = null; // prepared while the expert was busy, asked at the next pause
   let delivering: ReadyQuestion | null = null; // being spoken right now: never a second time in parallel
 
+  let prepareSoon: ReturnType<typeof setTimeout> | undefined;
   const off = deps.bus.on('*', (e) => {
     if (!SCREEN_EVENT_TYPES.has(e.type) || !e.text) return;
     if (o.getInputs().offRecord) return;
     pending.push(e);
     if (pending.length > MAX_PENDING) pending.shift();
+    clearTimeout(prepareSoon);
+    prepareSoon = setTimeout(prepareAhead, PREPARE_AFTER_EVENT_MS);
   });
 
   const note = (why: string) => logPause({ t: nowRel(), pause: true, blockers: [], note: `skipped: ${why}` });
@@ -214,7 +220,7 @@ export function createQuestionPolicy(o: PolicyOpts) {
 
   // Think ahead while the expert is busy: a question that is ready waits for the next pause, and the
   // raised hand tells the expert there is one, so nobody is interrupted and nobody talks on unaware.
-  const prepare = setInterval(() => {
+  function prepareAhead(): void {
     if (ready || inFlight || delivering) return;
     const inputs = o.getInputs();
     if (inputs.offRecord || isPause(inputs).pause) return; // pauses are handled by onPause
@@ -222,12 +228,18 @@ export function createQuestionPolicy(o: PolicyOpts) {
     inFlight = true;
     void think()
       .then((q) => {
-        if (q) hold(q);
+        if (!q) return;
+        inFlight = false;
+        // The pause may have begun while the model was thinking: ask now instead of waiting for the
+        // pause loop's next retry (up to 3 s later).
+        if (isPause(o.getInputs()).pause) return askNow(q);
+        hold(q);
       })
       .finally(() => {
         inFlight = false;
       });
-  }, PREPARE_EVERY_MS);
+  }
+  const prepare = setInterval(prepareAhead, PREPARE_EVERY_MS);
 
   /** The expert said "ask me now" (clicked the raised hand). */
   function askReadyNow(): boolean {
@@ -250,6 +262,7 @@ export function createQuestionPolicy(o: PolicyOpts) {
     dispose: () => {
       off();
       clearInterval(prepare);
+      clearTimeout(prepareSoon);
       if (ready) deps.mascot.waiting?.(null);
     },
   };

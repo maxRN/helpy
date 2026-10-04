@@ -140,6 +140,24 @@ describe('live question timing', () => {
     expect(askedEvents()).toHaveLength(1);
   });
 
+  it('latency: a question thought out while the expert typed is asked as soon as the pause begins', async () => {
+    // One policy call takes ~2 s (measured 1.6-2.6 s against /api/policy).
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        await new Promise((r) => setTimeout(r, 2_000));
+        return { ok: true, json: async () => ({ ask: true, question: 'Why capex?', eventId: '', kind: 'why' }) };
+      }),
+    );
+    startCaptureWithoutAgent(deliver);
+    typeKey();
+    screenEvent();
+    await keepDoing(typeKey, 250, 500); // typing stops at ~0.5 s: pause at ~3 s
+    // Think-ahead starts 1.2 s after the event (still typing) and answers at ~3.2 s, inside the pause.
+    await vi.advanceTimersByTimeAsync(3_400);
+    expect(spoken).toEqual(['Why capex?']); // not held until the pause loop's next retry (~6 s)
+  });
+
   it('never asks about an invoice that does not exist (grounding)', async () => {
     vi.stubGlobal(
       'fetch',
