@@ -1,0 +1,45 @@
+{
+  "session": 1,
+  "status": "complete",
+  "completed_at": "2026-10-04T07:03:28Z",
+  "base_branch": "main",
+  "implementation_head": "6b06381",
+  "tests": {
+    "npm_test": "passed",
+    "npm_test_detail": "25 files, 144 tests",
+    "typecheck": "passed",
+    "build": "passed",
+    "lint": "not present in the repository",
+    "e2e": "no E2E framework in the repository; manual Playwright-driven checks in Chrome (not committed), see manual_checks"
+  },
+  "manual_checks": [
+    "Mascot: same resting spot bottom-right through a top->bottom->top scroll of the inbox, pointing round trip, drag held then return on a new bubble, resize (Chrome, 1280x720 and 900x600)",
+    "Recorded processes: back arrow on workflow and step pages, keyboard Enter, list search kept",
+    "macOS chrome: traffic lights close/minimize/zoom, dock restores ProcureFlow, Helpy app window, learning's desktop-icon finder still finds the icon",
+    "Teach (real Claude guardrail compile + ElevenLabs tutor connection): 5102 posted as opex is blocked, alert bubble persists >12 s, re-coding to capex resolves it; tutor websocket receives [SCREEN] ... Now on screen updates",
+    "Capture (real Scribe token, /api/frame, /api/policy, /api/tts; synthetic canvas as the shared screen, fake mic): no question while typing 12 s, question spoken ~3 s after the last keystroke while the mouse kept moving, no question repeated, vision events grounded, cost-center change reaches vision, debrief starts after I'm done",
+    "Map: real /api/workmap returns a concise task name ('Code and Post Supplier Invoice') and EUR guardrails incl. the quarter-end Kramer rule",
+    "Invoice 42 root cause reproduced with the app's own Redact model in Chrome (invoice number tagged BUILDING_NUMBER -> synthetic '42')",
+    "Local Convex ledger from the old seed was reseeded automatically; ERP shows the 2026/EUR story"
+  ],
+  "summary": [
+    "Questions: only typing and speech (Scribe endpoint) hold a live question back; mouse/screen changes never do. A question is committed only when its voice starts, deferred if the expert starts talking/typing first, spoken exactly once.",
+    "Screen context: src/shared/screen.ts keeps timestamped screen state (exact ProcureFlow app state + latest vision description, never older over newer). Vision requests are latest-wins. Policy, Helpy replies and the ElevenLabs agents (debrief, tutor) get the current screen; change detection now notices field-value changes.",
+    "Invoice 42: Redact misclassified invoice numbers as BUILDING_NUMBER and painted the synthetic '42'. ERP business identifiers are no longer redacted; invoice numbers from models are grounded against the ERP (dropped/scrubbed/never spoken).",
+    "Mascot: explicit pointing/dragging/dragged/resting state; rests fixed bottom-right of the viewport, scroll never moves it; drags are temporary and not persisted.",
+    "Speech bubbles: no timeouts; each bubble has a topic that a meaningful transition resolves (work, speech, answer, next step, invoice closed, Helpy opened).",
+    "Recorded processes: concise generated names (<=5 words, <=48 chars, client and server) and a keyboard-accessible back arrow using the app's page state.",
+    "Mock OS: macOS-style window chrome, menu bar and dock (visual only).",
+    "Demo story: Stuttgart machine builder, Sabine 24 years, EUR, invoices Aug-Oct 2026 (today 2026-10-04, September close); Kramer double-bills at every quarter-end (user decision), guardrail month in [3,6,9,12]; stale Convex ledgers reseed automatically.",
+    "Latency (measured: policy 1.6-2.6 s, TTS 0.25-0.48 s): think ahead 1.2 s after screen events, ask at once when a prepared question lands in a pause, prefetch held questions' audio."
+  ],
+  "known_blockers": [],
+  "open_items_for_session_2": [
+    "ElevenLabs agents still carry their old prompts (amounts in 'dollars') until `node scripts/create-elevenlabs-agents.mjs` is run; not run in Session 1 because it changes the external agents.",
+    "Teach mode reads the screen from ProcureFlow's exact app state; it does not capture screenshots of the trainee's screen (that would need screen sharing in Teach).",
+    "Not tested with real human speech or a real shared desktop (headless Chrome: fake microphone, synthetic canvas screen). Speech-endpoint timing is covered by unit tests only.",
+    "The demo date 2026-10-04 is a Sunday; the brief's story moment is a Thursday afternoon.",
+    "Production Convex will reseed its invoices once on the first load after deploy (old 2025/USD ledger), which resets demo invoice progress once.",
+    "Redaction keeps only identifiers ProcureFlow registers; identifiers of other apps can still be misclassified by the PII model."
+  ]
+}
