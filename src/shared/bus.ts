@@ -1,6 +1,6 @@
 import mitt from 'mitt'
 import { isPersonText, redactText } from './privacy'
-import { session } from './session'
+import { sessionClock } from './session'
 import type { AppEvent } from './types'
 
 type BusEvents = {
@@ -15,7 +15,7 @@ let counter = 0
 /** Fills in id and t (ms since session.t0), stores the event in the log and broadcasts it. */
 export function emitEvent(partial: Omit<AppEvent, 'id' | 't'> & { t?: number }): AppEvent {
   const now = Date.now()
-  const t0 = session().t0
+  const t0 = sessionClock()
   const event: AppEvent = {
     ...partial,
     // Personal data in what people say or type never reaches the log, the database or a model.

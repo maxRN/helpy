@@ -39,7 +39,19 @@ export async function startLearning(p: Process) {
   mascot.setState('thinking')
   mascot.bubble('One moment, I’m getting a case ready for you…', { topic: 'step' })
   resetPracticeCases()
-  await startTeach(p.workMap)
+  const { checkable } = await startTeach(p.workMap)
+  // Without checkable rules Helpy could not stop a wrong decision: say so instead of teaching silently without it.
+  if (checkable === 0 && p.workMap.guardrails.length > 0) {
+    mascot.setState('idle')
+    mascot.bubble(`I couldn’t turn ${p.workMap.expert}’s rules into checks right now, so I could not stop a mistake. Let’s try again in a moment.`, {
+      topic: 'step',
+      actions: [
+        { label: 'Try again', primary: true, onClick: () => void startLearning(p) },
+        { label: 'Not now', onClick: () => void stopLearning() },
+      ],
+    })
+    return
+  }
   const first = Object.values(erp().invoices).find((i) => i.teachOnly && i.status === 'open')
   const row = first ? rowTarget(first.id) : null
   // The ERP window is closed: first point at its icon on the desktop, then carry on once it is open.

@@ -37,8 +37,11 @@ type ReadyQuestion = { question: string; kind: QuestionKind; eventId?: string };
 export interface DeliveryControl {
   /** Is it still a pause? Check right before the voice starts (e.g. after the TTS audio arrived). */
   stillQuiet(): boolean;
-  /** Call when the question actually starts being spoken (or shown); the question counts as asked from then on. */
-  started(): void;
+  /**
+   * Call when the question actually starts being spoken (or shown); the question counts as asked from then on.
+   * `voice: false`: only shown in the bubble (no audio could be played); recorded as such.
+   */
+  started(opts?: { voice?: boolean }): void;
 }
 
 export interface PolicyOpts {
@@ -171,13 +174,14 @@ export function createQuestionPolicy(o: PolicyOpts) {
   }
 
   /** The question is being said: from now on it counts as asked (once). */
-  function commit(q: ReadyQuestion): void {
+  function commit(q: ReadyQuestion, voice = true): void {
     deps.mascot.waiting?.(null);
     const qe = emit({
       type: 'question_asked',
       speaker: 'agent',
       text: q.question,
-      meta: { eventId: q.eventId, kind: q.kind, phase: 'capture' },
+      // wrapUp: asked at the end of the task (before the recording stops) because it was still owed.
+      meta: { eventId: q.eventId, kind: q.kind, phase: 'capture', voice, ...(wrapping ? { wrapUp: true } : {}) },
     });
     history.push({ question: q.question, kind: q.kind, eventId: q.eventId, t: qe.t });
     asked += 1;
@@ -187,7 +191,7 @@ export function createQuestionPolicy(o: PolicyOpts) {
     answerWaiter?.();
     answerWaiter = null;
 
-    deps.mascot.setState('speaking');
+    deps.mascot.setState(voice ? 'speaking' : 'listening');
     deps.mascot.bubble(q.question);
     o.noteQuestion({ questionEventId: qe.id, eventId: q.eventId });
     logPause({ t: qe.t, pause: true, blockers: [], note: `asked (${q.kind}): ${q.question}` });
@@ -202,10 +206,10 @@ export function createQuestionPolicy(o: PolicyOpts) {
     delivering = q;
     ready = null;
     let committed = false;
-    const started = () => {
+    const started = (opts?: { voice?: boolean }) => {
       if (committed) return;
       committed = true;
-      commit(q);
+      commit(q, opts?.voice ?? true);
     };
     let said = true;
     try {

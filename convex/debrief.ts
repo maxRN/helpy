@@ -1,7 +1,7 @@
 import { v } from 'convex/values'
 import { query } from './_generated/server'
 
-/** Screenshots of a capture task between two offsets (ms), with URLs: the frames of a debrief clip. */
+/** Redacted screenshots of a capture task between two offsets (ms), with URLs: the frames of a debrief clip. */
 export const clipFrames = query({
   args: { taskId: v.string(), from: v.number(), to: v.number() },
   handler: async (ctx, { taskId, from, to }) => {
@@ -11,6 +11,6 @@ export const clipFrames = query({
       .query('screenshots')
       .withIndex('by_task', (q) => q.eq('taskId', id).gte('offsetMs', from).lte('offsetMs', to))
       .collect()
-    return Promise.all(shots.map(async (s) => ({ offsetMs: s.offsetMs, url: s.storageId ? await ctx.storage.getUrl(s.storageId) : null })))
+    return Promise.all(shots.map(async (s) => ({ offsetMs: s.offsetMs, url: s.redactedStorageId ? await ctx.storage.getUrl(s.redactedStorageId) : null })))
   },
 })

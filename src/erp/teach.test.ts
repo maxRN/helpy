@@ -75,3 +75,12 @@ describe('startTeach', () => {
     expect(session().mode).toBe('teach')
   })
 })
+
+describe('startTeach without checkable rules', () => {
+  it('reports that no rule can be checked when compiling fails on a recorded Work Map', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: 'model down' }, { status: 502 })))
+    const recorded = { ...FIXTURE_WORKMAP, guardrails: FIXTURE_WORKMAP.guardrails.map((g) => ({ ...g, when: [], require: [] })) }
+    expect((await startTeach(recorded)).checkable).toBe(0)
+    expect((await startTeach(FIXTURE_WORKMAP)).checkable).toBe(FIXTURE_WORKMAP.guardrails.length)
+  })
+})

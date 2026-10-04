@@ -237,6 +237,9 @@ export function WorkflowPage({ processId }: { processId: string }) {
               </button>
             ) : null}
           </div>
+          {wm && status === 'questions' ? (
+            <p className="m-0 mt-2 text-[15px] text-ask">{wm.expert} has not confirmed Helpy’s explanation yet, so parts of this may still be wrong.</p>
+          ) : null}
         </header>
 
         {!wm ? (

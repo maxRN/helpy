@@ -4,13 +4,15 @@ import { query, type QueryCtx } from './_generated/server'
 
 // Read-only access to a recording's screenshots for the clip player (P4).
 // Frame offsets are ms since the recording started, the same clock as AppEvent.t and Step.clip.
+// Only redacted screenshots are replayed (the new hire never sees the expert's personal data); a frame
+// whose redaction has not finished (or failed) is left out rather than shown unredacted.
 
 async function framesFor(ctx: QueryCtx, taskId: Id<'tasks'>) {
   const task = await ctx.db.get('tasks', taskId)
   if (!task) return null
   const screenshots = await ctx.db.query('screenshots').withIndex('by_task', (q) => q.eq('taskId', taskId)).collect()
   const frames = await Promise.all(
-    screenshots.map(async (s) => ({ offsetMs: s.offsetMs, url: s.storageId ? await ctx.storage.getUrl(s.storageId) : null })),
+    screenshots.map(async (s) => ({ offsetMs: s.offsetMs, url: s.redactedStorageId ? await ctx.storage.getUrl(s.redactedStorageId) : null })),
   )
   return {
     taskId,
