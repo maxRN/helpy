@@ -6,7 +6,7 @@ import { resumeAudio } from '../integration/audioUnlock'
 import { getEventLog } from '../shared/bus'
 import { ungroundedInvoiceRefs } from '../shared/grounding'
 import { screenSummary } from '../shared/screen'
-import { startListening, stopListening } from '../integration/listener'
+import { speech, startListening, stopListening } from '../integration/listener'
 import { installVoiceBridge, resetVoiceClock } from '../integration/voiceBridge'
 import { mascot } from '../mascot'
 import { useMascot } from '../shared/mascot'
@@ -172,7 +172,8 @@ export async function teachBackAloud(text: string): Promise<{ confirmed: boolean
  */
 export async function wrapUpLiveQuestions(cancelled: () => boolean) {
   const voice = await load()
-  if (!voice.isActive()) return null
+  // Without ears (Scribe) Helpy could ask but never hear the answer: no wrap-up then.
+  if (!voice.isActive() || !speech.active()) return null
   const lang = session().language
   return voice.wrapUpCapture({
     cancelled,
