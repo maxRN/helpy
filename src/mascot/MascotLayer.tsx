@@ -8,7 +8,8 @@ import { Robot } from './Robot'
 import { useHelpyExtras, type BubbleAction, type BubbleInput } from './store'
 
 export const SIZE = { width: 84, height: 105 }
-const FLY_MS = 650
+/** Flying to a field takes its time, so the eye can follow where Helpy goes (Sabine, 68). */
+const FLY_MS = 1300
 /** First guess before the bubble is measured (it is measured before it is painted). */
 const BUBBLE_GUESS = { width: 336, height: 80 }
 
@@ -191,7 +192,7 @@ export function MascotLayer({ boundsRef, hideBubble = false, badge }: { boundsRe
           width: SIZE.width,
           height: SIZE.height,
           transform: `translate(${x}px, ${y}px)`,
-          transition: drag ? 'none' : flying ? `transform ${FLY_MS}ms cubic-bezier(0.34, 1.25, 0.64, 1)` : 'transform 90ms linear',
+          transition: drag ? 'none' : flying ? `transform ${FLY_MS}ms cubic-bezier(0.45, 0.05, 0.25, 1)` : 'transform 90ms linear',
         }}
       >
         {showBubble ? (

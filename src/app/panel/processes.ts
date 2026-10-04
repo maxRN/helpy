@@ -6,9 +6,14 @@ import { UNNAMED } from '../recordName'
 
 export const EXAMPLE_ID = 'example'
 
+/** Where a process happens. Only the mock ERP (ProcureFlow) for now; more systems would add categories here. */
+export const CATEGORIES = ['ERP'] as const
+export type Category = (typeof CATEGORIES)[number]
+
 export interface Process {
   id: string
   name: string
+  category: Category
   example: boolean
   /** Newest first. `recordedBy`: who was signed in (null for recordings from before the sign-in). */
   recordings: { taskId: string; startedAt: number; durationMs: number | null; finished: boolean; recordedBy: string | null }[]
@@ -38,6 +43,7 @@ export function statusOf(p: Process): Status {
 const EXAMPLE: Process = {
   id: EXAMPLE_ID,
   name: FIXTURE_WORKMAP.task,
+  category: 'ERP',
   example: true,
   recordings: [],
   people: [FIXTURE_WORKMAP.expert],
@@ -56,6 +62,7 @@ export function useProcesses(): Process[] | undefined {
       id: p.id,
       // Nobody said what it was: the Work Map's task name, once there is one.
       name: p.name === UNNAMED && workMap?.task ? workMap.task : p.name,
+      category: 'ERP' as const, // every recording so far is in ProcureFlow
       example: false,
       recordings: p.recordings,
       people: [...new Set([...p.recordings.map((r) => r.recordedBy), p.createdBy].filter((n): n is string => !!n))],
