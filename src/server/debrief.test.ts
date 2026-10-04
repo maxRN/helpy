@@ -81,9 +81,15 @@ describe('buildWorkMap', () => {
     expect(s2.targetId).toBeUndefined()
     expect(s2.reason).toBeUndefined()
     expect(s2.confidence).toBeCloseTo(0.48)
-    expect(s2.clip.end - s2.clip.start).toBe(10_000) // clips are at least 10 s
+    // Clips are centered on the real screen event of the step (here "posted" at 60 s).
+    expect(s2.moment).toEqual({ t: 60_000, event: 'Invoice 4471: posted' })
+    expect(s2.clip).toEqual(clipAround(60_000))
+    expect(s1.moment).toEqual({ t: 41_000, event: 'Invoice 4471: cost center 4711 → 0400 (capex)' })
     expect(workMap.guardrails.map((g) => g.id)).toEqual(['G1'])
     expect(workMap.guardrails[0]).toMatchObject({ stepId: 'S1', severity: 'block', when: [], require: [] })
+    // The rule was said right after a live question about the capex change: linked to that screen moment.
+    expect(workMap.guardrails[0].quote.via).toBe('live_question')
+    expect(workMap.guardrails[0].moment).toEqual({ t: 41_000, event: 'Invoice 4471: cost center 4711 → 0400 (capex)' })
     expect(warnings).toHaveLength(2)
   })
 })
@@ -116,5 +122,32 @@ describe('debrief question state', () => {
     expect(res.done).toBe(false)
     expect(res.required).toBe(2)
     expect(res.gaps).toHaveLength(2)
+  })
+})
+
+describe('screen moments', () => {
+  it('never invents a moment: a step far from any screen event has none', async () => {
+    const { stepMoment, momentBefore } = await import('./debrief')
+    expect(stepMoment(log, 400_000, 410_000)).toBeNull()
+    expect(stepMoment(log, 61_000, 70_000)).toEqual({ t: 60_000, event: 'Invoice 4471: posted' }) // within the slack
+    expect(momentBefore(log, 20_000)).toBeNull() // nothing on screen before it
+    expect(momentBefore(log, 58_000)?.t).toBe(41_000) // the decision, not the later "opened"
+  })
+
+  it('a rule from the debrief about an unseen case has no screen moment', async () => {
+    const debriefLog: LogLine[] = [
+      ...log,
+      { t: 300_000, who: 'agent', text: 'What if a supplier is not in the vendor master?' },
+      { t: 304_000, who: 'expert', text: "If they're not in the vendor master, I don't pay. I hold it and ask Weber." },
+    ]
+    generateJson.mockResolvedValueOnce({
+      task: 'Process invoices',
+      steps: [{ title: 'Code the cost center', targetId: 'field-costCenter', startT: 40_000, endT: 56_000, decision: '4711 → 0400', reasonQuote: '', isJudgmentCall: true, confidence: 0.9, guardrailIds: [] }],
+      guardrails: [{ id: 'G5', text: 'Unknown supplier: hold and ask the controller.', quote: "If they're not in the vendor master, I don't pay." }],
+      openQuestions: [],
+    })
+    const { workMap } = await buildWorkMap('s1', debriefLog)
+    expect(workMap.guardrails[0].quote.via).toBe('debrief')
+    expect(workMap.guardrails[0].moment).toBeNull()
   })
 })

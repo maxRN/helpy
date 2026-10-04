@@ -2,8 +2,9 @@
 import { z } from 'zod'
 import { isDuplicateQuestion } from '../agent/coverage'
 import { catalogForPrompt, TARGET_IDS } from '../erp/catalog'
+import { clipAround } from '../workmap/moments'
 import { conciseProcessName } from '../shared/processName'
-import type { Gap, Guardrail, Quote, Step, WorkMap } from '../shared/types'
+import type { Gap, Guardrail, Quote, ScreenMoment, Step, WorkMap } from '../shared/types'
 import { generateJson, MODELS } from './anthropic'
 
 /** One line of the session as the models see it. `who` = screen | expert | agent. */
@@ -17,8 +18,6 @@ export type LogLine = z.infer<typeof LogLineSchema>
 export const MAX_DEBRIEF_QUESTIONS = 6
 /** The brief's bar: at least three follow-up questions that were not answered during the task. */
 export const MIN_DEBRIEF_QUESTIONS = 3
-const CLIP_BEFORE_MS = 8000
-const CLIP_AFTER_MS = 8000
 
 const mmss = (ms: number) => {
   const s = Math.max(0, Math.floor(ms / 1000))
@@ -31,7 +30,7 @@ export const formatLog = (log: LogLine[]) =>
     .map((l) => `[${mmss(l.t)} | t=${l.t}] ${l.who.toUpperCase()}: ${l.text}`)
     .join('\n')
 
-export const clipAround = (t: number) => ({ start: Math.max(0, t - CLIP_BEFORE_MS), end: t + CLIP_AFTER_MS })
+export { clipAround }
 
 const normalize = (s: string) =>
   s
@@ -46,6 +45,43 @@ export function findExpertQuote(log: LogLine[], text: string): Quote | null {
   if (needle.length < 8) return null
   const line = log.find((l) => l.who === 'expert' && normalize(l.text).includes(needle))
   return line ? { text: text.trim(), t: line.t, speaker: 'expert' } : null
+}
+
+// ------------------------------------------------------------------ screen moments
+
+/** A step is linked to a screen event inside its time range, or at most this far outside it. */
+const STEP_MOMENT_SLACK_MS = 20_000
+/** A rule explained live is linked to the last screen change at most this long before the expert said it. */
+const RULE_LOOKBACK_MS = 90_000
+
+const isDecisionLine = (l: LogLine) => /→|put on hold|second approval/.test(l.text)
+const asMoment = (l: LogLine | undefined): ScreenMoment | null => (l ? { t: l.t, event: l.text } : null)
+
+/** The real screen event behind a step: inside [start, end] (a decision first), else the nearest within the slack. */
+export function stepMoment(log: LogLine[], start: number, end: number): ScreenMoment | null {
+  const screen = log.filter((l) => l.who === 'screen')
+  const inside = screen.filter((l) => l.t >= start && l.t <= end)
+  if (inside.length) return asMoment(inside.find(isDecisionLine) ?? inside[0])
+  const dist = (l: LogLine) => (l.t < start ? start - l.t : l.t - end)
+  const near = screen.filter((l) => dist(l) <= STEP_MOMENT_SLACK_MS).sort((a, b) => dist(a) - dist(b))
+  return asMoment(near[0])
+}
+
+/** The screen change the expert was explaining: the last one before `t` (a decision first), within the lookback. */
+export function momentBefore(log: LogLine[], t: number): ScreenMoment | null {
+  const before = log.filter((l) => l.who === 'screen' && l.t <= t && t - l.t <= RULE_LOOKBACK_MS)
+  return asMoment([...before].reverse().find(isDecisionLine) ?? before[before.length - 1])
+}
+
+/** How the expert came to say `quote`: a live question, the debrief, a teach-back correction, or unprompted. */
+export function quoteVia(log: LogLine[], quote: Quote, corrections: readonly string[] = []): NonNullable<Quote['via']> {
+  const said = normalize(quote.text)
+  if (corrections.some((c) => normalize(c).includes(said) || said.includes(normalize(c)))) return 'teachback'
+  const captureEnd = Math.max(0, ...log.filter((l) => l.who === 'screen').map((l) => l.t))
+  const sorted = [...log].sort((a, b) => a.t - b.t)
+  const prev = sorted.filter((l) => l.t < quote.t && l.who !== 'screen').pop()
+  if (prev?.who === 'agent' && prev.text.trim().endsWith('?')) return quote.t > captureEnd ? 'debrief' : 'live_question'
+  return quote.t > captureEnd ? 'debrief' : 'narration'
 }
 
 // ------------------------------------------------------------------ gaps
@@ -308,7 +344,7 @@ export async function buildWorkMap(sessionId: string, log: LogLine[], expert = '
       warnings.push(`Dropped guardrail "${g.text}": quote not found in what the expert said.`)
       continue
     }
-    guardrails.push({ id: g.id, text: g.text.trim(), quote, when: [], require: [], severity: 'block' })
+    guardrails.push({ id: g.id, text: g.text.trim(), quote: { ...quote, via: quoteVia(log, quote, corrections) }, when: [], require: [], severity: 'block' })
   }
   const known = new Set(guardrails.map((g) => g.id))
 
@@ -318,21 +354,30 @@ export async function buildWorkMap(sessionId: string, log: LogLine[], expert = '
     if (s.reasonQuote && !reason) warnings.push(`Step "${s.title}": reason quote not found, left out.`)
     const start = Math.max(0, Math.min(s.startT, lastT))
     const end = Math.max(start + 10_000, Math.min(s.endT, start + 20_000))
+    // The clip is centered on a real screen event; without one the step says so instead of a made-up time.
+    const moment = stepMoment(log, start, end)
     return {
       id,
       index: i + 1,
       title: s.title.trim(),
       ...(TARGET_IDS.includes(s.targetId) ? { targetId: s.targetId } : {}),
-      clip: { start, end },
+      clip: moment ? clipAround(moment.t) : { start, end },
+      moment,
       decision: s.decision.trim(),
-      ...(reason ? { reason } : {}),
+      ...(reason ? { reason: { ...reason, via: quoteVia(log, reason, corrections) } } : {}),
       guardrailIds: s.guardrailIds.filter((g) => known.has(g)),
       isJudgmentCall: s.isJudgmentCall,
       confidence: Math.max(0, Math.min(1, reason || !s.reasonQuote ? s.confidence : s.confidence * 0.6)),
     }
   })
-  // Each guardrail points back at the first step that uses it.
-  for (const g of guardrails) g.stepId = steps.find((s) => s.guardrailIds.includes(g.id))?.id
+  // Each guardrail points back at the first step that uses it, and at the screen moment it was explained at:
+  // said during the task = the screen change just before; said afterwards = its step's moment, if any.
+  for (const g of guardrails) {
+    const step = steps.find((s) => s.guardrailIds.includes(g.id))
+    g.stepId = step?.id
+    const live = g.quote.via === 'live_question' || g.quote.via === 'narration'
+    g.moment = (live ? momentBefore(log, g.quote.t) : null) ?? step?.moment ?? null
+  }
 
   return {
     // A verbose model output never becomes a huge title in "Recorded processes".

@@ -5,6 +5,7 @@ import { useProcess } from '../panel/processes'
 import { mmss } from '../panel/ui'
 import { EnlargeableClip } from '../player/EnlargeableClip'
 import { showWhere, teach } from './actions'
+import { MomentLink, quoteSource } from './Moment'
 import { helpyApp } from './store'
 import { appPrimary, appSecondary, card, pageTitle, sectionTitle } from './ui'
 
@@ -36,8 +37,11 @@ function DecisionTree({ wm, step, rules, next }: { wm: WorkMap; step: Step; rule
                 </p>
                 {logic.require ? <p className="m-0 mt-1 text-[15px] text-ink">It has to be: {logic.require}.</p> : null}
                 <p className="m-0 mt-2 font-quote text-[17px] italic leading-snug text-ink">
-                  “{g.quote.text}” <span className="font-helpy text-[14px] not-italic text-muted">— {wm.expert}</span>
+                  “{g.quote.text}” <span className="font-helpy text-[14px] not-italic text-muted">— {quoteSource(wm.expert, g.quote)}</span>
                 </p>
+                <div className="mt-2">
+                  <MomentLink sessionId={wm.sessionId} moment={g.moment} title={`${wm.expert}’s screen · ${g.text}`} missing="No screen moment: discussed in the debrief" />
+                </div>
               </div>
             </div>
             {g.when.length ? <p className="m-0 mt-2 pl-4 text-[15px] font-semibold text-muted">No ↓</p> : null}
@@ -107,7 +111,7 @@ export function StepPage({ processId, stepId }: { processId: string; stepId: str
           ) : null}
           {step.reason ? (
             <p className="m-0 mt-4 border-l-2 border-helpy pl-3 font-quote text-[19px] italic leading-snug text-ink">
-              “{step.reason.text}” <span className="font-helpy text-[14px] not-italic text-muted">— {wm.expert}</span>
+              “{step.reason.text}” <span className="font-helpy text-[14px] not-italic text-muted">— {quoteSource(wm.expert, step.reason)}</span>
             </p>
           ) : null}
         </section>
@@ -139,7 +143,13 @@ export function StepPage({ processId, stepId }: { processId: string; stepId: str
       <aside className="flex flex-col gap-3">
         <h2 className={sectionTitle}>{wm.expert}’s screen</h2>
         <EnlargeableClip sessionId={wm.sessionId} start={step.clip.start} end={step.clip.end} title={`${wm.expert}’s screen · ${step.title}`} />
-        <p className="m-0 text-[14px] text-muted">At {mmss(step.clip.start)} in the recording.</p>
+        <p className="m-0 text-[14px] text-muted">
+          {step.moment
+            ? `Screen moment ${mmss(step.moment.t)}: ${step.moment.event}`
+            : step.moment === null
+              ? 'No screen moment backs this step.'
+              : `From ${mmss(step.clip.start)} in the recording.`}
+        </p>
       </aside>
     </div>
   )

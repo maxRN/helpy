@@ -43,6 +43,17 @@ export interface Quote {
   text: string
   t: number
   speaker: Speaker
+  /** How the expert came to say it: answering a live question, in the debrief, correcting the teach-back, or unprompted. */
+  via?: 'live_question' | 'debrief' | 'teachback' | 'narration'
+}
+
+/**
+ * A captured screen moment: the time of a real screen event of the recording and what it showed.
+ * Never made up: when nothing on screen backs a step or rule, `moment` is null instead.
+ */
+export interface ScreenMoment {
+  t: number
+  event: string
 }
 
 export interface Step {
@@ -51,6 +62,8 @@ export interface Step {
   title: string
   targetId?: string // mascot points here in Teach
   clip: { start: number; end: number } // ms into the recording
+  /** The screen event the step is linked to (null: no screen evidence; undefined: older Work Maps). */
+  moment?: ScreenMoment | null
   decision: string // "Re-coded 4711 → 0400 (capex)"
   reason?: Quote
   guardrailIds: string[]
@@ -99,6 +112,8 @@ export interface Guardrail {
   require: Condition[] // any fails → violation
   severity: 'block' | 'ask'
   stepId?: string
+  /** The screen moment the rule was explained at (null: no screen evidence, e.g. a case only discussed in the debrief). */
+  moment?: ScreenMoment | null
 }
 
 export interface WorkMap {
