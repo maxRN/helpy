@@ -5,6 +5,7 @@ import type { Id } from '../../../convex/_generated/dataModel'
 import { PROCESS_NAME_MAX } from '../../shared/processName'
 import { useSession } from '../../shared/session'
 import { downloadWorkMapMarkdown } from '../../workmap/exportMarkdown'
+import { registerTarget } from '../../shared/registry'
 import { STATUS, statusOf, useProcess, type Process } from '../panel/processes'
 import { Avatar } from '../panel/Avatar'
 import { field, textBtn } from '../panel/ui'
@@ -14,6 +15,7 @@ import { answerQuestions, recordAgain, teach } from './actions'
 import { MomentLink, quoteSource } from './Moment'
 import { helpyApp } from './store'
 import { appPrimary, appSecondary, pageTitle, sectionTitle } from './ui'
+import { TOUR_TARGETS } from '../tourTargets'
 
 const when = (t: number) => new Date(t).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 const howLong = (ms: number | null) => (ms === null ? '' : ms < 60_000 ? ' · under a minute' : ` · ${Math.round(ms / 60_000)} min`)
@@ -227,7 +229,7 @@ export function WorkflowPage({ processId }: { processId: string }) {
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             {wm ? (
-              <button type="button" className={appPrimary} onClick={() => teach(process)}>
+              <button type="button" ref={registerTarget(TOUR_TARGETS.teach)} className={appPrimary} onClick={() => teach(process)}>
                 Teach me this
               </button>
             ) : null}

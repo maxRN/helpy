@@ -15,6 +15,7 @@ import { panel, usePanel } from './panel/store'
 import { askQuestions } from './panel/questions'
 import { mmss } from './panel/ui'
 import { RecordDialog, recordFlow } from './RecordDialog'
+import { tour } from './tour'
 import { VoiceDebrief, voiceDebrief } from './VoiceDebrief'
 import { askWaitingQuestion, stopVoice } from './voice'
 
@@ -48,13 +49,16 @@ function useWaitReason() {
   return talking ? 'you’re talking' : busy === 'typing' ? 'you’re typing' : busy === 'mid-step' ? 'you’re mid-step' : 'at your next pause'
 }
 
-/** Helpy has a question but you are busy: a quiet sign above the robot that says why it waits. No sound, no blinking. */
-function QuestionSign() {
+/** Helpy has a question but you are busy: a quiet line that says why it waits. No sound, no blinking. */
+function QuestionLine() {
   const why = useWaitReason()
   return (
-    <span className="helpy-pop flex items-center gap-1 rounded-full bg-[#f5b83d] px-2 py-0.5 text-[11px] font-bold whitespace-nowrap text-[#3d2a00] shadow-soft">
-      <span aria-hidden>?</span> Question · {why === 'at your next pause' ? why : `waiting, ${why}`}
-    </span>
+    <div className="flex items-center gap-2 text-[12px] font-semibold text-[#f5c565]">
+      <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-[#f5b83d] text-[10px] font-bold text-[#3d2a00]" aria-hidden>
+        ?
+      </span>
+      <span className="truncate">Question · {why === 'at your next pause' ? why : `waiting, ${why}`}</span>
+    </div>
   )
 }
 
@@ -67,14 +71,44 @@ function tailOf(text: string, max = 140) {
   return `…${space > 0 && space < 30 ? cut.slice(space + 1) : cut}`
 }
 
-/** What Helpy hears right now (ElevenLabs Scribe v2 Realtime), live while the expert talks. Wraps, never runs off screen. */
-function HearingCaption() {
+/** After a sentence ends, what Helpy heard stays this long, so the card does not blink between sentences. */
+const HEARD_LINGER_MS = 2500
+
+/** What Helpy hears right now (ElevenLabs Scribe v2 Realtime): live while the expert talks, then briefly after. */
+function useHeard(): string {
   const { speaking, partial } = useListener()
-  if (!speaking || !partial) return null
+  const [heard, setHeard] = useState('')
+  useEffect(() => {
+    if (speaking && partial.trim()) return setHeard(partial)
+    const timer = setTimeout(() => setHeard(''), HEARD_LINGER_MS)
+    return () => clearTimeout(timer)
+  }, [speaking, partial])
+  return heard
+}
+
+/**
+ * The card above the robot while it records: what it hears and a question it holds back. Fixed width, newest words at
+ * the bottom, at most three lines (older lines leave at the top); nothing at all when there is nothing to show.
+ */
+function StatusCard({ waiting }: { waiting: boolean }) {
+  const heard = useHeard()
+  const live = useListener((s) => s.speaking)
+  if (!heard && !waiting) return null
   return (
-    <span className="block max-w-[320px] rounded-2xl bg-helpy-ink/85 px-3 py-1 text-center text-[12px] leading-snug break-words text-white shadow-soft">
-      I hear: “{tailOf(partial)}”
-    </span>
+    <div className="flex flex-col gap-1.5 rounded-xl bg-helpy-ink/90 px-3 py-2 text-white shadow-soft backdrop-blur-sm">
+      {heard ? (
+        <div>
+          <div className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wide text-white/60 uppercase">
+            <span className={`size-1.5 rounded-full ${live ? 'bg-helpy-mint' : 'bg-white/40'}`} aria-hidden />
+            Helpy hears
+          </div>
+          <div className="mt-0.5 flex max-h-[3lh] flex-col justify-end overflow-hidden text-[13px] leading-snug break-words">
+            <p className="m-0">{tailOf(heard, 200)}</p>
+          </div>
+        </div>
+      ) : null}
+      {waiting ? <QuestionLine /> : null}
+    </div>
   )
 }
 
@@ -105,9 +139,12 @@ export function Helpy({ boundsRef }: { boundsRef?: RefObject<HTMLElement | null>
   useEffect(() => {
     setMascotClickHandler(onRobotClick)
     const uninstallBubbles = installBubbleLifecycle()
+    // Someone Helpy has never seen: it comes to the middle, says hello and offers a tour.
+    const uninstallTour = tour.install()
     // Dev console: helpy.mascot.pointTo('field-costCenter'), helpy.panel.show(), helpy.question('Why 0400?')
     if (import.meta.env.DEV) Object.assign(window, { helpy: { mascot, panel, question: sharedMascot.waiting } })
     return () => {
+      uninstallTour()
       setMascotClickHandler(null)
       uninstallBubbles()
     }
@@ -174,15 +211,8 @@ export function Helpy({ boundsRef }: { boundsRef?: RefObject<HTMLElement | null>
       <MascotLayer
         boundsRef={boundsRef}
         hideBubble={open}
-        badge={
-          activity?.kind === 'recording' ? (
-            <div className="flex flex-col items-center gap-1">
-              <HearingCaption />
-              {waiting ? <QuestionSign /> : null}
-              <RecordingLight startedAt={'task' in recorder ? recorder.task.startedAt : null} />
-            </div>
-          ) : null
-        }
+        badge={activity?.kind === 'recording' ? <RecordingLight startedAt={'task' in recorder ? recorder.task.startedAt : null} /> : null}
+        status={activity?.kind === 'recording' ? <StatusCard waiting={!!waiting} /> : null}
       />
       <HelpyPanel boundsRef={boundsRef} />
       <RecordDialog />

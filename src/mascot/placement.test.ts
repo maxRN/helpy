@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clampInto, mascotMode, placeBadge, placeNextTo, REST_INSET, restPosition, type Box } from './placement'
+import { centerPosition, clampInto, mascotMode, placeNextTo, placeStatus, REST_INSET, restPosition, type Box } from './placement'
 
 const SIZE = { width: 84, height: 105 }
 // The fake screen between the menu bar and the dock on a 1440 × 900 viewport (Helpy's bounds are fixed to the viewport).
@@ -57,26 +57,38 @@ describe('mascot state', () => {
   })
 })
 
-describe('placeBadge (what Helpy hears, above the robot)', () => {
+describe('placeStatus (what Helpy hears, above the robot)', () => {
   const screen = viewport()
   const robotAt = (x: number, y: number): Box => ({ left: x, top: y, ...SIZE })
+  const card = (height: number) => ({ width: 300, height })
 
-  it('sits centered above the robot when there is room', () => {
-    expect(placeBadge(robotAt(600, 400), { width: 200, height: 40 }, screen)).toEqual({ left: 42 - 100, top: 12 - 40 })
-  })
-
-  it('at the resting spot in the bottom-right corner it moves left instead of leaving the screen', () => {
+  it('at the resting spot lines up with the right edge of the robot and stays on screen', () => {
     const robot = robotAt(1440 - REST_INSET.right - 84, 852 - REST_INSET.bottom - 105)
-    const p = placeBadge(robot, { width: 320, height: 60 }, screen)
-    expect(robot.left + p.left + 320).toBeLessThanOrEqual(1440 - 8)
+    const p = placeStatus(robot, card(60), screen)
+    expect(robot.left + p.left + 300).toBe(robot.left + 84)
+    expect(robot.left + p.left).toBeGreaterThanOrEqual(8)
   })
 
-  it('never leaves the left edge either', () => {
-    expect(placeBadge(robotAt(10, 400), { width: 320, height: 40 }, screen).left + 10).toBe(8)
+  it('does not move sideways while the text grows, only upwards', () => {
+    const robot = robotAt(1300, 700)
+    const short = placeStatus(robot, card(30), screen)
+    const long = placeStatus(robot, card(70), screen)
+    expect(long.left).toBe(short.left)
+    expect(long.top).toBe(short.top - 40)
+  })
+
+  it('on the left half lines up with the left edge, never leaving the screen', () => {
+    expect(placeStatus(robotAt(200, 400), card(40), screen).left).toBe(0)
+    expect(placeStatus(robotAt(2, 400), card(40), screen).left + 2).toBe(8)
   })
 
   it('goes below the robot when there is no room above', () => {
-    const p = placeBadge(robotAt(600, 20), { width: 200, height: 60 }, screen)
-    expect(p.top).toBe(105 - 12)
+    expect(placeStatus(robotAt(600, 20), card(60), screen).top).toBeGreaterThanOrEqual(105)
+  })
+})
+
+describe('centerPosition (the first hello)', () => {
+  it('is horizontally centered on the screen', () => {
+    expect(centerPosition(viewport(), SIZE).x).toBe(720 - 42)
   })
 })

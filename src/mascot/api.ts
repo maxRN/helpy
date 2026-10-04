@@ -65,6 +65,11 @@ export const mascot = {
     shared.pointTo(targetId)
   },
 
+  /** Rest in the middle of the screen (true) or back in the corner (false). Pointing still wins while it points. */
+  center(on: boolean) {
+    useHelpyExtras.setState({ centered: on })
+  },
+
   /** Guardrail moment: red eyes, point at the field, say why. Stays until the trainee fixed it (Teach replaces it). */
   alert(targetId: string | null, text: string, actions: BubbleAction[] = []) {
     shared.setState('alert')
@@ -76,6 +81,7 @@ export const mascot = {
     mascot.bubble(null)
     mascot.pose(null)
     mascot.pointTo(null)
+    mascot.center(false)
     shared.setState('idle')
   },
 

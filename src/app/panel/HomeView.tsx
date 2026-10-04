@@ -5,7 +5,8 @@ import { recordFlow } from '../RecordDialog'
 import { askQuestions } from './questions'
 import { statusOf, useProcesses } from './processes'
 import { Avatar } from './Avatar'
-import { primaryBtn, secondaryBtn } from './ui'
+import { primaryBtn, secondaryBtn, textBtn } from './ui'
+import { tour } from '../tour'
 
 /** First thing Helpy shows: one main action (record), the way into what the team knows, and open questions if any. */
 export function HomeView() {
@@ -42,6 +43,9 @@ export function HomeView() {
           className={secondaryBtn}
         >
           Open Helpy
+        </button>
+        <button type="button" onClick={tour.start} className={`${textBtn} self-center`}>
+          Show me around
         </button>
       </div>
 

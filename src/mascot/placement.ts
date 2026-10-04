@@ -172,14 +172,25 @@ export function clampInto(pos: { x: number; y: number }, size: { width: number; 
 }
 
 /**
- * Where the small label above the robot goes (what Helpy hears, its recording light), relative to the robot's box:
- * centered above it, shifted sideways so it never leaves the bounds, and below the robot when there is no room above.
+ * Where the status card above the robot goes (what Helpy hears, a question it holds), relative to the robot's box.
+ * It has a fixed width and lines up with the robot's outer edge (the right one when the robot is on the right half),
+ * so new words never move it sideways; it grows upwards from `lift` px above the robot, below it when there is no room.
  */
-export function placeBadge(robot: Box, badge: { width: number; height: number }, bounds: Box, overlap = 12) {
-  const left = clamp(robot.left + robot.width / 2 - badge.width / 2, bounds.left + MARGIN, right(bounds) - MARGIN - badge.width)
-  const above = robot.top + overlap - badge.height
-  const top = above >= bounds.top + MARGIN ? above : robot.top + robot.height - overlap
-  return { left: left - robot.left, top: top - robot.top }
+export function placeStatus(robot: Box, card: { width: number; height: number }, bounds: Box, lift = 12) {
+  const onRight = robot.left + robot.width / 2 > bounds.left + bounds.width / 2
+  const left = clamp(onRight ? right(robot) - card.width : robot.left, bounds.left + MARGIN, right(bounds) - MARGIN - card.width)
+  const above = robot.top - lift - card.height
+  const fitsAbove = above >= bounds.top + MARGIN
+  const top = fitsAbove ? above : bottom(robot) + BUBBLE_GAP
+  return { left: left - robot.left, top: top - robot.top, above: fitsAbove }
+}
+
+/** Center of `bounds`, a bit below the middle so a bubble above the robot is centered too (the first hello). */
+export function centerPosition(bounds: Box, size: { width: number; height: number }) {
+  return {
+    x: bounds.left + bounds.width / 2 - size.width / 2,
+    y: clamp(bounds.top + bounds.height * 0.58 - size.height / 2, bounds.top + MARGIN, bottom(bounds) - MARGIN - size.height),
+  }
 }
 
 /**

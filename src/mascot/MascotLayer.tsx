@@ -3,7 +3,7 @@ import { useMascot } from '../shared/mascot'
 import { registry } from '../shared/registry'
 import { useSession } from '../shared/session'
 import { mascot } from './api'
-import { clampInto, mascotMode, placeBadge, placeBubble, placeNextTo, restPosition, type Box, type Side } from './placement'
+import { centerPosition, clampInto, mascotMode, placeBubble, placeNextTo, placeStatus, restPosition, type Box, type Side } from './placement'
 import { Robot } from './Robot'
 import { useHelpyExtras, type BubbleAction, type BubbleInput } from './store'
 
@@ -82,13 +82,31 @@ interface Layout {
  * The floating mascot. Flies next to `targetId` (from the registry), shows a pulsing ring around it
  * and keeps the speech bubble on screen. Draggable; never leaves `boundsRef` (the main work area).
  */
-export function MascotLayer({ boundsRef, hideBubble = false, badge }: { boundsRef?: RefObject<HTMLElement | null>; hideBubble?: boolean; badge?: ReactNode }) {
+/** Width of the status card above the robot (see placeStatus): fixed, so new words never move it sideways. */
+const STATUS_WIDTH = 300
+
+/**
+ * `badge`: a small label centered on the robot's head (the recording light); it never moves.
+ * `status`: a card above it (what Helpy hears, a held question), kept fully on screen; renders nothing when empty.
+ */
+export function MascotLayer({
+  boundsRef,
+  hideBubble = false,
+  badge,
+  status,
+}: {
+  boundsRef?: RefObject<HTMLElement | null>
+  hideBubble?: boolean
+  badge?: ReactNode
+  status?: ReactNode
+}) {
   const state = useMascot((s) => s.state)
   const bubbleText = useMascot((s) => s.bubble)
   const targetId = useMascot((s) => s.pointTarget)
   const extras = useHelpyExtras((s) => s.bubbleExtras)
   const tone = useHelpyExtras((s) => s.tone)
   const pose = useHelpyExtras((s) => s.pose)
+  const centered = useHelpyExtras((s) => s.centered)
   const waiting = useMascot((s) => s.waiting !== null)
   const offRecord = useSession((s) => s.offRecord)
 
@@ -99,8 +117,8 @@ export function MascotLayer({ boundsRef, hideBubble = false, badge }: { boundsRe
   const [dragged, setDragged] = useState<{ x: number; y: number; bubble: string | null } | null>(null)
   const [bubbleSize, setBubbleSize] = useState(BUBBLE_GUESS)
   const bubbleRef = useRef<HTMLDivElement>(null)
-  const [badgeSize, setBadgeSize] = useState({ width: 0, height: 0 })
-  const badgeRef = useRef<HTMLDivElement>(null)
+  const [statusHeight, setStatusHeight] = useState(0)
+  const statusRef = useRef<HTMLDivElement>(null)
   const showBubble = !!bubbleText && !hideBubble
   const dragStart = useRef<{ px: number; py: number; x: number; y: number; moved: boolean } | null>(null)
   /** The field the user is typing in, measured when it got focus (not on every scroll). */
@@ -135,6 +153,12 @@ export function MascotLayer({ boundsRef, hideBubble = false, badge }: { boundsRe
   useEffect(() => {
     setFlying(true)
     const timer = setTimeout(() => setFlying(false), FLY_MS + 50)
+    return () => clearTimeout(timer)
+  }, [centered])
+
+  useEffect(() => {
+    setFlying(true)
+    const timer = setTimeout(() => setFlying(false), FLY_MS + 50)
     if (targetId) {
       const el = registry.get(targetId)
       const r = el?.getBoundingClientRect()
@@ -161,7 +185,7 @@ export function MascotLayer({ boundsRef, hideBubble = false, badge }: { boundsRe
         // Resting: bottom-right of the viewport. Only the bounds (resize) and the typing field move it.
         const key = `${bubbleText ?? ''}|${Math.round(bounds.width)}x${Math.round(bounds.height)}`
         if (restAvoid.current?.key !== key) restAvoid.current = { key, boxes: showBubble ? controlsOnScreen(bounds) : [] }
-        const p = restPosition(bounds, SIZE, typingBox.current)
+        const p = centered ? centerPosition(bounds, SIZE) : restPosition(bounds, SIZE, typingBox.current)
         next = { x: p.x, y: p.y, side: null, ring: null, bounds, avoid: restAvoid.current.boxes, avoidKey: key }
       }
       setLayout((prev) =>
@@ -199,7 +223,7 @@ export function MascotLayer({ boundsRef, hideBubble = false, badge }: { boundsRe
       document.removeEventListener('focusout', onFocusOut)
       clearInterval(interval)
     }
-  }, [targetId, boundsRef, showBubble, bubbleSize, bubbleText])
+  }, [targetId, boundsRef, showBubble, bubbleSize, bubbleText, centered])
 
   const own = extras?.text === bubbleText ? extras : null
   const actionCount = (own?.actions.length ?? 0) + (own?.input ? 1 + (own.input.suggestions?.length ?? 0) : 0)
@@ -210,18 +234,15 @@ export function MascotLayer({ boundsRef, hideBubble = false, badge }: { boundsRe
     setBubbleSize((prev) => (prev.width === next.width && prev.height === next.height ? prev : next))
   }, [showBubble, bubbleText, actionCount, layout?.bounds.width])
 
-  // The badge's content (e.g. what Helpy hears) re-renders on its own, so its size is observed, not measured per render.
-  const hasBadge = !!badge
+  // The status card's content (what Helpy hears) re-renders on its own, so its height is observed, not measured per render.
+  const hasStatus = !!status
   useEffect(() => {
-    const el = badgeRef.current
+    const el = statusRef.current
     if (!el) return
-    const observer = new ResizeObserver(() => {
-      const next = { width: el.offsetWidth, height: el.offsetHeight }
-      setBadgeSize((prev) => (prev.width === next.width && prev.height === next.height ? prev : next))
-    })
+    const observer = new ResizeObserver(() => setStatusHeight(el.offsetHeight))
     observer.observe(el)
     return () => observer.disconnect()
-  }, [hasBadge, !!layout])
+  }, [hasStatus, !!layout])
 
   if (!layout) return null
 
@@ -231,10 +252,13 @@ export function MascotLayer({ boundsRef, hideBubble = false, badge }: { boundsRe
   const y = spot.y
   // The pointing arm is on the robot's right; mirror it when the target is to its left.
   const flip = layout.side === 'right' || (layout.side === 'below' || layout.side === 'above' ? (layout.ring?.left ?? 0) + (layout.ring?.width ?? 0) / 2 < x + SIZE.width / 2 : false)
-  // Around the robot, but never on the thing it points at and never off screen.
-  const bubble = placeBubble({ left: x, top: y, ...SIZE }, bubbleSize, drag ? null : layout.ring, layout.bounds, layout.avoid)
-  // Above the robot, but always fully on screen (it rests in the bottom-right corner).
-  const badgeAt = placeBadge({ left: x, top: y, ...SIZE }, badgeSize, layout.bounds)
+  const robotBox = { left: x, top: y, ...SIZE }
+  // Above the robot and its recording light, always fully on screen (it rests in the bottom-right corner).
+  const statusWidth = Math.min(STATUS_WIDTH, layout.bounds.width - 16)
+  const statusAt = placeStatus(robotBox, { width: statusWidth, height: statusHeight }, layout.bounds, badge ? 12 : 4)
+  const statusBox = statusHeight ? [{ left: x + statusAt.left, top: y + statusAt.top, width: statusWidth, height: statusHeight }] : []
+  // Around the robot, but never on the thing it points at, never on the status card and never off screen.
+  const bubble = placeBubble(robotBox, bubbleSize, drag ? null : layout.ring, layout.bounds, [...layout.avoid, ...statusBox])
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return
@@ -318,13 +342,15 @@ export function MascotLayer({ boundsRef, hideBubble = false, badge }: { boundsRe
         >
           <Robot state={state} pose={pose ?? (waiting ? 'question' : null)} pointing={!!layout.ring && !drag} off={offRecord} size={SIZE.width} />
         </div>
-        {badge ? (
+        {badge ? <div className="pointer-events-none absolute bottom-[calc(100%-12px)] left-1/2 -translate-x-1/2">{badge}</div> : null}
+        {status ? (
+          // Anchored by its bottom while above the robot: growing text never moves it before it is measured.
           <div
-            ref={badgeRef}
-            className="pointer-events-none absolute flex w-max flex-col items-center"
-            style={{ left: badgeAt.left, top: badgeAt.top, maxWidth: Math.max(0, layout.bounds.width - 16), visibility: badgeSize.width ? 'visible' : 'hidden' }}
+            ref={statusRef}
+            className="pointer-events-none absolute"
+            style={{ left: statusAt.left, width: statusWidth, ...(statusAt.above ? { bottom: SIZE.height + (badge ? 12 : 4) } : { top: statusAt.top }) }}
           >
-            {badge}
+            {status}
           </div>
         ) : null}
       </div>

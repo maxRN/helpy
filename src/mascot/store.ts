@@ -44,10 +44,13 @@ interface HelpyExtras {
   } | null
   tone: 'default' | 'alert'
   pose: Pose | null
+  /** Rests in the middle of the screen instead of its corner (the first hello to a new visitor). */
+  centered: boolean
 }
 
 export const useHelpyExtras = create<HelpyExtras>()(() => ({
   bubbleExtras: null,
   tone: 'default',
   pose: null,
+  centered: false,
 }))

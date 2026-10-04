@@ -1,5 +1,6 @@
 import { TITLE_BAR, TITLE_TEXT, TrafficLights, windowPlacement } from '../../desktop/TrafficLights'
 import { HelpyMark } from '../../mascot'
+import { registerTarget } from '../../shared/registry'
 import { useAuth } from '../auth'
 import { useProcess, useProcesses } from '../panel/processes'
 import { Avatar } from '../panel/Avatar'
@@ -8,6 +9,7 @@ import { ProcessesPage } from './ProcessesPage'
 import { StepPage } from './StepPage'
 import { helpyApp, parentPage, useHelpyApp, type AppPage } from './store'
 import { WorkflowPage } from './WorkflowPage'
+import { TOUR_TARGETS } from '../tourTargets'
 
 function BuildingIcon() {
   return (
@@ -29,10 +31,25 @@ function ListIcon() {
   )
 }
 
-function NavItem({ active, onClick, icon, label, count }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string; count?: number }) {
+function NavItem({
+  active,
+  onClick,
+  icon,
+  label,
+  count,
+  targetId,
+}: {
+  active: boolean
+  onClick: () => void
+  icon: React.ReactNode
+  label: string
+  count?: number
+  targetId?: string
+}) {
   return (
     <button
       type="button"
+      ref={targetId ? registerTarget(targetId) : undefined}
       aria-current={active ? 'page' : undefined}
       onClick={onClick}
       className={`flex h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-[16px] font-medium transition-colors duration-150 ${
@@ -127,8 +144,8 @@ export function HelpyApp() {
             <span className="text-[22px] font-semibold tracking-tight text-ink">Helpy</span>
           </div>
           <nav aria-label="Pages" className="flex flex-col gap-1">
-            <NavItem active={!onProcesses} onClick={() => helpyApp.go({ name: 'company' })} icon={<BuildingIcon />} label="Company info" />
-            <NavItem active={onProcesses} onClick={() => helpyApp.go({ name: 'processes' })} icon={<ListIcon />} label="Recorded processes" count={count} />
+            <NavItem active={!onProcesses} onClick={() => helpyApp.go({ name: 'company' })} icon={<BuildingIcon />} label="Company info" targetId={TOUR_TARGETS.company} />
+            <NavItem active={onProcesses} onClick={() => helpyApp.go({ name: 'processes' })} icon={<ListIcon />} label="Recorded processes" count={count} targetId={TOUR_TARGETS.processes} />
           </nav>
           <div className="mt-auto flex items-center gap-2.5 border-t border-helpy-line px-2 pt-3">
             <Avatar name={user.name} size={32} />
