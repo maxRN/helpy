@@ -125,6 +125,8 @@ export async function start(m: Mode, opts: { workMapMarkdown?: string } = {}): P
   });
 
   deps.mascot.setState('listening');
+  // Capture with Scribe listening: the agent must not hear (or answer) the narration; it only speaks on [ASK].
+  if (m === 'capture' && deps.speech?.active()) conv.setMicMuted(true);
   cleanup.push(startScreenFeed(deps));
 
   if (m === 'capture') startCapture(deps);
@@ -211,6 +213,12 @@ function settleTeachback(r: { confirmed: boolean; correction?: string }): void {
   t.resolve(r);
 }
 
+/** An answer heard outside the agent (Scribe in Capture): goes into the question history like the agent's own. */
+export function noteAnswer(q: Quote): void {
+  getDeps().mascot.bubble(null);
+  policy?.recordAnswer(q);
+}
+
 // ---------------------------------------------------------------- off the record
 
 /** source 'voice' = the agent's tool call (agent already confirmed aloud); 'ui' = P4's button. */
@@ -228,11 +236,13 @@ export function setOffRecord(on: boolean, source: 'voice' | 'ui' = 'ui'): void {
 function startCapture(deps: Deps): void {
   const getInputs = (): PauseInputs => {
     const now = Date.now();
+    // Scribe's VAD (when listening) and the agent's own VAD: whichever heard speech last.
+    const lastSpeech = Math.max(lastUserSpeechAt, deps.speech?.lastSpeechAt() ?? 0);
     return {
       now,
       lastInputAt: deps.activity.lastInputAt(),
       lastFrameChangeAt: deps.capture.lastFrameChangeAt(),
-      userSilentForMs: now - lastUserSpeechAt,
+      userSilentForMs: now - lastSpeech,
       agentSpeaking,
       offRecord,
     };

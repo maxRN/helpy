@@ -4,6 +4,7 @@ import { api } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
 import type { PauseLogEntry } from '../../agent/pause'
 import { useTaskRecording } from '../../capture/TaskRecorder'
+import { useListener } from '../../integration/listener'
 import { mascot } from '../../mascot'
 import { session, useSession } from '../../shared/session'
 import { pauseLog, setOffRecord, startVoice, useVoice } from '../voice'
@@ -34,6 +35,19 @@ function PauseLine() {
   )
 }
 
+/** What Helpy hears right now (ElevenLabs Scribe v2 Realtime): live words while the expert talks. */
+function HearingLine() {
+  const { status, speaking, partial, error } = useListener()
+  if (status === 'off') return null
+  if (status === 'error') return <p className="m-0 text-[14px] text-muted">I can’t hear you right now ({error}). I still watch the screen.</p>
+  if (status === 'connecting') return <p className="m-0 text-[14px] text-muted">Turning on my ears…</p>
+  return (
+    <p className="m-0 text-[14px] text-muted">
+      {speaking && partial ? <>I hear: “{partial}”</> : 'I’m listening.'}
+    </p>
+  )
+}
+
 /** Record what I do: name it, share the screen, work. While recording: pause and "I'm done". */
 export function RecordView() {
   const { state, start, finish, error } = useTaskRecording()
@@ -41,6 +55,7 @@ export function RecordView() {
   const offRecord = useSession((s) => s.offRecord)
   const voiceError = useVoice((s) => s.error)
   const voiceOn = useVoice((s) => s.mode === 'capture')
+  const listening = useListener((s) => s.status !== 'off')
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -83,8 +98,9 @@ export function RecordView() {
           </p>
           {offRecord ? (
             <p className="m-0 mt-1 text-[15px] text-muted">Nothing is recorded, written down or sent until you continue.</p>
-          ) : voiceOn ? (
-            <div className="mt-1">
+          ) : voiceOn || listening ? (
+            <div className="mt-1 flex flex-col gap-0.5">
+              <HearingLine />
               <PauseLine />
             </div>
           ) : (

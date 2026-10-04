@@ -18,6 +18,7 @@ import { Route as ProjectsIndexRouteImport } from './routes/projects.index'
 import { Route as ProjectsProjectIdRouteImport } from './routes/projects.$projectId'
 import { Route as ApiDebriefGapsRouteImport } from './routes/api/debrief/gaps'
 import { Route as ApiDebriefTeachbackRouteImport } from './routes/api/debrief/teachback'
+import { Route as ApiElevenlabsScribeTokenRouteImport } from './routes/api/elevenlabs/scribe-token'
 import { Route as ApiElevenlabsSignedUrlRouteImport } from './routes/api/elevenlabs/signed-url'
 import { Route as ApiGuardrailsCompileRouteImport } from './routes/api/guardrails/compile'
 import { Route as ProjectsProjectIdTasksTaskIdRouteImport } from './routes/projects.$projectId_.tasks.$taskId'
@@ -67,6 +68,12 @@ const ApiDebriefTeachbackRoute = ApiDebriefTeachbackRouteImport.update({
   path: '/api/debrief/teachback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiElevenlabsScribeTokenRoute =
+  ApiElevenlabsScribeTokenRouteImport.update({
+    id: '/api/elevenlabs/scribe-token',
+    path: '/api/elevenlabs/scribe-token',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiElevenlabsSignedUrlRoute = ApiElevenlabsSignedUrlRouteImport.update({
   id: '/api/elevenlabs/signed-url',
   path: '/api/elevenlabs/signed-url',
@@ -94,6 +101,7 @@ export interface FileRoutesByFullPath {
   '/projects/': typeof ProjectsIndexRoute
   '/api/debrief/gaps': typeof ApiDebriefGapsRoute
   '/api/debrief/teachback': typeof ApiDebriefTeachbackRoute
+  '/api/elevenlabs/scribe-token': typeof ApiElevenlabsScribeTokenRoute
   '/api/elevenlabs/signed-url': typeof ApiElevenlabsSignedUrlRoute
   '/api/guardrails/compile': typeof ApiGuardrailsCompileRoute
   '/projects/$projectId/tasks/$taskId': typeof ProjectsProjectIdTasksTaskIdRoute
@@ -108,6 +116,7 @@ export interface FileRoutesByTo {
   '/projects': typeof ProjectsIndexRoute
   '/api/debrief/gaps': typeof ApiDebriefGapsRoute
   '/api/debrief/teachback': typeof ApiDebriefTeachbackRoute
+  '/api/elevenlabs/scribe-token': typeof ApiElevenlabsScribeTokenRoute
   '/api/elevenlabs/signed-url': typeof ApiElevenlabsSignedUrlRoute
   '/api/guardrails/compile': typeof ApiGuardrailsCompileRoute
   '/projects/$projectId/tasks/$taskId': typeof ProjectsProjectIdTasksTaskIdRoute
@@ -123,6 +132,7 @@ export interface FileRoutesById {
   '/projects/': typeof ProjectsIndexRoute
   '/api/debrief/gaps': typeof ApiDebriefGapsRoute
   '/api/debrief/teachback': typeof ApiDebriefTeachbackRoute
+  '/api/elevenlabs/scribe-token': typeof ApiElevenlabsScribeTokenRoute
   '/api/elevenlabs/signed-url': typeof ApiElevenlabsSignedUrlRoute
   '/api/guardrails/compile': typeof ApiGuardrailsCompileRoute
   '/projects/$projectId_/tasks/$taskId': typeof ProjectsProjectIdTasksTaskIdRoute
@@ -139,6 +149,7 @@ export interface FileRouteTypes {
     | '/projects/'
     | '/api/debrief/gaps'
     | '/api/debrief/teachback'
+    | '/api/elevenlabs/scribe-token'
     | '/api/elevenlabs/signed-url'
     | '/api/guardrails/compile'
     | '/projects/$projectId/tasks/$taskId'
@@ -153,6 +164,7 @@ export interface FileRouteTypes {
     | '/projects'
     | '/api/debrief/gaps'
     | '/api/debrief/teachback'
+    | '/api/elevenlabs/scribe-token'
     | '/api/elevenlabs/signed-url'
     | '/api/guardrails/compile'
     | '/projects/$projectId/tasks/$taskId'
@@ -167,6 +179,7 @@ export interface FileRouteTypes {
     | '/projects/'
     | '/api/debrief/gaps'
     | '/api/debrief/teachback'
+    | '/api/elevenlabs/scribe-token'
     | '/api/elevenlabs/signed-url'
     | '/api/guardrails/compile'
     | '/projects/$projectId_/tasks/$taskId'
@@ -182,6 +195,7 @@ export interface RootRouteChildren {
   ProjectsIndexRoute: typeof ProjectsIndexRoute
   ApiDebriefGapsRoute: typeof ApiDebriefGapsRoute
   ApiDebriefTeachbackRoute: typeof ApiDebriefTeachbackRoute
+  ApiElevenlabsScribeTokenRoute: typeof ApiElevenlabsScribeTokenRoute
   ApiElevenlabsSignedUrlRoute: typeof ApiElevenlabsSignedUrlRoute
   ApiGuardrailsCompileRoute: typeof ApiGuardrailsCompileRoute
   ProjectsProjectIdTasksTaskIdRoute: typeof ProjectsProjectIdTasksTaskIdRoute
@@ -252,6 +266,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiDebriefTeachbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/elevenlabs/scribe-token': {
+      id: '/api/elevenlabs/scribe-token'
+      path: '/api/elevenlabs/scribe-token'
+      fullPath: '/api/elevenlabs/scribe-token'
+      preLoaderRoute: typeof ApiElevenlabsScribeTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/elevenlabs/signed-url': {
       id: '/api/elevenlabs/signed-url'
       path: '/api/elevenlabs/signed-url'
@@ -286,6 +307,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProjectsIndexRoute: ProjectsIndexRoute,
   ApiDebriefGapsRoute: ApiDebriefGapsRoute,
   ApiDebriefTeachbackRoute: ApiDebriefTeachbackRoute,
+  ApiElevenlabsScribeTokenRoute: ApiElevenlabsScribeTokenRoute,
   ApiElevenlabsSignedUrlRoute: ApiElevenlabsSignedUrlRoute,
   ApiGuardrailsCompileRoute: ApiGuardrailsCompileRoute,
   ProjectsProjectIdTasksTaskIdRoute: ProjectsProjectIdTasksTaskIdRoute,
