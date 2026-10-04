@@ -87,3 +87,34 @@ describe('buildWorkMap', () => {
     expect(warnings).toHaveLength(2)
   })
 })
+
+describe('debrief question state', () => {
+  it('lists the live questions and whether the expert answered them', async () => {
+    const { liveQuestions } = await import('./debrief')
+    const withUnanswered: LogLine[] = [...log, { t: 70_000, who: 'agent', text: 'Is there a limit?' }, { t: 72_000, who: 'screen', text: 'Invoice 4472: put on hold' }]
+    expect(liveQuestions(withUnanswered)).toEqual([
+      { question: 'What made you do that?', t: 52_000, answered: true },
+      { question: 'Is there a limit?', t: 70_000, answered: false },
+    ])
+    // Debrief questions in the log are not live questions.
+    expect(liveQuestions(withUnanswered, [{ question: 'Is there a limit?', answered: false }]).map((q) => q.question)).toEqual(['What made you do that?'])
+  })
+
+  it('fallback questions are tied to real screen moments and never repeat', async () => {
+    const { fallbackGaps } = await import('./debrief')
+    const gaps = fallbackGaps(log, 3, [{ question: 'When do you stop on an invoice like this and ask someone, and who is that?' }], 2)
+    expect(gaps).toHaveLength(3)
+    expect(gaps.map((g) => g.id)).toEqual(['gap-3', 'gap-4', 'gap-5'])
+    expect(gaps.some((g) => g.question.startsWith('When do you stop'))).toBe(false)
+    for (const g of gaps) expect([41_000, 30_000, 60_000].map((t) => clipAround(t).start)).toContain(g.clip.start)
+  })
+
+  it('keeps asking while fewer than three debrief questions were asked, even if the model fails', async () => {
+    generateJson.mockReset()
+    generateJson.mockRejectedValue(new Error('model down'))
+    const res = await findGaps(log, [{ question: 'Who releases a hold?', answered: true }])
+    expect(res.done).toBe(false)
+    expect(res.required).toBe(2)
+    expect(res.gaps).toHaveLength(2)
+  })
+})

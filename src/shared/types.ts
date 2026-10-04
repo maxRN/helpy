@@ -109,7 +109,32 @@ export interface WorkMap {
   steps: Step[]
   guardrails: Guardrail[]
   openQuestions: string[]
-  teachback?: { text: string; confirmed: boolean; corrections: Quote[] }
+  /**
+   * The teach-back and its outcome. `confirmed` is only true when the expert said it is right
+   * (not when the debrief simply ended). `rounds`: how often Helpy explained it back.
+   */
+  teachback?: { text: string; confirmed: boolean; corrections: Quote[]; rounds?: number; confirmedAt?: number }
+  /** Why Helpy believes it understood: the questions it asked and the reason it stopped asking. */
+  debrief?: DebriefRecord
+}
+
+/** One question of the debrief and whether it was answered. */
+export interface DebriefQuestion {
+  id: string
+  question: string
+  kind: Gap['kind']
+  /** Screen moment the question was about (ms into the recording). */
+  t: number
+  status: 'answered' | 'skipped'
+}
+
+export interface DebriefRecord {
+  /** Questions asked live during the task (not repeated in the debrief). */
+  live: { question: string; t: number; answered: boolean }[]
+  questions: DebriefQuestion[]
+  /** The server's reason for ending the debrief, as Helpy said it. */
+  doneReason: string
+  completedAt: number
 }
 
 export interface Gap {
