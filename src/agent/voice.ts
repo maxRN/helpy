@@ -233,6 +233,17 @@ function settleTeachback(r: { confirmed: boolean; correction?: string }): void {
   t.resolve(r);
 }
 
+/** When the expert last spoke: the agent's own VAD, or Scribe while it listens. 0 = not yet. */
+export function lastExpertSpeechAt(): number {
+  let scribe = 0;
+  try {
+    scribe = getDeps().speech?.lastSpeechAt() ?? 0;
+  } catch {
+    /* deps not set yet */
+  }
+  return Math.max(lastUserSpeechAt, scribe);
+}
+
 /** Capture: the expert invited the question Helpy is holding back (raised hand). false = none waiting. */
 export function askWaitingQuestion(): boolean {
   return policy?.askReadyNow() ?? false;
