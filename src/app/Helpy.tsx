@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { useTaskRecording } from '../capture/TaskRecorder'
-import { useDebriefUi } from '../debrief/DebriefPanel'
 import { useListener } from '../integration/listener'
 import { mascot, MascotLayer, setMascotClickHandler } from '../mascot'
 import { mascot as sharedMascot, useMascot } from '../shared/mascot'
@@ -12,7 +11,8 @@ import { panel, usePanel } from './panel/store'
 import { askQuestions } from './panel/questions'
 import { mmss } from './panel/ui'
 import { RecordDialog, recordFlow } from './RecordDialog'
-import { askWaitingQuestion, stopVoice, useVoice } from './voice'
+import { VoiceDebrief, voiceDebrief } from './VoiceDebrief'
+import { askWaitingQuestion, stopVoice } from './voice'
 
 /** Small red light with the time on the robot while it records. */
 function RecordingLight({ startedAt }: { startedAt: number | null }) {
@@ -53,6 +53,7 @@ const NUDGE_AFTER_MS = 40_000
 function onRobotClick() {
   if (!auth.user()) return panel.toggle()
   if (usePanel.getState().activity?.kind === 'recording') return recordFlow.controls()
+  if (voiceDebrief.active()) return voiceDebrief.controls()
   if (recordFlow.active()) return
   panel.toggle()
 }
@@ -135,13 +136,7 @@ export function Helpy({ boundsRef }: { boundsRef?: RefObject<HTMLElement | null>
     if (!signedIn) mascot.reset()
   }, [signedIn])
 
-  // When the debrief closes, the debrief agent is done too.
-  const debriefOpen = useDebriefUi((s) => s.open)
-  useEffect(() => {
-    if (!debriefOpen && useVoice.getState().mode === 'debrief') void stopVoice()
-  }, [debriefOpen])
-
-  // Teach mode can start from Helpy or from the debrief's last screen; the guidance runs in both cases.
+  // Teach mode can start from Helpy or from P3's debrief panel; the guidance runs in both cases.
   const teaching = useSession((s) => s.mode === 'teach' && s.workMap !== null)
 
   const onCaseDone = useCallback(() => {
@@ -165,6 +160,7 @@ export function Helpy({ boundsRef }: { boundsRef?: RefObject<HTMLElement | null>
       />
       <HelpyPanel boundsRef={boundsRef} />
       <RecordDialog />
+      <VoiceDebrief />
       {teaching ? <TeachLayer onCaseDone={onCaseDone} /> : null}
     </>
   )
