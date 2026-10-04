@@ -31,6 +31,45 @@ interface ErpState {
 
 const initialInvoices = () => Object.fromEntries(ALL_INVOICES.map((i) => [i.id, structuredClone(i)]))
 
+/** Fields a change of `field` affects (the GL account follows the cost center). */
+const AFFECTS: Partial<Record<EditableField, string[]>> = { costCenter: ['costCenter', 'account'] }
+
+/**
+ * Teach: guardrail violations a field change just caused (a wrong decision, caught before anything is
+ * posted). Only rules whose unmet condition is about the changed field count: a capex re-coding that still
+ * needs its asset number is not wrong yet, it is the next step.
+ */
+function decisionViolations(invoice: Invoice, field: EditableField): Violation[] {
+  const { mode, workMap } = session()
+  if (mode !== 'teach' || !workMap || !invoice.teachOnly) return []
+  const fields = AFFECTS[field] ?? [field]
+  return evaluateGuardrails(invoice, workMap.guardrails)
+    .filter((v) => v.guardrail.severity === 'block')
+    .map((v) => ({ ...v, failed: v.failed.filter((c) => fields.includes(c.field)) }))
+    .filter((v) => v.failed.length > 0)
+}
+
+function emitViolations(invoiceId: string, violations: Violation[], stage: 'decision' | 'post', fallbackTarget?: string) {
+  const { workMap } = session()
+  for (const v of violations) {
+    emitEvent({
+      source: 'system',
+      kind: 'guardrail_violation',
+      invoiceId,
+      targetId: v.guardrail.stepId ? workMap?.steps.find((s) => s.id === v.guardrail.stepId)?.targetId : fallbackTarget,
+      text: v.guardrail.text,
+      meta: {
+        guardrailId: v.guardrail.id,
+        severity: v.guardrail.severity,
+        quote: v.guardrail.quote,
+        stepId: v.guardrail.stepId,
+        failed: v.failed,
+        stage,
+      },
+    })
+  }
+}
+
 const costCenterLabel = (code: string) => {
   const cc = COST_CENTERS.find((c) => c.code === code)
   return cc ? `${cc.code} ${cc.name} (${cc.account})` : code
@@ -82,6 +121,8 @@ export const useErp = create<ErpState>()((set, get) => {
         to: label(value),
         meta: { field },
       })
+      // A wrong decision is caught as it is made, long before the invoice could be posted.
+      emitViolations(id, decisionViolations(next, field), 'decision', fieldTarget(field))
     },
 
     commit: (id, action, note = '') => {
@@ -93,24 +134,7 @@ export const useErp = create<ErpState>()((set, get) => {
       const { mode, workMap } = session()
       if (mode === 'teach' && action === 'post' && workMap) {
         const violations = evaluateGuardrails(proposed, workMap.guardrails)
-        for (const v of violations) {
-          emitEvent({
-            source: 'system',
-            kind: 'guardrail_violation',
-            invoiceId: id,
-            targetId: v.guardrail.stepId
-              ? workMap.steps.find((s) => s.id === v.guardrail.stepId)?.targetId
-              : actionTarget(action),
-            text: v.guardrail.text,
-            meta: {
-              guardrailId: v.guardrail.id,
-              severity: v.guardrail.severity,
-              quote: v.guardrail.quote,
-              stepId: v.guardrail.stepId,
-              failed: v.failed,
-            },
-          })
-        }
+        emitViolations(id, violations, 'post', actionTarget(action))
         const blocking = violations.filter((v) => v.guardrail.severity === 'block')
         if (blocking.length > 0) {
           set({ blocked: { invoiceId: id, violations: blocking } })

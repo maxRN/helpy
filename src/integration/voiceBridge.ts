@@ -74,7 +74,7 @@ export function toAgentEvents(e: AppEvent): AgentEvent[] {
 
   if (e.kind === 'guardrail_violation') {
     const quote = meta.quote as Quote | undefined
-    return [{ id: e.id, t: e.t, type: e.kind, text: e.text, meta: { guardrailId: meta.guardrailId, rule: e.text, quote: quote?.text, stepId: meta.stepId, invoiceId: e.invoiceId } }]
+    return [{ id: e.id, t: e.t, type: e.kind, text: e.text, meta: { guardrailId: meta.guardrailId, rule: e.text, quote: quote?.text, stepId: meta.stepId, invoiceId: e.invoiceId, stage: meta.stage } }]
   }
 
   if (e.kind === 'sequence_deviation') {

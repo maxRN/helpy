@@ -398,7 +398,7 @@ function wireTutor(deps: Deps): () => void {
       case 'guardrail_violation': {
         if (!allow(`g:${m.guardrailId}`, 15_000)) return;
         conv.sendUserMessage(
-          `[INTERVENE] guardrail ${m.guardrailId ?? '?'}: ${m.rule ?? e.text ?? ''}. ` +
+          `[INTERVENE] ${m.stage === 'decision' ? 'The trainee just made this decision' : 'The trainee tried to post'}, which breaks guardrail ${m.guardrailId ?? '?'}: ${m.rule ?? e.text ?? ''}. ` +
             `Expert quote: "${m.quote ?? ''}". Step: ${m.stepId ?? '?'}. Invoice: ${m.invoiceId ?? '?'}.`,
         );
         emit({ type: 'tutor_intervention', speaker: 'agent', meta: { kind: 'guardrail', ...m } });
