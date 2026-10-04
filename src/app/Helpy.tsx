@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { useTaskRecording } from '../capture/TaskRecorder'
 import { useListener } from '../integration/listener'
+import { activity } from '../shared/activity'
 import { mascot, MascotLayer, setMascotClickHandler } from '../mascot'
 import { mascot as sharedMascot, useMascot } from '../shared/mascot'
 import { useSession } from '../shared/session'
@@ -32,11 +33,26 @@ function RecordingLight({ startedAt }: { startedAt: number | null }) {
   )
 }
 
-/** Helpy has a question but you are busy: a quiet sign above the robot, no sound, no blinking. */
+/** Why a held question is not asked yet: the same signals the pause detector uses (typing, Scribe's open turn). */
+function useWaitReason() {
+  const talking = useListener((s) => s.speaking)
+  const [busy, setBusy] = useState<'typing' | 'mid-step' | null>(null)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = Date.now()
+      setBusy(now - activity.lastTypingAt() < 2500 ? 'typing' : now - activity.lastFieldAt() < 4000 ? 'mid-step' : null)
+    }, 500)
+    return () => clearInterval(timer)
+  }, [])
+  return talking ? 'you’re talking' : busy === 'typing' ? 'you’re typing' : busy === 'mid-step' ? 'you’re mid-step' : 'at your next pause'
+}
+
+/** Helpy has a question but you are busy: a quiet sign above the robot that says why it waits. No sound, no blinking. */
 function QuestionSign() {
+  const why = useWaitReason()
   return (
     <span className="helpy-pop flex items-center gap-1 rounded-full bg-[#f5b83d] px-2 py-0.5 text-[11px] font-bold whitespace-nowrap text-[#3d2a00] shadow-soft">
-      <span aria-hidden>?</span> Question
+      <span aria-hidden>?</span> Question · {why === 'at your next pause' ? why : `waiting, ${why}`}
     </span>
   )
 }

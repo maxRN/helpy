@@ -54,6 +54,17 @@ export function predictionFor(g: Guardrail): Prediction {
   return { guardrail: g, options: [...options.slice(shift), ...options.slice(0, shift)] }
 }
 
+// ---------- intervention ----------
+
+/**
+ * What Helpy says after "Sabine would stop here. Why do you think?": the rule in the expert's own
+ * words (the reason she gave), what the rule is, and what to do instead.
+ */
+export function explainIntervention(wm: WorkMap, g: Guardrail): string {
+  const fix = g.require[0] ? actionPhrase(g.require[0]) : 'Fix it before you post'
+  return `${wm.expert} said: “${g.quote.text}” Here that means: ${fix.charAt(0).toLowerCase()}${fix.slice(1).replace(/\.?$/, '.')}`
+}
+
 // ---------- report ----------
 
 export type Outcome = 'mastered' | 'with_help' | 'caught' | 'not_reached'

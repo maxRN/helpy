@@ -265,6 +265,17 @@ export function askWaitingQuestion(): boolean {
   return policy?.askReadyNow() ?? false;
 }
 
+/**
+ * Capture is ending: ask the live questions still owed (fewer than three, or none about a guardrail), each
+ * at a pause, about decisions still unexplained on screen. Resolves with the coverage reached.
+ */
+export async function wrapUpCapture(opts: { cancelled?: () => boolean; onStart?: (owed: number) => void } = {}) {
+  return (await policy?.wrapUp(opts)) ?? { asked: 0, hasGuardrail: false };
+}
+
+/** Live question coverage so far (null outside Capture). */
+export const captureStats = () => policy?.stats() ?? null;
+
 /** An answer heard outside the agent (Scribe in Capture): goes into the question history like the agent's own. */
 export function noteAnswer(q: Quote): void {
   getDeps().mascot.bubble(null);
@@ -388,7 +399,7 @@ function wireTutor(deps: Deps): () => void {
       case 'guardrail_violation': {
         if (!allow(`g:${m.guardrailId}`, 15_000)) return;
         conv.sendUserMessage(
-          `[INTERVENE] guardrail ${m.guardrailId ?? '?'}: ${m.rule ?? e.text ?? ''}. ` +
+          `[INTERVENE] ${m.stage === 'decision' ? 'The trainee just made this decision' : 'The trainee tried to post'}, which breaks guardrail ${m.guardrailId ?? '?'}: ${m.rule ?? e.text ?? ''}. ` +
             `Expert quote: "${m.quote ?? ''}". Step: ${m.stepId ?? '?'}. Invoice: ${m.invoiceId ?? '?'}.`,
         );
         emit({ type: 'tutor_intervention', speaker: 'agent', meta: { kind: 'guardrail', ...m } });

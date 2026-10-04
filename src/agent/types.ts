@@ -49,6 +49,17 @@ export interface PolicyRequest {
   history: QaRecord[];
   transcriptTail: { speaker: Speaker; text: string }[];
   budget: { questionsLeft: number; forceGuardrail: boolean };
+  /**
+   * What the live questions still have to cover: at least `questionsNeeded` more, a guardrail question if
+   * `guardrailNeeded`, preferably about one of the `unresolvedDecisions`. `mustAsk`: the task is ending and
+   * these questions are owed, so declining is not allowed.
+   */
+  coverage?: {
+    questionsNeeded: number;
+    guardrailNeeded: boolean;
+    unresolvedDecisions: { id: string; t: number; text: string }[];
+    mustAsk?: boolean;
+  };
   /** Language Helpy speaks with the expert (they can ask for German). Default English. */
   language?: 'de' | 'en';
   /** What is visible right now, with the age of each source (see src/shared/screen.ts). */

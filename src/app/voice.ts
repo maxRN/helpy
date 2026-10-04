@@ -6,7 +6,7 @@ import { resumeAudio } from '../integration/audioUnlock'
 import { getEventLog } from '../shared/bus'
 import { ungroundedInvoiceRefs } from '../shared/grounding'
 import { screenSummary } from '../shared/screen'
-import { startListening, stopListening } from '../integration/listener'
+import { speech, startListening, stopListening } from '../integration/listener'
 import { installVoiceBridge, resetVoiceClock } from '../integration/voiceBridge'
 import { mascot } from '../mascot'
 import { useMascot } from '../shared/mascot'
@@ -164,6 +164,29 @@ export async function askAloud(question: string): Promise<string | null> {
 export async function teachBackAloud(text: string): Promise<{ confirmed: boolean; correction?: string } | null> {
   const voice = await load()
   return voice.isConnected() ? voice.teachBack(text) : null
+}
+
+/**
+ * Capture is ending: Helpy asks the live questions it still owes (at least three, one about a guardrail),
+ * about decisions it saw but nobody explained, each at a pause. No-op without a live voice session.
+ */
+export async function wrapUpLiveQuestions(cancelled: () => boolean) {
+  const voice = await load()
+  // Without ears (Scribe) Helpy could ask but never hear the answer: no wrap-up then.
+  if (!voice.isActive() || !speech.active()) return null
+  const lang = session().language
+  return voice.wrapUpCapture({
+    cancelled,
+    onStart: (owed) => {
+      const line =
+        lang === 'de'
+          ? owed === 1 ? 'Bevor du aufhörst: noch eine kurze Frage zu dem, was ich gesehen habe.' : `Bevor du aufhörst: noch ${owed} kurze Fragen zu dem, was ich gesehen habe.`
+          : owed === 1 ? 'Before you stop: one quick question about what I saw.' : `Before you stop: ${owed} quick questions about what I saw.`
+      mascot.setState('speaking')
+      mascot.bubble(line)
+      void speak(line)
+    },
+  })
 }
 
 /** Capture: ask the question Helpy is holding back (its raised hand), now. */

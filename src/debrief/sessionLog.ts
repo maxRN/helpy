@@ -1,6 +1,7 @@
 // Turns the session's AppEvents into the plain log the debrief models read.
 import { describeScreenEvent } from '../integration/voiceBridge'
 import type { LogLine } from '../server/debrief'
+import { withoutOffRecord } from '../shared/privacy'
 import type { AppEvent } from '../shared/types'
 
 const SCREEN_KINDS = new Set<AppEvent['kind']>(['invoice_opened', 'field_changed', 'action'])
@@ -21,7 +22,8 @@ export function needsGuardrailQuestion(events: readonly AppEvent[]): boolean {
 
 export function toLogLines(events: readonly AppEvent[]): LogLine[] {
   const lines: LogLine[] = []
-  for (const e of events) {
+  // What happened off the record never reaches the debrief, the Work Map or Helpy's answers.
+  for (const e of withoutOffRecord(events)) {
     let line: LogLine | null = null
     if ((e.source === 'dom' || (e.source === 'vision' && !e.meta?.confirms)) && SCREEN_KINDS.has(e.kind)) {
       const text = describeScreenEvent(e)

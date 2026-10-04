@@ -6,9 +6,10 @@ const BodySchema = z.object({
   sessionId: z.string().min(1),
   log: z.array(LogLineSchema).min(1),
   expert: z.string().default('Sabine'),
+  corrections: z.array(z.string()).default([]),
 })
 
-// POST /api/workmap  { sessionId, log, expert? } → { workMap: WorkMap, warnings: string[] }
+// POST /api/workmap  { sessionId, log, expert?, corrections? } → { workMap: WorkMap, warnings: string[] }
 export const Route = createFileRoute('/api/workmap')({
   server: {
     handlers: {
@@ -16,7 +17,7 @@ export const Route = createFileRoute('/api/workmap')({
         const parsed = BodySchema.safeParse(await request.json().catch(() => null))
         if (!parsed.success) return Response.json({ error: 'Body must be { sessionId, log: LogLine[] }' }, { status: 400 })
         try {
-          return Response.json(await buildWorkMap(parsed.data.sessionId, parsed.data.log, parsed.data.expert))
+          return Response.json(await buildWorkMap(parsed.data.sessionId, parsed.data.log, parsed.data.expert, parsed.data.corrections))
         } catch (err) {
           if (err instanceof NotEnoughWorkError) return Response.json({ error: err.message }, { status: 422 })
           console.error('[workmap]', err)

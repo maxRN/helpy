@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import { api } from '../../convex/_generated/api'
 import type { Doc } from '../../convex/_generated/dataModel'
 import { bus } from '../shared/bus'
+import { keepWhileOffRecord } from '../shared/privacy'
 import { session } from '../shared/session'
 import type { AppEvent } from '../shared/types'
 import type { Invoice } from './model'
@@ -45,6 +46,8 @@ export function ConvexSync() {
   // Every AppEvent of the session goes to the database (P3 can read it server-side).
   useEffect(() => {
     const onEvent = (e: AppEvent) => {
+      // Off the record: nothing that happens is stored (only the markers, which hold no content).
+      if (!keepWhileOffRecord(e, session().offRecord)) return
       void appendEvent({ sessionId: session().sessionId, event: e }).catch((err) =>
         console.error('[convex] append event failed', err),
       )

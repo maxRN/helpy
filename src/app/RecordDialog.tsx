@@ -14,7 +14,7 @@ import { auth } from './auth'
 import { helpyApp } from './helpy-app/store'
 import { panel } from './panel/store'
 import { UNNAMED } from './recordName'
-import { askWaitingQuestion, setOffRecord, startVoice } from './voice'
+import { askWaitingQuestion, setOffRecord, startVoice, wrapUpLiveQuestions } from './voice'
 
 // "Record what I do" without a window: Helpy asks in its bubble what to call the task (typed, so nothing
 // said to Helpy ends up as the name), then sharing the screen and the microphone starts. No spoken intro:
@@ -74,6 +74,9 @@ function notNow() {
   mascot.setState('idle')
   mascot.bubble('Okay, another time.')
 }
+
+/** "I'm done" while Helpy still asks its owed live questions; a second "I'm done" skips them. */
+let wrapUp: { skip: boolean } | null = null
 
 /** Runs the dialog. Mounted once by Helpy (it needs the recorder and Convex hooks). */
 export function RecordDialog() {
@@ -179,7 +182,21 @@ export function RecordDialog() {
   }, [step, model, pii])
 
   const done = async () => {
+    if (wrapUp) {
+      wrapUp.skip = true // clicked again while Helpy asks its last questions: finish now
+      return
+    }
     if (session().offRecord) await setOffRecord(false)
+    // Fewer than three live questions so far (or none about a guardrail): ask them now, at pauses.
+    const current = { skip: false }
+    wrapUp = current
+    try {
+      await wrapUpLiveQuestions(() => current.skip)
+    } catch (err) {
+      console.warn('[helpy] wrap-up questions failed', err)
+    } finally {
+      wrapUp = null
+    }
     mascot.setState('thinking')
     mascot.bubble('Finishing the recording…')
     await finish()
@@ -198,6 +215,12 @@ export function RecordDialog() {
   // Clicked during a recording: pause, ask the waiting question, or finish, right in the bubble.
   useEffect(() => {
     if (!controlsAt || recorder.kind === 'idle') return
+    if (wrapUp) {
+      mascot.bubble('I’m asking my last questions about what I saw.', {
+        actions: [{ label: 'Skip and finish', primary: true, onClick: () => void done() }],
+      })
+      return
+    }
     const offRecord = session().offRecord
     const waiting = useMascot.getState().waiting !== null
     // Scribe (live listening): say when Helpy can't hear, so nobody talks into the void.

@@ -55,7 +55,13 @@ export async function startTeach(workMap: WorkMap): Promise<TeachStart> {
   const warnings: string[] = []
   try {
     const compiled = await compile(workMap.guardrails)
-    guardrails = compiled.guardrails
+    // Only the conditions and severity come from compiling; everything else (the expert's quote and how she
+    // said it, the screen moment) stays as the Work Map has it, because the Work Map is saved again below.
+    const byId = new Map(compiled.guardrails.map((g) => [g.id, g]))
+    guardrails = workMap.guardrails.map((g) => {
+      const c = byId.get(g.id)
+      return c ? { ...g, when: c.when, require: c.require, severity: c.severity } : g
+    })
     warnings.push(...compiled.warnings)
   } catch (err) {
     warnings.push(`Guardrails were not recompiled (${err instanceof Error ? err.message : String(err)}); using the Work Map as is.`)

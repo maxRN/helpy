@@ -10,7 +10,8 @@ import { getEventLog } from '../shared/bus'
 import { scrubUngroundedInvoices, ungroundedInvoiceRefs } from '../shared/grounding'
 import { mascot as sharedMascot } from '../shared/mascot'
 import { session, useSession } from '../shared/session'
-import type { AppEvent, Gap, Quote, WorkMap } from '../shared/types'
+import type { AppEvent } from '../shared/types'
+import { runDebriefFlow } from './debriefFlow'
 import { panel } from './panel/store'
 import { startVoice, stopVoice } from './voice'
 
@@ -18,8 +19,6 @@ import { startVoice, stopVoice } from './voice'
 // Same steps as P3's debrief (gaps -> answers -> Work Map -> teach-back -> confirmation), but before every
 // question Helpy waits until nobody is talking or typing, then asks it out loud through the interviewer agent.
 
-const MAX_QUESTIONS = 6
-const MAX_TEACHBACK_ROUNDS = 3
 /** Quiet means: no keyboard or mouse for this long, and nobody speaking for this long. */
 const QUIET_INPUT_MS = 2500
 const QUIET_SPEECH_MS = 1500
@@ -114,10 +113,6 @@ async function debrief(convex: ConvexReactClient) {
   const log = async () => toLogLines(await events())
   // The brief requires a guardrail question: if none came during the task, the debrief starts with one.
   const needGuardrail = needsGuardrailQuestion(await events())
-  const relNow = () => {
-    const t0 = session().t0
-    return t0 === null ? 0 : Date.now() - t0
-  }
 
   panel.close()
   setPhase('finding')
@@ -132,75 +127,66 @@ async function debrief(convex: ConvexReactClient) {
     return
   }
 
-  // 1. Questions, one at a time, each at a pause.
-  let asked = 0
-  while (asked < MAX_QUESTIONS && !run?.stopped) {
-    setPhase('finding')
-    const res = await post<{ gaps: Gap[]; done: boolean; doneReason?: string; notEnoughWork?: boolean }>('/api/debrief/gaps', { log: await log(), asked, needGuardrail })
-    // Too little of the task was recorded: say so instead of inventing questions or a Work Map.
-    if (res.notEnoughWork) {
-      setPhase('idle')
-      mascot.setState('idle')
-      mascot.bubble(res.doneReason ?? 'I saw too little work on screen. Record the task again.')
-      if (voice.isConnected()) void voice.say(res.doneReason ?? 'I saw too little work on screen. Please record the task again.').catch(() => undefined)
-      return
-    }
-    if (res.done || res.gaps.length === 0) break
-    for (const gap of res.gaps) {
-      if (asked >= MAX_QUESTIONS || run?.stopped) break
-      // Grounding: a question about an invoice that does not exist is never asked.
-      if (ungroundedInvoiceRefs(gap.question).length) {
-        console.warn('[helpy] skipped a debrief question about an unknown invoice:', gap.question)
-        continue
-      }
-      setPhase('asking')
+  const outcome = await runDebriefFlow({
+    sessionId,
+    needGuardrail,
+    log,
+    post,
+    ask: async (question) => {
       mascot.bubble(null)
       mascot.setState('listening')
-      await waitForQuiet(gap.question)
-      if (run?.stopped) return
-      if (!takeSkip()) await interruptible(voice.ask(gap.question)) // no answer or skipped: go on
+      if (takeSkip()) return null
+      const answer = await interruptible(voice.ask(question)) // no answer or skipped: go on
       takeSkip()
-      asked += 1
-    }
-  }
-  if (run?.stopped) return
+      return answer?.text?.trim() || null
+    },
+    teachBack: async (text) => {
+      mascot.bubble('Here’s how I understood it. Tell me if something is wrong.')
+      return interruptible(voice.teachBack(text))
+    },
+    say: async (text) => {
+      mascot.setState('speaking')
+      mascot.bubble(text)
+      await interruptible(voice.say(text))
+    },
+    waitForQuiet,
+    stopped: () => !!run?.stopped,
+    grounded: (question) => {
+      // Grounding: a question about an invoice that does not exist is never asked.
+      if (!ungroundedInvoiceRefs(question).length) return true
+      console.warn('[helpy] skipped a debrief question about an unknown invoice:', question)
+      return false
+    },
+    scrub: scrubUngroundedInvoices,
+    now: () => {
+      const t0 = session().t0
+      return t0 === null ? 0 : Date.now() - t0
+    },
+    phase: (p) => {
+      if (p === 'asking') return setPhase('asking')
+      if (p === 'teachback') return setPhase('teachback')
+      setPhase(p === 'finding' ? 'finding' : 'building')
+      mascot.setState('thinking')
+      if (p === 'building') mascot.bubble('Thank you! I’m writing down how you work…')
+    },
+  })
 
-  // 2. The Work Map, told back until the expert says it is right (or stops correcting).
-  setPhase('building')
-  mascot.setState('thinking')
-  mascot.bubble('Thank you! I’m writing down how you work…')
-  let workMap = (await post<{ workMap: WorkMap }>('/api/workmap', { sessionId, log: await log() })).workMap
-  const corrections: Quote[] = []
-  let text = ''
-  let confirmed = false
-  for (let round = 0; round < MAX_TEACHBACK_ROUNDS && !run?.stopped; round++) {
-    text = scrubUngroundedInvoices((await post<{ text: string }>('/api/debrief/teachback', { workMap })).text)
-    setPhase('teachback')
-    mascot.bubble('Here’s how I understood it. Tell me if something is wrong.')
-    await waitForQuiet('Here’s how I understood it.')
-    const verdict = await interruptible(voice.teachBack(text))
-    if (!verdict || run?.stopped) break
-    if (verdict.confirmed) {
-      confirmed = true
-      break
-    }
-    // "(no response)" / "(session ended)" are not corrections.
-    if (!verdict.correction || verdict.correction.startsWith('(')) break
-    corrections.push({ text: verdict.correction, t: relNow(), speaker: 'expert' })
-    setPhase('building')
-    mascot.setState('thinking')
-    mascot.bubble('Thanks, I’m fixing that…')
-    workMap = (await post<{ workMap: WorkMap }>('/api/workmap', { sessionId, log: await log() })).workMap
+  if (outcome.kind === 'stopped') return
+  if (outcome.kind === 'not_enough_work') {
+    setPhase('idle')
+    mascot.setState('idle')
+    mascot.bubble(outcome.reason || 'I saw too little work on screen. Record the task again.')
+    if (voice.isConnected()) void voice.say(outcome.reason || 'I saw too little work on screen. Please record the task again.').catch(() => undefined)
+    return
   }
-  if (run?.stopped) return
 
-  // 3. Saved either way, so nothing is lost; unconfirmed it stays "Has questions" for another round.
-  const final: WorkMap = { ...workMap, teachback: { text, confirmed, corrections } }
+  // Saved either way, so nothing is lost; unconfirmed it stays "Has questions" for another round.
+  const final = outcome.workMap
   useSession.getState().setWorkMap(final)
   erpSync()?.saveWorkMap(final.sessionId, final)
   setPhase('idle')
   await stopVoice()
-  if (confirmed) {
+  if (outcome.confirmed) {
     mascot.setState('speaking')
     mascot.pose('cheer', 2200)
     mascot.bubble(`Got it, thank you! Now your team can learn “${final.task}” from you.`)

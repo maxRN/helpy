@@ -1,3 +1,4 @@
+import { fallbackQuestion, isDuplicateQuestion, unresolvedDecisions } from './coverage';
 import { emit, getDeps, nowRel } from './deps';
 import { isPause, logPause, type PauseInputs, type PauseResult } from './pause';
 import {
@@ -14,21 +15,22 @@ import {
 // "Ask less, later": a handful of live questions, the rest waits for the debrief.
 // A demo recording lasts a few minutes, so the gap between two questions is 30 s, not minutes.
 export const POLICY_LIMITS = {
+  /** The brief's bar: at least three live questions per task, at least one about a guardrail. */
+  minQuestions: 3,
   maxQuestions: 5,
   minGapMs: 30_000,
   guardrailByQuestion: 1, // the brief requires a guardrail question: if the first was not one, the second must be
 } as const;
 
 const MAX_PENDING = 40;
+const MAX_SEEN = 200;
+/** Wrap-up: how long Helpy waits for a pause, and for the answer, per owed question. */
+const WRAP_PAUSE_WAIT_MS = 20_000;
+const WRAP_ANSWER_WAIT_MS = 30_000;
 // Thinking ahead: shortly after new screen events (so a question is ready by the pause; one model call
 // takes 1.5-2.5 s), with a slow periodic check as a fallback.
 const PREPARE_AFTER_EVENT_MS = 1200;
 const PREPARE_EVERY_MS = 8000;
-const FALLBACK_GUARDRAIL = {
-  en: ['Is there a limit on this step?', 'When would you stop and ask someone?'],
-  de: ['Gibt es bei diesem Schritt eine Grenze?', 'Wann würdest du aufhören und jemanden fragen?'],
-};
-
 type ReadyQuestion = { question: string; kind: QuestionKind; eventId?: string };
 
 /** What deliver() gets to say a question at the right moment. */
@@ -57,6 +59,7 @@ export function createQuestionPolicy(o: PolicyOpts) {
   const endpoint = o.endpoint ?? '/api/policy';
 
   let pending: AppEvent[] = []; // screen events not yet covered by a question
+  const seen: AppEvent[] = []; // every screen event of the task (on the record), for coverage and the wrap-up
   const history: QaRecord[] = [];
   let asked = 0;
   let lastAskedAt = 0;
@@ -64,6 +67,9 @@ export function createQuestionPolicy(o: PolicyOpts) {
   let lastEvaluated: string | null = null; // newest event id we already evaluated and declined
   let ready: ReadyQuestion | null = null; // prepared while the expert was busy, asked at the next pause
   let delivering: ReadyQuestion | null = null; // being spoken right now: never a second time in parallel
+  let disposed = false;
+  let wrapping = false; // the wrap-up asks the owed questions itself
+  let answerWaiter: (() => void) | null = null;
 
   let prepareSoon: ReturnType<typeof setTimeout> | undefined;
   const off = deps.bus.on('*', (e) => {
@@ -71,6 +77,8 @@ export function createQuestionPolicy(o: PolicyOpts) {
     if (o.getInputs().offRecord) return;
     pending.push(e);
     if (pending.length > MAX_PENDING) pending.shift();
+    seen.push(e);
+    if (seen.length > MAX_SEEN) seen.shift();
     clearTimeout(prepareSoon);
     prepareSoon = setTimeout(prepareAhead, PREPARE_AFTER_EVENT_MS);
   });
@@ -92,13 +100,8 @@ export function createQuestionPolicy(o: PolicyOpts) {
       console.warn('[policy] request failed', err);
       if (req.budget.forceGuardrail) {
         const last = req.events[req.events.length - 1];
-        return {
-          ask: true,
-          question: FALLBACK_GUARDRAIL[req.language ?? 'en'][asked % 2],
-          eventId: last?.id,
-          kind: 'guardrail',
-          reason: 'fallback',
-        };
+        const event = seen.find((e) => e.id === last?.id);
+        return { ask: true, question: fallbackQuestion(event, 'guardrail', req.language), eventId: last?.id, kind: 'guardrail', reason: 'fallback' };
       }
       return { ask: false, reason: 'policy unavailable' };
     }
@@ -111,16 +114,28 @@ export function createQuestionPolicy(o: PolicyOpts) {
     return null;
   };
 
-  /** One model call over the pending screen events. null = nothing worth asking. */
-  async function think(): Promise<ReadyQuestion | null> {
-    const newest = pending[pending.length - 1].id;
-    const force = asked >= POLICY_LIMITS.guardrailByQuestion && !hasGuardrail();
+  const coverage = () => ({
+    questionsNeeded: Math.max(0, POLICY_LIMITS.minQuestions - asked),
+    guardrailNeeded: !hasGuardrail(),
+    unresolvedDecisions: unresolvedDecisions(seen, history)
+      .slice(-8)
+      .map((e) => ({ id: e.id, t: e.t, text: e.text as string })),
+  });
+
+  /**
+   * One model call over screen events (default: the pending ones). null = nothing worth asking.
+   * `mustAsk`: questions are owed (wrap-up), so the model may not decline.
+   */
+  async function think(events: AppEvent[] = pending, mustAsk = false): Promise<ReadyQuestion | null> {
+    const newest = events[events.length - 1].id;
+    const force = (asked >= POLICY_LIMITS.guardrailByQuestion || mustAsk) && !hasGuardrail();
     const req: PolicyRequest = {
       // Oldest first by screen time: a vision event can arrive after a newer ERP event.
-      events: [...pending].sort((a, b) => a.t - b.t).map((e) => ({ id: e.id, t: e.t, text: e.text as string })),
+      events: [...events].sort((a, b) => a.t - b.t).map((e) => ({ id: e.id, t: e.t, text: e.text as string })),
       history,
       transcriptTail: o.tail(8),
       budget: { questionsLeft: POLICY_LIMITS.maxQuestions - asked, forceGuardrail: force },
+      coverage: { ...coverage(), mustAsk },
       language: deps.language?.() ?? 'en',
       screen: deps.screen?.(),
     };
@@ -137,7 +152,15 @@ export function createQuestionPolicy(o: PolicyOpts) {
       note(`dropped, names unknown invoice ${ungrounded.join(', ')}: ${res.question}`);
       return null;
     }
-    return { question: res.question, kind: res.kind ?? (force ? 'guardrail' : 'why'), eventId: res.eventId };
+    // Never the same question twice, even reworded.
+    if (isDuplicateQuestion(res.question, history)) {
+      lastEvaluated = newest;
+      note(`dropped, already asked: ${res.question}`);
+      return null;
+    }
+    // The question must be about one of the events it was given (screen grounding).
+    const eventId = events.some((e) => e.id === res.eventId) ? res.eventId : newest;
+    return { question: res.question, kind: res.kind ?? (force ? 'guardrail' : 'why'), eventId };
   }
 
   /** Hold a question until the next pause; Helpy raises a hand meanwhile. */
@@ -161,6 +184,8 @@ export function createQuestionPolicy(o: PolicyOpts) {
     lastAskedAt = Date.now();
     pending = [];
     lastEvaluated = null;
+    answerWaiter?.();
+    answerWaiter = null;
 
     deps.mascot.setState('speaking');
     deps.mascot.bubble(q.question);
@@ -198,7 +223,7 @@ export function createQuestionPolicy(o: PolicyOpts) {
 
   /** Called by the pause loop. Safe to call repeatedly. */
   async function onPause(_r: PauseResult): Promise<void> {
-    if (delivering) return;
+    if (delivering || wrapping) return;
     if (ready) return askNow(ready);
     if (inFlight) return;
     const why = canAsk(Date.now());
@@ -251,15 +276,93 @@ export function createQuestionPolicy(o: PolicyOpts) {
   /** Attach the expert's answer to the latest question (for the next policy call). */
   function recordAnswer(q: Quote): void {
     const last = history[history.length - 1];
-    if (last && !last.answer) last.answer = q.text;
+    if (last && !last.answer) {
+      last.answer = q.text;
+      answerWaiter?.();
+      answerWaiter = null;
+    }
+  }
+
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  /** Resolves when `ok()` holds (checked every 250 ms), or false after `ms` or when cancelled. */
+  async function until(ok: () => boolean, ms: number, cancelled: () => boolean): Promise<boolean> {
+    const end = Date.now() + ms;
+    while (!ok()) {
+      if (disposed || cancelled() || Date.now() >= end) return false;
+      await sleep(250);
+    }
+    return true;
+  }
+
+  /** The next question still owed at the end of the task: the model's choice, or a grounded fallback. */
+  async function owedQuestion(): Promise<ReadyQuestion | null> {
+    const open = unresolvedDecisions(seen, history);
+    const events = open.length ? open : seen.filter((e) => !history.some((h) => h.eventId === e.id));
+    if (!events.length) return null;
+    const needGuardrail = !hasGuardrail();
+    const fromModel = await think(events, true);
+    if (fromModel && (!needGuardrail || fromModel.kind === 'guardrail')) return fromModel;
+    // Without a usable model answer: a question built from the newest open decision, never one already asked.
+    const lang = deps.language?.() ?? 'en';
+    const kinds: QuestionKind[] = needGuardrail ? ['guardrail'] : ['why', 'guardrail', 'exception'];
+    for (const e of [...events].reverse())
+      for (const kind of kinds) {
+        const question = fallbackQuestion(e, kind, lang);
+        if (!isDuplicateQuestion(question, history)) return { question, kind, eventId: e.id };
+      }
+    return null;
+  }
+
+  /**
+   * Capture is ending. If fewer than the minimum questions (or no guardrail question) were asked, Helpy
+   * asks the owed ones now about decisions still unexplained on screen, each at a pause, waiting for the
+   * answer. Resolves with the coverage reached. `cancelled()` (e.g. "I'm done" clicked again) stops it.
+   */
+  async function wrapUp(opts: { cancelled?: () => boolean; onStart?: (owed: number) => void } = {}): Promise<{ asked: number; hasGuardrail: boolean }> {
+    const cancelled = opts.cancelled ?? (() => false);
+    const owed = () => (asked < POLICY_LIMITS.minQuestions || !hasGuardrail()) && asked < POLICY_LIMITS.maxQuestions;
+    clearInterval(prepare);
+    clearTimeout(prepareSoon);
+    wrapping = true;
+    try {
+      return await askOwed(cancelled, owed, opts.onStart);
+    } finally {
+      wrapping = false;
+    }
+  }
+
+  async function askOwed(cancelled: () => boolean, owed: () => boolean, onStart?: (owed: number) => void) {
+    let announced = false;
+    while (owed() && !disposed && !cancelled() && !o.getInputs().offRecord) {
+      const before = asked;
+      // A question held back during the task (raised hand) is the most natural one: it goes first.
+      const q = ready ?? (await owedQuestion());
+      if (!q || cancelled()) break;
+      if (!announced) {
+        announced = true;
+        onStart?.(Math.max(POLICY_LIMITS.minQuestions - asked, 1));
+      }
+      if (!(await until(() => isPause(o.getInputs()).pause && !delivering, WRAP_PAUSE_WAIT_MS, cancelled))) break;
+      await askNow(q);
+      if (asked === before) break; // not said (the expert became busy and stayed busy)
+      const answered = new Promise<void>((r) => (answerWaiter = r));
+      if (!history[history.length - 1]?.answer) await Promise.race([answered, sleep(WRAP_ANSWER_WAIT_MS)]);
+      answerWaiter = null;
+      note(`wrap-up asked (${q.kind}): ${q.question}`);
+    }
+    return { asked, hasGuardrail: hasGuardrail() };
   }
 
   return {
     onPause,
     askReadyNow,
     recordAnswer,
-    stats: () => ({ asked, hasGuardrail: hasGuardrail(), history: [...history], waiting: ready?.question ?? null }),
+    wrapUp,
+    stats: () => ({ asked, hasGuardrail: hasGuardrail(), history: [...history], waiting: ready?.question ?? null, coverage: coverage() }),
     dispose: () => {
+      disposed = true;
+      answerWaiter?.();
       off();
       clearInterval(prepare);
       clearTimeout(prepareSoon);

@@ -1,8 +1,10 @@
 // Server only. Debrief: find what is still unclear, build the Work Map, write the teach-back.
 import { z } from 'zod'
+import { isDuplicateQuestion } from '../agent/coverage'
 import { catalogForPrompt, TARGET_IDS } from '../erp/catalog'
+import { clipAround } from '../workmap/moments'
 import { conciseProcessName } from '../shared/processName'
-import type { Gap, Guardrail, Quote, Step, WorkMap } from '../shared/types'
+import type { Gap, Guardrail, Quote, ScreenMoment, Step, WorkMap } from '../shared/types'
 import { generateJson, MODELS } from './anthropic'
 
 /** One line of the session as the models see it. `who` = screen | expert | agent. */
@@ -14,8 +16,8 @@ export const LogLineSchema = z.object({
 export type LogLine = z.infer<typeof LogLineSchema>
 
 export const MAX_DEBRIEF_QUESTIONS = 6
-const CLIP_BEFORE_MS = 8000
-const CLIP_AFTER_MS = 8000
+/** The brief's bar: at least three follow-up questions that were not answered during the task. */
+export const MIN_DEBRIEF_QUESTIONS = 3
 
 const mmss = (ms: number) => {
   const s = Math.max(0, Math.floor(ms / 1000))
@@ -28,7 +30,7 @@ export const formatLog = (log: LogLine[]) =>
     .map((l) => `[${mmss(l.t)} | t=${l.t}] ${l.who.toUpperCase()}: ${l.text}`)
     .join('\n')
 
-export const clipAround = (t: number) => ({ start: Math.max(0, t - CLIP_BEFORE_MS), end: t + CLIP_AFTER_MS })
+export { clipAround }
 
 const normalize = (s: string) =>
   s
@@ -43,6 +45,43 @@ export function findExpertQuote(log: LogLine[], text: string): Quote | null {
   if (needle.length < 8) return null
   const line = log.find((l) => l.who === 'expert' && normalize(l.text).includes(needle))
   return line ? { text: text.trim(), t: line.t, speaker: 'expert' } : null
+}
+
+// ------------------------------------------------------------------ screen moments
+
+/** A step is linked to a screen event inside its time range, or at most this far outside it. */
+const STEP_MOMENT_SLACK_MS = 20_000
+/** A rule explained live is linked to the last screen change at most this long before the expert said it. */
+const RULE_LOOKBACK_MS = 90_000
+
+const isDecisionLine = (l: LogLine) => /→|put on hold|second approval/.test(l.text)
+const asMoment = (l: LogLine | undefined): ScreenMoment | null => (l ? { t: l.t, event: l.text } : null)
+
+/** The real screen event behind a step: inside [start, end] (a decision first), else the nearest within the slack. */
+export function stepMoment(log: LogLine[], start: number, end: number): ScreenMoment | null {
+  const screen = log.filter((l) => l.who === 'screen')
+  const inside = screen.filter((l) => l.t >= start && l.t <= end)
+  if (inside.length) return asMoment(inside.find(isDecisionLine) ?? inside[0])
+  const dist = (l: LogLine) => (l.t < start ? start - l.t : l.t - end)
+  const near = screen.filter((l) => dist(l) <= STEP_MOMENT_SLACK_MS).sort((a, b) => dist(a) - dist(b))
+  return asMoment(near[0])
+}
+
+/** The screen change the expert was explaining: the last one before `t` (a decision first), within the lookback. */
+export function momentBefore(log: LogLine[], t: number): ScreenMoment | null {
+  const before = log.filter((l) => l.who === 'screen' && l.t <= t && t - l.t <= RULE_LOOKBACK_MS)
+  return asMoment([...before].reverse().find(isDecisionLine) ?? before[before.length - 1])
+}
+
+/** How the expert came to say `quote`: a live question, the debrief, a teach-back correction, or unprompted. */
+export function quoteVia(log: LogLine[], quote: Quote, corrections: readonly string[] = []): NonNullable<Quote['via']> {
+  const said = normalize(quote.text)
+  if (corrections.some((c) => normalize(c).includes(said) || said.includes(normalize(c)))) return 'teachback'
+  const captureEnd = Math.max(0, ...log.filter((l) => l.who === 'screen').map((l) => l.t))
+  const sorted = [...log].sort((a, b) => a.t - b.t)
+  const prev = sorted.filter((l) => l.t < quote.t && l.who !== 'screen').pop()
+  if (prev?.who === 'agent' && prev.text.trim().endsWith('?')) return quote.t > captureEnd ? 'debrief' : 'live_question'
+  return quote.t > captureEnd ? 'debrief' : 'narration'
 }
 
 // ------------------------------------------------------------------ gaps
@@ -80,7 +119,11 @@ Rules:
 - Never ask what the log already answers. Never repeat an earlier question.
 - aboutT: the t (ms) of the screen moment the question is about, copied from the log; for unseen cases use the closest related moment.
 - Order by importance. At most 3 questions per round.
-- done = true when every decision has a reason and every judgment call has its guardrail (or the expert said there is none). Say why in doneReason.`
+- "Required new questions" in the request: while it is above 0 you MUST return at least that many new questions and done = false.
+  Good debrief questions then are rule checks, exceptions, unseen cases and who decides; never a question the live questions already covered.
+- done = true when every decision has a reason and every judgment call has its guardrail (or the expert said there is none).
+- doneReason: one or two short spoken sentences in first person, why you now understand the process (what is covered) or what is still open, e.g.
+  "I think I've got it: every decision has a reason now, and you told me when to stop and ask Weber." Never mention ids or codes.`
 
 export class NotEnoughWorkError extends Error {
   constructor() {
@@ -96,53 +139,159 @@ export const hasEnoughWork = (log: LogLine[]) => log.filter((l) => l.who === 'sc
 export const NOT_ENOUGH_WORK =
   'I saw too little work on screen to ask good questions. Record the task again and work through a few invoices while you explain.'
 
-/** The brief: "The debrief asks at least three follow-up questions that were not answered during the task." */
-export const MIN_DEBRIEF_QUESTIONS = 3
+/** A debrief question already asked in this debrief, and whether the expert answered it. */
+export const AskedGapSchema = z.object({ question: z.string(), answered: z.boolean() })
+export type AskedGap = z.infer<typeof AskedGapSchema>
 
+/** A question asked live during the task (agent line) and whether the expert answered before the next agent line. */
+export interface LiveQuestion {
+  question: string
+  t: number
+  answered: boolean
+}
+
+/** The live questions of the task: agent questions in the log that were not asked in this debrief. */
+export function liveQuestions(log: LogLine[], debrief: readonly AskedGap[] = []): LiveQuestion[] {
+  const sorted = [...log].sort((a, b) => a.t - b.t)
+  const out: LiveQuestion[] = []
+  sorted.forEach((l, i) => {
+    if (l.who !== 'agent' || !l.text.trim().endsWith('?')) return
+    if (debrief.some((d) => d.question.trim() === l.text.trim())) return
+    const next = sorted.slice(i + 1).find((x) => x.who !== 'screen')
+    out.push({ question: l.text.trim(), t: l.t, answered: next?.who === 'expert' })
+  })
+  return out
+}
+
+export interface GapsResult {
+  gaps: Gap[]
+  done: boolean
+  doneReason: string
+  notEnoughWork?: boolean
+  /** How many more debrief questions are required before the debrief may end. */
+  required: number
+  /** The live questions the debrief must not repeat. */
+  live: LiveQuestion[]
+}
+
+const DECISION = /→|put on hold|second approval/
+
+/**
+ * Last resort when the model gives too few usable questions while some are still required: short spoken
+ * questions about exceptions, stop-and-ask moments and unseen cases, each tied to a real screen moment
+ * of the log. They ask; they never state a fact about the process.
+ */
+export function fallbackGaps(log: LogLine[], count: number, avoid: readonly { question: string }[], idStart: number): Gap[] {
+  const screen = log.filter((l) => l.who === 'screen')
+  const decisions = screen.filter((l) => DECISION.test(l.text))
+  const at = (decisions[decisions.length - 1] ?? screen[screen.length - 1])?.t ?? 0
+  const first = (decisions[0] ?? screen[0])?.t ?? at
+  const candidates: { question: string; kind: Gap['kind']; t: number }[] = [
+    { question: 'Looking at that moment again: when would you not do it the way you just did?', kind: 'exception', t: at },
+    { question: 'When do you stop on an invoice like this and ask someone, and who is that?', kind: 'guardrail', t: first },
+    { question: 'What do you do with an invoice from a supplier you have never seen before?', kind: 'unseen_case', t: first },
+    { question: 'What if the amount were just under one of your limits? Would you still do the same?', kind: 'unseen_case', t: at },
+    { question: 'Is there anything you would never do with an invoice like this one?', kind: 'guardrail', t: at },
+  ]
+  const out: Gap[] = []
+  for (const c of candidates) {
+    if (out.length >= count) break
+    if (isDuplicateQuestion(c.question, [...avoid, ...out])) continue
+    out.push({ id: `gap-${idStart + out.length + 1}`, question: c.question, kind: c.kind, clip: clipAround(c.t) })
+  }
+  return out
+}
+
+const describeAsked = (live: LiveQuestion[], debrief: readonly AskedGap[]) =>
+  [
+    'Live questions already asked during the task (do not repeat them):',
+    ...(live.length ? live.map((q) => `- ${q.question} (${q.answered ? 'answered' : 'not answered'})`) : ['- none']),
+    'Debrief questions already asked (do not repeat them):',
+    ...(debrief.length ? debrief.map((q) => `- ${q.question} (${q.answered ? 'answered' : 'skipped'})`) : ['- none']),
+  ].join('\n')
+
+/**
+ * The next debrief questions. At least MIN_DEBRIEF_QUESTIONS new ones are asked before the debrief may end;
+ * none repeats a live question or an earlier debrief question. `asked` is the list of debrief questions so
+ * far (a number is accepted from older clients and only counts).
+ */
 export const FALLBACK_GUARDRAIL_GAP = 'Is there a limit, or a case where you would stop and ask someone before doing this?'
 
 /**
- * needGuardrail: no guardrail question was asked during the task (the brief requires one), so the
- * debrief's first question must be one. If the model does not deliver it, a fixed one is put first.
+ * `needGuardrail`: no guardrail question was asked during the task (the brief requires one), so the
+ * debrief's first question must be one; if the model does not deliver it, a fixed one goes first.
  */
-export async function findGaps(
-  log: LogLine[],
-  askedSoFar: number,
-  needGuardrail = false,
-): Promise<{ gaps: Gap[]; done: boolean; doneReason: string; notEnoughWork?: boolean }> {
-  if (!hasEnoughWork(log)) return { gaps: [], done: true, doneReason: NOT_ENOUGH_WORK, notEnoughWork: true }
-  if (askedSoFar >= MAX_DEBRIEF_QUESTIONS) return { gaps: [], done: true, doneReason: `Question budget of ${MAX_DEBRIEF_QUESTIONS} used.` }
-  const mustGuardrail = needGuardrail && askedSoFar === 0
-  const rules = [
-    `Questions left in the budget: ${MAX_DEBRIEF_QUESTIONS - askedSoFar}.`,
-    askedSoFar < MIN_DEBRIEF_QUESTIONS
-      ? `Debrief questions asked so far: ${askedSoFar}. At least ${MIN_DEBRIEF_QUESTIONS} are required in total, so do not set done before that.`
-      : '',
-    mustGuardrail
-      ? 'No guardrail question was asked during the task. Your FIRST question MUST be kind "guardrail": a limit, a threshold, or when they would stop and ask someone, about the most important decision on screen.'
-      : '',
-  ].filter(Boolean)
-  const out = await generateJson({
-    model: MODELS.deep,
-    schema: GapsSchema,
-    system: GAPS_SYSTEM,
-    content: `Session log:\n${formatLog(log)}\n\n${rules.join('\n')}`,
-    effort: 'medium',
-  })
-  let found = out.gaps.map((g) => ({ question: g.question.trim(), kind: g.kind, aboutT: g.aboutT }))
-  if (mustGuardrail) {
-    const g = found.findIndex((x) => x.kind === 'guardrail')
-    if (g > 0) found = [found[g], ...found.filter((_, i) => i !== g)]
-    if (g < 0) {
-      const lastScreen = [...log].reverse().find((l) => l.who === 'screen')
-      found = [{ question: FALLBACK_GUARDRAIL_GAP, kind: 'guardrail', aboutT: lastScreen?.t ?? 0 }, ...found]
-    }
+export async function findGaps(log: LogLine[], asked: readonly AskedGap[] | number, needGuardrail = false): Promise<GapsResult> {
+  const debrief: AskedGap[] = typeof asked === 'number' ? Array.from({ length: asked }, () => ({ question: '', answered: true })) : [...asked]
+  const live = liveQuestions(log, debrief)
+  const askedSoFar = debrief.length
+  const required = Math.max(0, MIN_DEBRIEF_QUESTIONS - askedSoFar)
+  if (!hasEnoughWork(log)) return { gaps: [], done: true, doneReason: NOT_ENOUGH_WORK, notEnoughWork: true, required: 0, live }
+  if (askedSoFar >= MAX_DEBRIEF_QUESTIONS) {
+    return { gaps: [], done: true, doneReason: `I asked all ${MAX_DEBRIEF_QUESTIONS} questions I had; anything still open is noted in the Work Map.`, required: 0, live }
   }
-  const gaps = found.slice(0, Math.min(3, MAX_DEBRIEF_QUESTIONS - askedSoFar)).map(
-    (g, i): Gap => ({ id: `gap-${askedSoFar + i + 1}`, question: g.question, kind: g.kind, clip: clipAround(g.aboutT) }),
-  )
-  const minimumReached = askedSoFar + gaps.length >= MIN_DEBRIEF_QUESTIONS
-  return { gaps, done: gaps.length === 0 || (out.done && minimumReached), doneReason: out.doneReason }
+  const room = Math.min(3, MAX_DEBRIEF_QUESTIONS - askedSoFar)
+  const mustGuardrail = needGuardrail && askedSoFar === 0
+  const guardrailRule = mustGuardrail
+    ? '\nNo guardrail question was asked during the task. Your FIRST question MUST be kind "guardrail": a limit, a threshold, or when they would stop and ask someone, about the most important decision on screen.'
+    : ''
+  const avoid = [...live, ...debrief.filter((d) => d.question)]
+
+  const usable = (raw: { question: string; kind: Gap['kind']; aboutT: number }[], have: Gap[]) => {
+    const out: Gap[] = []
+    for (const g of raw) {
+      const question = g.question.trim()
+      if (!question || isDuplicateQuestion(question, [...avoid, ...have, ...out])) continue
+      out.push({ id: `gap-${askedSoFar + have.length + out.length + 1}`, question, kind: g.kind, clip: clipAround(g.aboutT) })
+    }
+    return out
+  }
+
+  let gaps: Gap[] = []
+  let modelDone = false
+  let doneReason = ''
+  try {
+    const out = await generateJson({
+      model: MODELS.deep,
+      schema: GapsSchema,
+      system: GAPS_SYSTEM,
+      content: `Session log:\n${formatLog(log)}\n\n${describeAsked(live, debrief)}\n\nRequired new questions: ${required}. Questions left in the budget: ${MAX_DEBRIEF_QUESTIONS - askedSoFar}.${guardrailRule}`,
+      effort: 'medium',
+    })
+    gaps = usable(out.gaps, []).slice(0, room)
+    modelDone = out.done
+    doneReason = out.doneReason.trim()
+    // Too few new questions while some are still required: ask the model once more, naming what it repeated.
+    if (gaps.length < Math.min(required, room)) {
+      const more = await generateJson({
+        model: MODELS.deep,
+        schema: GapsSchema,
+        system: GAPS_SYSTEM,
+        content: `Session log:\n${formatLog(log)}\n\n${describeAsked(live, debrief)}\nAlready chosen this round: ${gaps.map((g) => g.question).join(' | ') || 'none'}\n\nRequired new questions: ${required - gaps.length}. Every question must be new: about an exception, a rule you are unsure about, a case that did not come up, or who decides. Ground each in a moment of the log.`,
+        effort: 'low',
+      })
+      gaps = [...gaps, ...usable(more.gaps, gaps)].slice(0, room)
+    }
+  } catch (err) {
+    console.warn('[debrief/gaps] model failed', err)
+  }
+  // Still short of the required questions (model down or repeating itself): grounded fallback questions.
+  if (gaps.length < Math.min(required, room)) gaps = [...gaps, ...fallbackGaps(log, Math.min(required, room) - gaps.length, [...avoid, ...gaps], askedSoFar + gaps.length)]
+
+  // The guardrail question goes first when none came live (the model's, else a fixed one).
+  if (mustGuardrail) {
+    const g = gaps.findIndex((x) => x.kind === 'guardrail')
+    if (g > 0) gaps = [gaps[g], ...gaps.filter((_, i) => i !== g)]
+    if (g < 0 && !isDuplicateQuestion(FALLBACK_GUARDRAIL_GAP, avoid)) {
+      const lastScreen = [...log].reverse().find((l) => l.who === 'screen')
+      gaps = [{ id: '', question: FALLBACK_GUARDRAIL_GAP, kind: 'guardrail' as const, clip: clipAround(lastScreen?.t ?? 0) }, ...gaps].slice(0, room)
+    }
+    gaps = gaps.map((x, i) => ({ ...x, id: `gap-${askedSoFar + i + 1}` }))
+  }
+
+  const done = required === 0 && (modelDone || gaps.length === 0)
+  if (done && !doneReason) doneReason = 'I think I understand it now: the decisions I saw have their reasons, and I know when to stop and ask.'
+  return { gaps: done ? [] : gaps, done, doneReason, required, live }
 }
 
 // ------------------------------------------------------------------ Work Map
@@ -190,13 +339,20 @@ Only the work counts: ignore chatter with colleagues, talk about the recording t
 
 ${catalogForPrompt()}`
 
-export async function buildWorkMap(sessionId: string, log: LogLine[], expert = 'Sabine'): Promise<{ workMap: WorkMap; warnings: string[] }> {
+/**
+ * `corrections`: what the expert said was wrong in the teach-back, in their words. They override anything
+ * else in the log, and each is also an expert line of the log, so it can be quoted.
+ */
+export async function buildWorkMap(sessionId: string, log: LogLine[], expert = 'Sabine', corrections: string[] = []): Promise<{ workMap: WorkMap; warnings: string[] }> {
   if (!hasEnoughWork(log)) throw new NotEnoughWorkError()
+  const fixes = corrections.length
+    ? `\n\nThe expert corrected your last teach-back. These corrections override anything else in the log; change the steps and guardrails so they say this, quoting the expert's correction:\n${corrections.map((c) => `- "${c}"`).join('\n')}`
+    : ''
   const draft = await generateJson({
     model: MODELS.deep,
     schema: WorkMapDraftSchema,
     system: WORKMAP_SYSTEM,
-    content: `Session log:\n${formatLog(log)}`,
+    content: `Session log:\n${formatLog(log)}${fixes}`,
     effort: 'medium',
   })
   const warnings: string[] = []
@@ -209,7 +365,7 @@ export async function buildWorkMap(sessionId: string, log: LogLine[], expert = '
       warnings.push(`Dropped guardrail "${g.text}": quote not found in what the expert said.`)
       continue
     }
-    guardrails.push({ id: g.id, text: g.text.trim(), quote, when: [], require: [], severity: 'block' })
+    guardrails.push({ id: g.id, text: g.text.trim(), quote: { ...quote, via: quoteVia(log, quote, corrections) }, when: [], require: [], severity: 'block' })
   }
   const known = new Set(guardrails.map((g) => g.id))
 
@@ -219,21 +375,30 @@ export async function buildWorkMap(sessionId: string, log: LogLine[], expert = '
     if (s.reasonQuote && !reason) warnings.push(`Step "${s.title}": reason quote not found, left out.`)
     const start = Math.max(0, Math.min(s.startT, lastT))
     const end = Math.max(start + 10_000, Math.min(s.endT, start + 20_000))
+    // The clip is centered on a real screen event; without one the step says so instead of a made-up time.
+    const moment = stepMoment(log, start, end)
     return {
       id,
       index: i + 1,
       title: s.title.trim(),
       ...(TARGET_IDS.includes(s.targetId) ? { targetId: s.targetId } : {}),
-      clip: { start, end },
+      clip: moment ? clipAround(moment.t) : { start, end },
+      moment,
       decision: s.decision.trim(),
-      ...(reason ? { reason } : {}),
+      ...(reason ? { reason: { ...reason, via: quoteVia(log, reason, corrections) } } : {}),
       guardrailIds: s.guardrailIds.filter((g) => known.has(g)),
       isJudgmentCall: s.isJudgmentCall,
       confidence: Math.max(0, Math.min(1, reason || !s.reasonQuote ? s.confidence : s.confidence * 0.6)),
     }
   })
-  // Each guardrail points back at the first step that uses it.
-  for (const g of guardrails) g.stepId = steps.find((s) => s.guardrailIds.includes(g.id))?.id
+  // Each guardrail points back at the first step that uses it, and at the screen moment it was explained at:
+  // said during the task = the screen change just before; said afterwards = its step's moment, if any.
+  for (const g of guardrails) {
+    const step = steps.find((s) => s.guardrailIds.includes(g.id))
+    g.stepId = step?.id
+    const live = g.quote.via === 'live_question' || g.quote.via === 'narration'
+    g.moment = (live ? momentBefore(log, g.quote.t) : null) ?? step?.moment ?? null
+  }
 
   return {
     // A verbose model output never becomes a huge title in "Recorded processes".

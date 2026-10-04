@@ -8,7 +8,10 @@ import { downloadWorkMapMarkdown } from '../../workmap/exportMarkdown'
 import { STATUS, statusOf, useProcess, type Process } from '../panel/processes'
 import { Avatar } from '../panel/SignInView'
 import { field, textBtn } from '../panel/ui'
+import type { WorkMap } from '../../shared/types'
+import { momentCoverage } from '../../workmap/moments'
 import { answerQuestions, recordAgain, teach } from './actions'
+import { MomentLink, quoteSource } from './Moment'
 import { helpyApp } from './store'
 import { appPrimary, appSecondary, pageTitle, sectionTitle } from './ui'
 
@@ -120,6 +123,85 @@ function Title({ process }: { process: Process }) {
   )
 }
 
+/** Every guardrail with the expert's words and the screen moment it was explained at. */
+function Rules({ wm }: { wm: WorkMap }) {
+  if (!wm.guardrails.length) return null
+  const steps = new Map(wm.steps.map((s) => [s.id, s]))
+  const linked = momentCoverage(wm)
+  return (
+    <section>
+      <h2 className={sectionTitle}>The rules</h2>
+      <p className="m-0 mt-1 text-[15px] text-muted">
+        {wm.guardrails.length} rules, {linked.guardrails} of them linked to a moment on {wm.expert}’s screen.
+      </p>
+      <ul className="m-0 mt-4 flex list-none flex-col gap-3 p-0">
+        {wm.guardrails.map((g) => {
+          const stop = g.severity === 'block'
+          const step = g.stepId ? steps.get(g.stepId) : undefined
+          return (
+            <li key={g.id} className="flex items-start gap-3 rounded-2xl border border-helpy-line bg-white px-4 py-3">
+              <span className={`mt-0.5 shrink-0 rounded-full px-2.5 py-0.5 text-[13px] font-semibold ${stop ? 'bg-guard-soft text-guard' : 'bg-ask-soft text-ask'}`}>{stop ? 'Stop' : 'Ask first'}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[17px] font-medium leading-snug text-ink">{g.text}</span>
+                <span className="mt-1 block font-quote text-[16px] italic leading-snug text-ink">“{g.quote.text}”</span>
+                <span className="mt-0.5 block text-[14px] text-muted">
+                  {quoteSource(wm.expert, g.quote)}
+                  {step ? ` · step ${step.index}` : ''}
+                </span>
+              </span>
+              <MomentLink sessionId={wm.sessionId} moment={g.moment} title={`${wm.expert}’s screen · ${g.text}`} missing="Discussed in the debrief" />
+            </li>
+          )
+        })}
+      </ul>
+    </section>
+  )
+}
+
+/** How Helpy knows it understood: the questions it asked, why it stopped, and the expert's okay. */
+function Understood({ wm }: { wm: WorkMap }) {
+  const d = wm.debrief
+  const tb = wm.teachback
+  if (!d && !tb) return null
+  const answered = d?.questions.filter((q) => q.status === 'answered').length ?? 0
+  return (
+    <section className="rounded-2xl bg-rule-soft p-5">
+      <h2 className={sectionTitle}>How Helpy knows it understood</h2>
+      {d ? (
+        <>
+          <p className="m-0 mt-2 text-[16px] leading-snug text-ink">
+            {d.live.length} questions during the work, then {d.questions.length} new ones afterwards ({answered} answered).
+          </p>
+          <ol className="m-0 mt-2 flex list-decimal flex-col gap-1 pl-6 text-[15px] leading-snug text-ink">
+            {d.questions.map((q) => (
+              <li key={q.id}>
+                {q.question} <span className="text-muted">· {q.status === 'answered' ? 'answered' : 'skipped'}</span>
+              </li>
+            ))}
+          </ol>
+          {d.doneReason ? <p className="m-0 mt-3 text-[16px] leading-snug text-ink">Why it stopped asking: “{d.doneReason}”</p> : null}
+        </>
+      ) : null}
+      {tb ? (
+        <p className={`m-0 mt-3 text-[16px] font-medium ${tb.confirmed ? 'text-helpy' : 'text-ask'}`}>
+          {tb.confirmed
+            ? `${wm.expert} confirmed Helpy’s explanation${tb.corrections.length ? ` after ${tb.corrections.length === 1 ? 'one correction' : `${tb.corrections.length} corrections`}` : ''}.`
+            : `${wm.expert} has not confirmed Helpy’s explanation yet.`}
+        </p>
+      ) : null}
+      {tb?.corrections.length ? (
+        <ul className="m-0 mt-1 list-none p-0 text-[15px] text-muted">
+          {tb.corrections.map((c, i) => (
+            <li key={i} className="font-quote italic">
+              Corrected: “{c.text}”
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
+  )
+}
+
 /** One process as a workflow: every step in order; a click opens the step's guide. */
 export function WorkflowPage({ processId }: { processId: string }) {
   const process = useProcess(processId)
@@ -168,14 +250,14 @@ export function WorkflowPage({ processId }: { processId: string }) {
         ) : (
           <section>
             <h2 className={sectionTitle}>The steps</h2>
-            <p className="m-0 mt-1 text-[15px] text-muted">Click a step for the exact guide.</p>
+            <p className="m-0 mt-1 text-[15px] text-muted">Click a step for the exact guide, or its time to see {wm.expert}’s screen at that moment.</p>
             <ol className="m-0 mt-4 list-none p-0">
               {steps.map((s, i) => {
                 const rules = wm.guardrails.filter((g) => s.guardrailIds.includes(g.id))
                 const stops = rules.filter((g) => g.severity === 'block').length
                 const asks = rules.length - stops
                 return (
-                  <li key={s.id} className="relative pl-14">
+                  <li key={s.id} className="relative flex items-start gap-2 pl-14">
                     {i < steps.length - 1 ? <span className="absolute top-11 bottom-0 left-[19px] w-0.5 bg-helpy-line" aria-hidden /> : null}
                     <span className="absolute top-2.5 left-0 flex size-10 items-center justify-center rounded-full bg-helpy-soft text-[16px] font-semibold text-helpy tabular-nums">{s.index}</span>
                     <button
@@ -198,12 +280,17 @@ export function WorkflowPage({ processId }: { processId: string }) {
                         ›
                       </span>
                     </button>
+                    <span className="flex w-[76px] shrink-0 justify-end pt-3">
+                      <MomentLink sessionId={wm.sessionId} moment={s.moment} title={`${wm.expert}’s screen · ${s.title}`} missing="—" />
+                    </span>
                   </li>
                 )
               })}
             </ol>
           </section>
         )}
+        {wm ? <Rules wm={wm} /> : null}
+        {wm ? <Understood wm={wm} /> : null}
       </div>
 
       <aside className="flex flex-col gap-8">

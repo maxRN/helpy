@@ -18,6 +18,18 @@ describe('toLogLines', () => {
       { t: 55_000, who: 'expert', text: 'Equipment over five thousand is always capex.' },
     ])
   })
+
+  it('leaves out everything that happened off the record (Trust)', () => {
+    const events: AppEvent[] = [
+      { id: '1', t: 10_000, source: 'vision', kind: 'field_changed', text: 'Invoice 4471: cost center 4711 → 0400' },
+      { id: '2', t: 20_000, source: 'voice', kind: 'off_record_start' },
+      { id: '3', t: 21_000, source: 'vision', kind: 'action', text: 'Invoice 4480: put on hold' },
+      { id: '4', t: 22_000, source: 'voice', kind: 'utterance', speaker: 'expert', text: 'Between us, Weber always approves late.' },
+      { id: '5', t: 30_000, source: 'voice', kind: 'off_record_end' },
+      { id: '6', t: 31_000, source: 'voice', kind: 'utterance', speaker: 'expert', text: 'Now the Kramer invoice.' },
+    ]
+    expect(toLogLines(events).map((l) => l.text)).toEqual(['Invoice 4471: cost center 4711 → 0400', 'Now the Kramer invoice.'])
+  })
 })
 
 describe('needsGuardrailQuestion', () => {

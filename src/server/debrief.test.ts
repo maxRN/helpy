@@ -65,21 +65,39 @@ describe('findGaps', () => {
   it('starts with a guardrail question when none was asked live: moves the model\'s one first', async () => {
     generateJson.mockResolvedValueOnce({ gaps: [why(41_000), { question: 'Is there a limit?', kind: 'guardrail', aboutT: 41_000 }], done: false, doneReason: '' })
     const res = await findGaps(log, 0, true)
-    expect(res.gaps.map((g) => g.kind)).toEqual(['guardrail', 'why'])
+    expect(res.gaps.map((g) => g.kind).slice(0, 2)).toEqual(['guardrail', 'why'])
+    expect(res.gaps).toHaveLength(3) // three are required, so the round is filled up
   })
 
   it('starts with a fixed guardrail question when the model gives none', async () => {
     generateJson.mockResolvedValueOnce({ gaps: [why(41_000)], done: false, doneReason: '' })
+    generateJson.mockResolvedValueOnce({ gaps: [], done: false, doneReason: '' }) // the retry adds nothing either
+    const res = await findGaps(log, 0, true)
+    expect(res.gaps[0].kind).toBe('guardrail')
+    expect(res.gaps.map((g) => g.id)).toEqual(['gap-1', 'gap-2', 'gap-3'])
+    // Tied to a real screen moment of the log.
+    expect([30_000, 41_000, 60_000].map((t) => clipAround(t).start)).toContain(res.gaps[0].clip.start)
+  })
+
+  it('uses the fixed guardrail question when nothing else is a guardrail question', async () => {
+    generateJson.mockResolvedValueOnce({
+      gaps: [why(41_000), { question: 'Why post it right after?', kind: 'why', aboutT: 60_000 }, { question: 'What did you check on the Neckartal invoice?', kind: 'why', aboutT: 30_000 }],
+      done: false,
+      doneReason: '',
+    })
     const res = await findGaps(log, 0, true)
     expect(res.gaps[0]).toMatchObject({ kind: 'guardrail', question: FALLBACK_GUARDRAIL_GAP })
     expect(res.gaps[0].clip.start).toBe(52_000) // around the last screen change (60 s)
+    expect(res.gaps).toHaveLength(3)
   })
 
   it('does not stop before three debrief questions, even if the model says done', async () => {
     generateJson.mockResolvedValueOnce({ gaps: [why(41_000)], done: true, doneReason: 'all clear' })
     expect((await findGaps(log, 0)).done).toBe(false)
     generateJson.mockResolvedValueOnce({ gaps: [why(41_000)], done: true, doneReason: 'all clear' })
-    expect((await findGaps(log, 2)).done).toBe(true)
+    expect((await findGaps(log, 2)).done).toBe(false) // only questions actually asked count
+    generateJson.mockResolvedValueOnce({ gaps: [], done: true, doneReason: 'all clear' })
+    expect(await findGaps(log, 3)).toMatchObject({ done: true, doneReason: 'all clear' })
   })
 })
 
@@ -103,9 +121,73 @@ describe('buildWorkMap', () => {
     expect(s2.targetId).toBeUndefined()
     expect(s2.reason).toBeUndefined()
     expect(s2.confidence).toBeCloseTo(0.48)
-    expect(s2.clip.end - s2.clip.start).toBe(10_000) // clips are at least 10 s
+    // Clips are centered on the real screen event of the step (here "posted" at 60 s).
+    expect(s2.moment).toEqual({ t: 60_000, event: 'Invoice 4471: posted' })
+    expect(s2.clip).toEqual(clipAround(60_000))
+    expect(s1.moment).toEqual({ t: 41_000, event: 'Invoice 4471: cost center 4711 → 0400 (capex)' })
     expect(workMap.guardrails.map((g) => g.id)).toEqual(['G1'])
     expect(workMap.guardrails[0]).toMatchObject({ stepId: 'S1', severity: 'block', when: [], require: [] })
+    // The rule was said right after a live question about the capex change: linked to that screen moment.
+    expect(workMap.guardrails[0].quote.via).toBe('live_question')
+    expect(workMap.guardrails[0].moment).toEqual({ t: 41_000, event: 'Invoice 4471: cost center 4711 → 0400 (capex)' })
     expect(warnings).toHaveLength(2)
+  })
+})
+
+describe('debrief question state', () => {
+  it('lists the live questions and whether the expert answered them', async () => {
+    const { liveQuestions } = await import('./debrief')
+    const withUnanswered: LogLine[] = [...log, { t: 70_000, who: 'agent', text: 'Is there a limit?' }, { t: 72_000, who: 'screen', text: 'Invoice 4472: put on hold' }]
+    expect(liveQuestions(withUnanswered)).toEqual([
+      { question: 'What made you do that?', t: 52_000, answered: true },
+      { question: 'Is there a limit?', t: 70_000, answered: false },
+    ])
+    // Debrief questions in the log are not live questions.
+    expect(liveQuestions(withUnanswered, [{ question: 'Is there a limit?', answered: false }]).map((q) => q.question)).toEqual(['What made you do that?'])
+  })
+
+  it('fallback questions are tied to real screen moments and never repeat', async () => {
+    const { fallbackGaps } = await import('./debrief')
+    const gaps = fallbackGaps(log, 3, [{ question: 'When do you stop on an invoice like this and ask someone, and who is that?' }], 2)
+    expect(gaps).toHaveLength(3)
+    expect(gaps.map((g) => g.id)).toEqual(['gap-3', 'gap-4', 'gap-5'])
+    expect(gaps.some((g) => g.question.startsWith('When do you stop'))).toBe(false)
+    for (const g of gaps) expect([41_000, 30_000, 60_000].map((t) => clipAround(t).start)).toContain(g.clip.start)
+  })
+
+  it('keeps asking while fewer than three debrief questions were asked, even if the model fails', async () => {
+    generateJson.mockReset()
+    generateJson.mockRejectedValue(new Error('model down'))
+    const res = await findGaps(log, [{ question: 'Who releases a hold?', answered: true }])
+    expect(res.done).toBe(false)
+    expect(res.required).toBe(2)
+    expect(res.gaps).toHaveLength(2)
+  })
+})
+
+describe('screen moments', () => {
+  it('never invents a moment: a step far from any screen event has none', async () => {
+    const { stepMoment, momentBefore } = await import('./debrief')
+    expect(stepMoment(log, 400_000, 410_000)).toBeNull()
+    expect(stepMoment(log, 61_000, 70_000)).toEqual({ t: 60_000, event: 'Invoice 4471: posted' }) // within the slack
+    expect(momentBefore(log, 20_000)).toBeNull() // nothing on screen before it
+    expect(momentBefore(log, 58_000)?.t).toBe(41_000) // the decision, not the later "opened"
+  })
+
+  it('a rule from the debrief about an unseen case has no screen moment', async () => {
+    const debriefLog: LogLine[] = [
+      ...log,
+      { t: 300_000, who: 'agent', text: 'What if a supplier is not in the vendor master?' },
+      { t: 304_000, who: 'expert', text: "If they're not in the vendor master, I don't pay. I hold it and ask Weber." },
+    ]
+    generateJson.mockResolvedValueOnce({
+      task: 'Process invoices',
+      steps: [{ title: 'Code the cost center', targetId: 'field-costCenter', startT: 40_000, endT: 56_000, decision: '4711 → 0400', reasonQuote: '', isJudgmentCall: true, confidence: 0.9, guardrailIds: [] }],
+      guardrails: [{ id: 'G5', text: 'Unknown supplier: hold and ask the controller.', quote: "If they're not in the vendor master, I don't pay." }],
+      openQuestions: [],
+    })
+    const { workMap } = await buildWorkMap('s1', debriefLog)
+    expect(workMap.guardrails[0].quote.via).toBe('debrief')
+    expect(workMap.guardrails[0].moment).toBeNull()
   })
 })
