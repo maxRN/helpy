@@ -7,7 +7,7 @@ export const COMPANY = {
   about: 'A family-owned machine builder near Stuttgart: laser cutting and metal forming machines for industrial customers.',
   facts: [
     { label: 'Headquarters', value: 'Leonberg, near Stuttgart, Germany' },
-    { label: 'Plant', value: 'Brno, Czech Republic (Hartmann Machine Works s.r.o.)' },
+    { label: 'Plant', value: 'Brno, Czech Republic (Hartmann Machine Works Brno, the Czech subsidiary)' },
     { label: 'Employees', value: 'About 420' },
     { label: 'Currency', value: 'Euro (EUR)' },
     { label: 'Fiscal year', value: 'January to December' },
@@ -18,7 +18,7 @@ export const COMPANY = {
     systems: [{ name: 'ProcureFlow', what: 'ERP: supplier invoices, cost centers, approvals and posting' }],
     calendar: [
       { label: 'Current posting period', value: 'September 2026' },
-      { label: 'Month-end close', value: 'Books closed on the 4th working day of the next month (September: 6 October 2026)' },
+      { label: 'Month-end close', value: 'Books closed on the 3rd working day of the next month (September: Monday, 5 October 2026)' },
       { label: 'Payment run', value: 'Every Thursday' },
     ],
   },

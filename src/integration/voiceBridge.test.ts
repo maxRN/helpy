@@ -29,7 +29,7 @@ describe('voice bridge', () => {
     erp().update('4471', 'costCenter', '0400')
     off()
     const screen = seen.filter((e) => e.type === 'dom')
-    expect(screen[0].text).toBe('Opened invoice 4471 from Neckartal Werkzeugmaschinen GmbH (€6,800.00, equipment)')
+    expect(screen[0].text).toBe('Opened invoice 4471 from Neckar Valley Machine Tools (€6,800.00, equipment)')
     expect(screen[1].text).toMatch(/^Invoice 4471: cost center 4711 .* → 0400 Capital Equipment \(capex\)$/)
     // The tutor cue for "predict" carries the invoice fields.
     expect(seen.find((e) => e.type === 'invoice_opened')?.meta?.fields).toMatchObject({ id: '4471', amount: 6800 })

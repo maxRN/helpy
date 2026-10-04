@@ -49,7 +49,7 @@ describe('mergeCompiled', () => {
 describe('catalogForPrompt', () => {
   it('lists targets, fields, suppliers and cost centers', () => {
     const text = catalogForPrompt()
-    for (const s of ['field-costCenter', 'action-post', 'supplierId', 'SUP-1007: Kramer Industriebedarf GmbH', '0400: Capital Equipment (capex)']) {
+    for (const s of ['field-costCenter', 'action-post', 'supplierId', 'SUP-1007: Kramer Industrial Supply', '0400: Capital Equipment (capex)']) {
       expect(text).toContain(s)
     }
   })

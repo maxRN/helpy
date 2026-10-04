@@ -28,7 +28,7 @@ export const FIXTURE_GUARDRAILS: Guardrail[] = [
   },
   {
     id: 'G3',
-    text: 'Kramer Industriebedarf double-bills at every quarter-end: hold it, the controller releases it.',
+    text: 'Kramer Industrial Supply double-bills at every quarter-end: hold it, the controller releases it.',
     quote: { text: 'Kramer bills us twice at every quarter-end, so I hold it and Weber releases it.', t: 265_000, speaker: 'expert' },
     when: [
       { field: 'supplierId', op: 'eq', value: 'SUP-1007' },
