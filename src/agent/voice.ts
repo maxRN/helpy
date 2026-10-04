@@ -33,6 +33,7 @@ let sayWaiters: Array<{ resolve: () => void; spoke: boolean }> = [];
 let teachback: {
   resolve: (r: { confirmed: boolean; correction?: string }) => void;
   timer: ReturnType<typeof setTimeout>;
+  startedAt: number;
 } | null = null;
 
 export const isConnected = (): boolean => conv !== null;
@@ -234,7 +235,7 @@ export function teachBack(text: string): Promise<{ confirmed: boolean; correctio
   const c = requireConn();
   return new Promise((resolve) => {
     const timer = setTimeout(() => settleTeachback({ confirmed: false, correction: '(no response)' }), 180_000);
-    teachback = { resolve, timer };
+    teachback = { resolve, timer, startedAt: nowRel() };
     emit({ type: 'teachback_given', speaker: 'agent', text });
     c.sendUserMessage(`[TEACHBACK] ${text}`);
   });
@@ -245,8 +246,13 @@ function settleTeachback(r: { confirmed: boolean; correction?: string }): void {
   const t = teachback;
   teachback = null;
   clearTimeout(t.timer);
-  emit({ type: 'teachback_result', speaker: 'expert', text: r.correction, meta: { confirmed: r.confirmed } });
-  t.resolve(r);
+  // A correction is kept in the expert's own words (what they said after the teach-back), not the agent's
+  // summary of it; the summary is the fallback when the transcript has nothing.
+  const summary = r.correction;
+  const own = !r.confirmed && summary && !summary.startsWith('(') ? (transcript?.userSince(t.startedAt) ?? []).join(' ').trim() : '';
+  const result = own ? { ...r, correction: own } : r;
+  emit({ type: 'teachback_result', speaker: 'expert', text: result.correction, meta: { confirmed: r.confirmed, agentSummary: summary } });
+  t.resolve(result);
 }
 
 /** When the expert last spoke: the agent's own VAD, or Scribe while it listens. 0 = not yet. */

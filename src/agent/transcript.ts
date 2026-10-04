@@ -39,6 +39,7 @@ interface Collector {
 export function createTranscript(opts: TranscriptOpts) {
   const userSpeaker: Speaker = opts.mode === 'teach' ? 'trainee' : 'expert';
   const tailBuf: { speaker: Speaker; text: string }[] = [];
+  const userLines: { text: string; t: number }[] = []; // the expert's own words, for corrections
   let collector: Collector | null = null;
   let chunks: { text: string; t: number }[] = [];
   let turnTimer: ReturnType<typeof setTimeout> | null = null;
@@ -67,6 +68,10 @@ export function createTranscript(opts: TranscriptOpts) {
 
     tailBuf.push({ speaker, text });
     if (tailBuf.length > 20) tailBuf.shift();
+    if (isUser) {
+      userLines.push({ text, t });
+      if (userLines.length > 40) userLines.shift();
+    }
 
     if (isUser && collector?.armed) {
       chunks.push({ text, t });
@@ -141,6 +146,8 @@ export function createTranscript(opts: TranscriptOpts) {
       if (collector?.agentSpoke) collector.armed = true;
     },
     tail: (n = 6) => tailBuf.slice(-n),
+    /** What the expert said since `t` (ms on the session clock), in their own words. */
+    userSince: (t: number) => userLines.filter((l) => l.t >= t).map((l) => l.text),
     dispose: () => {
       if (collector) {
         clearCollector(collector);
