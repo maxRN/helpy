@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import { ANSWER_WINDOW_MS, SpeechTracker } from './speech'
+import { ANSWER_WINDOW_MS, recordCommand, SpeechTracker } from './speech'
+
+describe('recordCommand', () => {
+  it('hears off / back on the record in English and German', () => {
+    expect(recordCommand('Okay, this part is off the record.')).toBe('off')
+    expect(recordCommand('Stop recording for a second')).toBe('off')
+    expect(recordCommand('Das jetzt bitte inoffiziell.')).toBe('off')
+    expect(recordCommand("We're back on the record.")).toBe('on')
+    expect(recordCommand('Wieder aufnehmen bitte')).toBe('on')
+  })
+
+  it('ignores normal narration', () => {
+    expect(recordCommand('I record the asset number from the PO.')).toBeNull()
+    expect(recordCommand('Equipment over five thousand is always capex.')).toBeNull()
+  })
+})
 
 describe('SpeechTracker', () => {
   it('marks the expert as speaking from the first real partial until the commit', () => {

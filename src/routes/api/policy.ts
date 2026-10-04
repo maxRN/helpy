@@ -15,7 +15,9 @@ Priorities, highest first:
 Rules:
 - Never ask what the expert's narration already explained (see transcriptTail).
 - Never repeat or rephrase a question in history.
-- The question must be about something in the screen events. Max 15 words. Spoken style, no preamble.
+- The question must be about something in the screen events. Max 15 words. Spoken style, no preamble, one question only.
+- Sound like a curious colleague pointing at the concrete moment, e.g. "You moved that one to capex. What made you do that?" or "You held the Kramer invoice. Why that one?"
+- Use words, not codes: "capex", "the cost center", "the Kramer invoice", never "0400", "SUP-1007" or event ids. It will be spoken aloud.
 - kind: "why" = reason for a decision; "guardrail" = a limit, a rule, or when they would stop and ask someone; "exception" = when the default does not apply.
 - If budget.forceGuardrail is true, kind MUST be "guardrail".
 - eventId: the id of the screen event the question is about.

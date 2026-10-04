@@ -6,7 +6,7 @@ import { bus, emitEvent } from '../shared/bus'
 import { useMascot } from '../shared/mascot'
 import { session, useSession } from '../shared/session'
 import type { AppEvent, Quote } from '../shared/types'
-import { SpeechTracker, type Utterance } from './speech'
+import { recordCommand, SpeechTracker, type Utterance } from './speech'
 
 // Words Scribe should not mishear in this demo (max 20 characters each).
 const KEYTERMS = ['capex', 'opex', 'ProcureFlow', 'cost center', 'asset number', 'Kramer', 'Brno', 'vendor master', 'Hartmann', 'Weber', 'second approval']
@@ -28,6 +28,7 @@ const tracker = new SpeechTracker()
 let connection: { close(): void; mute(): void; unmute(): void } | null = null
 let cleanups: Array<() => void> = []
 let onAnswer: ((q: Quote) => void) | null = null
+let onRecordCommand: ((cmd: 'off' | 'on') => void) | null = null
 
 export const speech = {
   lastSpeechAt: () => tracker.lastSpeechAt(),
@@ -64,10 +65,18 @@ function setMuted(muted: boolean) {
   useListener.setState({ muted, speaking: false, partial: '' })
 }
 
-/** Starts listening. `answer` receives the expert's spoken answers to the agent's questions. */
-export async function startListening(answer?: (q: Quote) => void): Promise<void> {
+export interface ListenerCallbacks {
+  /** The expert's spoken answer to the agent's latest question. */
+  onAnswer?: (q: Quote) => void
+  /** "Off the record" / "back on the record" said aloud (the agent's own mic is muted in Capture). */
+  onRecordCommand?: (cmd: 'off' | 'on') => void
+}
+
+/** Starts listening; resolves once Scribe confirmed the session. */
+export async function startListening(callbacks: ListenerCallbacks = {}): Promise<void> {
   if (connection) return
-  onAnswer = answer ?? null
+  onAnswer = callbacks.onAnswer ?? null
+  onRecordCommand = callbacks.onRecordCommand ?? null
   useListener.setState({ status: 'connecting', error: '' })
   try {
     const res = await fetch('/api/elevenlabs/scribe-token')
@@ -107,7 +116,11 @@ export async function startListening(answer?: (q: Quote) => void): Promise<void>
     conn.on(RealtimeEvents.COMMITTED_TRANSCRIPT, (m) => {
       const u = tracker.committed(m.text, Date.now())
       useListener.setState({ speaking: false, partial: '' })
-      if (u && !session().offRecord) logUtterance(u)
+      if (!u) return
+      // Voice commands work even while off the record (that is how "back on the record" is heard); they are never logged.
+      const cmd = recordCommand(u.text)
+      if (cmd) return onRecordCommand?.(cmd)
+      if (!session().offRecord) logUtterance(u)
     })
     const fail = (m: unknown) => {
       const message = (m as { error?: string; message?: string })?.error ?? (m as { message?: string })?.message ?? 'Scribe error'
@@ -154,6 +167,7 @@ export function stopListening() {
   const conn = connection
   connection = null
   onAnswer = null
+  onRecordCommand = null
   tracker.dropTurn()
   conn?.close()
   useListener.setState({ status: 'off', speaking: false, partial: '', muted: false })

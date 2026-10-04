@@ -26,7 +26,10 @@ export async function startVoice(mode: AgentMode) {
   const voice = await load()
   // Capture: Scribe v2 Realtime listens first (transcript + "is the expert talking?"), independent of the agent.
   if (mode === 'capture') {
-    await startListening((answer) => voice.noteAnswer(answer)).catch((err) => console.warn('[helpy] Scribe not started', err))
+    await startListening({
+      onAnswer: (answer) => voice.noteAnswer(answer),
+      onRecordCommand: (cmd) => void setOffRecord(cmd === 'off'),
+    }).catch((err) => console.warn('[helpy] Scribe not started', err))
   } else {
     stopListening()
   }

@@ -12,6 +12,16 @@ export interface Utterance {
 
 export const ANSWER_WINDOW_MS = 45_000 // a turn later than this after a question is not its answer
 
+const BACK_ON = /\b(back on the record|on the record again|resume recording|continue recording|start recording again|wieder (offiziell|aufnehmen)|aufnahme fortsetzen)\b/i
+const GO_OFF = /\b(off the record|stop recording|pause recording|don'?t record( this)?|inoffiziell|nicht aufnehmen|aufnahme (stoppen|pausieren))\b/i
+
+/** "Off the record" / "back on the record" spoken by the expert (English or German), else null. */
+export function recordCommand(text: string): 'off' | 'on' | null {
+  if (BACK_ON.test(text)) return 'on'
+  if (GO_OFF.test(text)) return 'off'
+  return null
+}
+
 export class SpeechTracker {
   private lastSpeech = 0
   private turnStart: number | null = null

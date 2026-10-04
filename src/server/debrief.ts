@@ -66,6 +66,8 @@ Find what a new hire would still not know to do this task alone, and turn it int
 - "guardrail": a limit, a threshold, or when to stop and ask someone, that is implied but not stated.
 - "exception": when the usual rule does not apply.
 - "unseen_case": a case that did not come up but obviously could (e.g. a supplier not in the vendor master, an amount just under a limit).
+Style: spoken aloud by a curious apprentice while the screen moment replays. Refer to that moment, use words not codes, e.g.
+"You held the December invoice. Is that for every supplier, and who decides when to release it?"
 Rules:
 - Never ask what the log already answers. Never repeat an earlier question.
 - aboutT: the t (ms) of the screen moment the question is about, copied from the log; for unseen cases use the closest related moment.
