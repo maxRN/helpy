@@ -1,7 +1,19 @@
 import { v } from 'convex/values'
-import { OCR_MODEL, OCR_REVISION, SMOLVLM_MODEL, SMOLVLM_REVISION } from '../src/capture/ocr-contract'
+import { OCR_MODEL, OCR_REVISION, SMOLVLM_MODEL, SMOLVLM_REVISION, TESSERACT_MODEL, TESSERACT_REVISION, OCR_LANGUAGE } from '../src/capture/ocr-contract'
 
 export const ocrResult = v.union(v.object({
+  model: v.literal(TESSERACT_MODEL),
+  revision: v.literal(TESSERACT_REVISION),
+  language: v.literal(OCR_LANGUAGE),
+  width: v.number(),
+  height: v.number(),
+  text: v.string(),
+  regions: v.array(v.object({
+    text: v.string(),
+    confidence: v.number(),
+    bbox: v.object({ x0: v.number(), y0: v.number(), x1: v.number(), y1: v.number() }),
+  })),
+}), v.object({
   model: v.literal(OCR_MODEL),
   revision: v.literal(OCR_REVISION),
   width: v.number(),

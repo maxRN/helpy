@@ -1,6 +1,6 @@
 import { useMutation } from '@tanstack/react-query'
 import type { Doc } from '../../convex/_generated/dataModel'
-import { SMOLVLM_MODEL } from './ocr-contract'
+import { SMOLVLM_MODEL, TESSERACT_MODEL } from './ocr-contract'
 import { redactPii, usePiiModel } from './pii'
 
 export function ScreenshotNote({ ocr }: { ocr: Doc<'screenshots'>['ocr'] }) {
@@ -29,6 +29,23 @@ function ExtractedTextNote({ result }: { result: NoteResult }) {
       </p>}
       {redaction.error && <p className="error" role="alert">PII redaction failed: {redaction.error.message}</p>}
     </div>
+  )
+  if (result.model === TESSERACT_MODEL) return (
+    <details className="screenshot-note">
+      <summary>Text note · {result.regions.length} words</summary>
+      <p className="muted">Tesseract.js · {result.width} × {result.height} pixels. Boxes show top-left and bottom-right pixel coordinates from the image's top left.</p>
+      {controls}
+      {redaction.isSuccess ? <p className="ocr-text">{redaction.data}</p> : result.regions.length === 0 ? <p className="muted">No text detected.</p> : (
+        <dl className="ocr-regions">
+          {result.regions.map(({ text, bbox, confidence }, index) => (
+            <div key={index}>
+              <dt>{text}</dt>
+              <dd>({bbox.x0}, {bbox.y0}) → ({bbox.x1}, {bbox.y1}) · {Math.round(confidence)}% confidence</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </details>
   )
   if (result.model === SMOLVLM_MODEL) return (
     <details className="screenshot-note">

@@ -2,30 +2,46 @@ import { z } from 'zod'
 
 export const OCR_MODEL = 'onnx-community/Florence-2-base-ft'
 export const OCR_REVISION = 'e88a44eaf3791a35eae0c5a47b3dbcd36e67eb6f'
-export const OCR_TASK = '<OCR_WITH_REGION>'
-export const OCR_CACHE = 'sabine-florence-2-v1'
 export const SMOLVLM_MODEL = 'HuggingFaceTB/SmolVLM-500M-Instruct'
 export const SMOLVLM_REVISION = 'a7da5b986cb59b408707209984f360a5f4ad7e47'
+export const TESSERACT_MODEL = 'tesseract.js'
+export const TESSERACT_REVISION = '7.0.0'
+export const OCR_LANGUAGE = 'eng+deu'
+export const OCR_TASK = '<OCR_WITH_REGION>'
 export const OCR_MODELS = {
-  florence: { label: 'Florence-2-base-ft', model: OCR_MODEL, revision: OCR_REVISION, cache: OCR_CACHE },
-  smolvlm: { label: 'SmolVLM-500M-Instruct', model: SMOLVLM_MODEL, revision: SMOLVLM_REVISION, cache: 'sabine-smolvlm-500m-v1' },
+  florence: { label: 'Florence-2-base-ft', model: OCR_MODEL, revision: OCR_REVISION, cache: 'sabine-florence-2-v1' },
+  tesseract: { label: 'Tesseract.js', model: TESSERACT_MODEL, revision: TESSERACT_REVISION },
 }
-export const ocrModelIdSchema = z.enum(['florence', 'smolvlm'])
+export const ocrModelIdSchema = z.enum(['florence', 'tesseract'])
 export type OcrModelId = z.infer<typeof ocrModelIdSchema>
 
 const coordinate = z.number().finite().nonnegative()
 export const quadSchema = z.tuple([coordinate, coordinate, coordinate, coordinate, coordinate, coordinate, coordinate, coordinate])
 const dimensions = { width: z.number().int().positive(), height: z.number().int().positive() }
-export const ocrResultSchema = z.discriminatedUnion('model', [z.object({
+export const tesseractResultSchema = z.object({
+  model: z.literal(TESSERACT_MODEL),
+  revision: z.literal(TESSERACT_REVISION),
+  language: z.literal(OCR_LANGUAGE),
+  ...dimensions,
+  text: z.string(),
+  regions: z.array(z.object({
+    text: z.string().min(1),
+    confidence: z.number().finite().min(0).max(100),
+    bbox: z.object({ x0: coordinate, y0: coordinate, x1: coordinate, y1: coordinate }),
+  })),
+}).superRefine((result, context) => {
+  for (const { bbox } of result.regions) {
+    if (bbox.x0 >= bbox.x1 || bbox.y0 >= bbox.y1 || bbox.x1 > result.width || bbox.y1 > result.height) {
+      context.addIssue({ code: 'custom', message: 'Text bounding box is invalid or exceeds screenshot dimensions.' })
+    }
+  }
+})
+
+export const ocrResultSchema = z.discriminatedUnion('model', [tesseractResultSchema, z.object({
   model: z.literal(OCR_MODEL),
   revision: z.literal(OCR_REVISION),
   ...dimensions,
   regions: z.array(z.object({ text: z.string(), quad: quadSchema })),
-}), z.object({
-  model: z.literal(SMOLVLM_MODEL),
-  revision: z.literal(SMOLVLM_REVISION),
-  ...dimensions,
-  text: z.string(),
 })]).superRefine((result, context) => {
   if (result.model !== OCR_MODEL) return
   for (const region of result.regions) {
