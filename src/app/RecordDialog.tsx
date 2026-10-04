@@ -217,13 +217,14 @@ export function RecordDialog() {
         ? 'I’m not looking or listening. Continue when you’re ready.'
         : `I’m watching and listening.${hearing}${waiting ? ' I also have a question for you.' : ''}`,
       {
-        actions: [
-          { label: 'I’m done', primary: true, onClick: () => void done() },
-          offRecord
-            ? { label: 'Continue recording', onClick: () => void setOffRecord(false).then(recordFlow.controls) }
-            : { label: 'Pause', onClick: () => void setOffRecord(true).then(recordFlow.controls) },
-          ...(waiting && !offRecord ? [{ label: 'Ask me now', onClick: () => void askWaitingQuestion() }] : []),
-        ],
+        // Paused: only the way back. "I'm done" there could read as "done with the private part".
+        actions: offRecord
+          ? [{ label: 'Continue recording', primary: true, onClick: () => void setOffRecord(false).then(recordFlow.controls) }]
+          : [
+              { label: 'I’m done', primary: true, onClick: () => void done() },
+              { label: 'Pause', onClick: () => void setOffRecord(true).then(recordFlow.controls) },
+              ...(waiting ? [{ label: 'Ask me now', onClick: () => void askWaitingQuestion() }] : []),
+            ],
       },
     )
   }, [controlsAt])
