@@ -5,7 +5,7 @@ import { bus, getEventLog } from '../../shared/bus'
 import { useSession } from '../../shared/session'
 import { hintNextStep } from '../../teach-ui/hint'
 import { buildReport, type Outcome } from '../../teach-ui/model'
-import { ClipPlayer } from '../player/ClipPlayer'
+import { EnlargeableClip } from '../player/EnlargeableClip'
 import { useVoice } from '../voice'
 import { stopLearning } from './learning'
 import { useProcess } from './processes'
@@ -127,7 +127,7 @@ export function MomentView({ stepId, processId }: { stepId: string; processId?: 
         </p>
         <p className="m-0 mt-1 text-[18px] font-semibold leading-snug text-ink">{step.title}</p>
       </div>
-      <ClipPlayer sessionId={wm.sessionId} start={step.clip.start} end={step.clip.end} className="w-full" />
+      <EnlargeableClip sessionId={wm.sessionId} start={step.clip.start} end={step.clip.end} title={`${wm.expert}’s screen · ${step.title}`} />
       {step.reason ? <p className="m-0 border-l-2 border-helpy pl-3 font-quote text-[19px] italic leading-snug text-ink">“{step.reason.text}”</p> : null}
     </div>
   )

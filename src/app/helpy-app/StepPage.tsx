@@ -3,7 +3,7 @@ import type { Guardrail, Step, WorkMap } from '../../shared/types'
 import { describeGuardrailLogic } from '../../workmap/conditions'
 import { useProcess } from '../panel/processes'
 import { mmss } from '../panel/ui'
-import { ClipPlayer } from '../player/ClipPlayer'
+import { EnlargeableClip } from '../player/EnlargeableClip'
 import { showWhere, teach } from './actions'
 import { helpyApp } from './store'
 import { appPrimary, appSecondary, card, pageTitle, sectionTitle } from './ui'
@@ -138,7 +138,7 @@ export function StepPage({ processId, stepId }: { processId: string; stepId: str
 
       <aside className="flex flex-col gap-3">
         <h2 className={sectionTitle}>{wm.expert}’s screen</h2>
-        <ClipPlayer sessionId={wm.sessionId} start={step.clip.start} end={step.clip.end} className="w-full" />
+        <EnlargeableClip sessionId={wm.sessionId} start={step.clip.start} end={step.clip.end} title={`${wm.expert}’s screen · ${step.title}`} />
         <p className="m-0 text-[14px] text-muted">At {mmss(step.clip.start)} in the recording.</p>
       </aside>
     </div>

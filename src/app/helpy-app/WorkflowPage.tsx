@@ -1,8 +1,12 @@
+import { useMutation } from 'convex/react'
+import { useState } from 'react'
+import { api } from '../../../convex/_generated/api'
+import type { Id } from '../../../convex/_generated/dataModel'
 import { useSession } from '../../shared/session'
 import { downloadWorkMapMarkdown } from '../../workmap/exportMarkdown'
 import { STATUS, statusOf, useProcess, type Process } from '../panel/processes'
 import { Avatar } from '../panel/SignInView'
-import { textBtn } from '../panel/ui'
+import { field, textBtn } from '../panel/ui'
 import { answerQuestions, recordAgain, teach } from './actions'
 import { helpyApp } from './store'
 import { appPrimary, appSecondary, pageTitle, sectionTitle } from './ui'
@@ -39,6 +43,81 @@ function Recordings({ process }: { process: Process }) {
   )
 }
 
+/** The process name, with "Rename" (not for the hand-written example, which is not stored). */
+function Title({ process }: { process: Process }) {
+  const rename = useMutation(api.projects.rename)
+  const [editing, setEditing] = useState(false)
+  const [name, setName] = useState(process.name)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  if (!editing) {
+    return (
+      <div className="mt-1 flex flex-wrap items-baseline gap-x-3">
+        <h1 className={pageTitle}>{process.name}</h1>
+        {!process.example ? (
+          <button
+            type="button"
+            className={textBtn}
+            onClick={() => {
+              setName(process.name)
+              setError('')
+              setEditing(true)
+            }}
+          >
+            Rename
+          </button>
+        ) : null}
+      </div>
+    )
+  }
+
+  const save = async () => {
+    const next = name.trim()
+    if (!next || next === process.name) return setEditing(false)
+    setSaving(true)
+    try {
+      await rename({ projectId: process.id as Id<'projects'>, name: next })
+      setEditing(false)
+    } catch {
+      setError('I couldn’t save the new name. Please try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form
+      className="mt-2 flex flex-col gap-2"
+      onSubmit={(e) => {
+        e.preventDefault()
+        void save()
+      }}
+    >
+      <label htmlFor="helpy-process-name" className="text-[15px] font-medium text-ink">
+        Name of the process
+      </label>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          id="helpy-process-name"
+          autoFocus
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === 'Escape' && setEditing(false)}
+          className={`${field} h-12 min-w-[min(100%,320px)] flex-1 text-[19px] font-semibold`}
+        />
+        <button type="submit" className={appPrimary} disabled={!name.trim() || saving}>
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+        <button type="button" className={appSecondary} onClick={() => setEditing(false)}>
+          Cancel
+        </button>
+      </div>
+      {error ? <p className="m-0 text-[15px] text-guard">{error}</p> : null}
+    </form>
+  )
+}
+
 /** One process as a workflow: every step in order; a click opens the step's guide. */
 export function WorkflowPage({ processId }: { processId: string }) {
   const process = useProcess(processId)
@@ -57,7 +136,7 @@ export function WorkflowPage({ processId }: { processId: string }) {
       <div className="flex min-w-0 flex-col gap-6">
         <header>
           <p className="m-0 text-[15px] font-medium text-helpy">{process.category} · Workflow</p>
-          <h1 className={`${pageTitle} mt-1`}>{process.name}</h1>
+          <Title process={process} />
           <p className="m-0 mt-2 text-[16px] text-muted">
             {wm ? `Learned from ${wm.expert} · ${wm.steps.length} steps · ${wm.guardrails.length} rules · ` : ''}
             <span className={STATUS[status].tone}>{STATUS[status].label}</span>

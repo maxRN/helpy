@@ -3,7 +3,7 @@ import { useMascot } from '../shared/mascot'
 import { registry } from '../shared/registry'
 import { useSession } from '../shared/session'
 import { mascot } from './api'
-import { dodge, homePosition, placeBubble, placeNextTo, type Box, type Side } from './placement'
+import { clearSpot, dodge, homePosition, placeBubble, placeNextTo, type Box, type Side } from './placement'
 import { Robot } from './Robot'
 import { useHelpyExtras, type BubbleAction, type BubbleInput } from './store'
 
@@ -38,6 +38,31 @@ export function visibleBounds(el: HTMLElement | null): Box {
   return { left, top, width: right - left, height: Math.min(vh, r.bottom) - top }
 }
 
+/**
+ * Controls the user may need next (buttons, fields, links): Helpy and its bubble keep off them.
+ * Not Helpy's own parts, not its panel, not table rows or other large areas (there would be no free spot left).
+ */
+function controlsOnScreen(bounds: Box, except?: Element): Box[] {
+  const out: Box[] = []
+  for (const el of document.querySelectorAll<HTMLElement>('button, select, input, textarea, a[href], [role="button"], [data-target]')) {
+    if (el === except || el.closest('[data-helpy], [role="dialog"]')) continue
+    const r = el.getBoundingClientRect()
+    if (r.width === 0 || r.height === 0 || r.height > 120 || r.width * r.height > 80_000) continue
+    if (r.right < bounds.left || r.left > bounds.left + bounds.width || r.bottom < bounds.top || r.top > bounds.top + bounds.height) continue
+    out.push(toBox(r))
+  }
+  return out
+}
+
+/** Where the user is typing (Helpy moves out of the way); a clicked button keeps focus but does not count. */
+const typingIn = (el: Element | null) =>
+  el instanceof HTMLTextAreaElement ||
+  el instanceof HTMLSelectElement ||
+  (el instanceof HTMLInputElement && !['button', 'submit', 'checkbox', 'radio', 'range'].includes(el.type)) ||
+  (el instanceof HTMLElement && el.isContentEditable)
+
+const boxesKey = (boxes: Box[]) => boxes.map((b) => `${Math.round(b.left)},${Math.round(b.top)},${Math.round(b.width)},${Math.round(b.height)}`).join(';')
+
 const sameBox = (a: Box | null, b: Box | null) =>
   a === b ||
   (!!a && !!b && Math.abs(a.left - b.left) < 0.5 && Math.abs(a.top - b.top) < 0.5 && Math.abs(a.width - b.width) < 0.5 && Math.abs(a.height - b.height) < 0.5)
@@ -48,6 +73,9 @@ interface Layout {
   side: Side | null
   ring: Box | null
   bounds: Box
+  /** Controls to keep the bubble off (see controlsOnScreen). */
+  avoid: Box[]
+  avoidKey: string
 }
 
 /**
@@ -99,19 +127,29 @@ export function MascotLayer({ boundsRef, hideBubble = false, badge }: { boundsRe
       const r = el?.getBoundingClientRect()
       const onScreen = !!r && r.width > 0 && r.height > 0 && r.bottom > bounds.top && r.top < bounds.top + bounds.height
 
+      const avoid = controlsOnScreen(bounds, el)
+      const avoidKey = boxesKey(avoid)
       let next: Layout
       if (r && onScreen) {
         const ring = toBox(r)
-        const p = placeNextTo(ring, SIZE, bounds, showBubble ? bubbleSize : null)
-        next = { x: p.x, y: p.y, side: p.side, ring, bounds }
+        const p = placeNextTo(ring, SIZE, bounds, showBubble ? bubbleSize : null, avoid)
+        next = { x: p.x, y: p.y, side: p.side, ring, bounds, avoid, avoidKey }
       } else {
         const active = document.activeElement
-        const focused = active instanceof HTMLElement && active !== document.body && (boundsRef?.current ?? document.body).contains(active) ? toBox(active.getBoundingClientRect()) : null
-        const p = dodge(homePosition(home, SIZE, bounds), SIZE, focused, bounds)
-        next = { x: p.x, y: p.y, side: null, ring: null, bounds }
+        const focused = typingIn(active) ? toBox(active!.getBoundingClientRect()) : null
+        let p = dodge(homePosition(home, SIZE, bounds), SIZE, focused, bounds)
+        // At rest, off the buttons and fields too; not while the panel is open, it opens next to the resting spot.
+        if (!hideBubble) p = clearSpot(p, SIZE, avoid, bounds)
+        next = { x: p.x, y: p.y, side: null, ring: null, bounds, avoid, avoidKey }
       }
       setLayout((prev) =>
-        prev && Math.abs(prev.x - next.x) < 0.5 && Math.abs(prev.y - next.y) < 0.5 && prev.side === next.side && sameBox(prev.ring, next.ring) && sameBox(prev.bounds, next.bounds)
+        prev &&
+        Math.abs(prev.x - next.x) < 0.5 &&
+        Math.abs(prev.y - next.y) < 0.5 &&
+        prev.side === next.side &&
+        sameBox(prev.ring, next.ring) &&
+        sameBox(prev.bounds, next.bounds) &&
+        prev.avoidKey === next.avoidKey
           ? prev
           : next,
       )
@@ -127,7 +165,7 @@ export function MascotLayer({ boundsRef, hideBubble = false, badge }: { boundsRe
       document.removeEventListener('focusin', update)
       clearInterval(interval)
     }
-  }, [targetId, home, boundsRef, showBubble, bubbleSize])
+  }, [targetId, home, boundsRef, showBubble, bubbleSize, hideBubble])
 
   const own = extras?.text === bubbleText ? extras : null
   const actionCount = (own?.actions.length ?? 0) + (own?.input ? 1 + (own.input.suggestions?.length ?? 0) : 0)
@@ -145,7 +183,7 @@ export function MascotLayer({ boundsRef, hideBubble = false, badge }: { boundsRe
   // The pointing arm is on the robot's right; mirror it when the target is to its left.
   const flip = layout.side === 'right' || (layout.side === 'below' || layout.side === 'above' ? (layout.ring?.left ?? 0) + (layout.ring?.width ?? 0) / 2 < x + SIZE.width / 2 : false)
   // Around the robot, but never on the thing it points at and never off screen.
-  const bubble = placeBubble({ left: x, top: y, ...SIZE }, bubbleSize, drag ? null : layout.ring, layout.bounds)
+  const bubble = placeBubble({ left: x, top: y, ...SIZE }, bubbleSize, drag ? null : layout.ring, layout.bounds, layout.avoid)
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return
