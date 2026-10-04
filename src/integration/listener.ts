@@ -33,9 +33,15 @@ let onMaybeToHelpy: ((text: string) => Promise<boolean>) | null = null
 
 const DECIDE_TIMEOUT_MS = 8000 // if Claude takes longer, treat the turn as narration
 
+/** Finished turns that might be meant for Helpy and are still being decided (or answered). */
+let deciding = 0
+
 export const speech = {
   lastSpeechAt: () => tracker.lastSpeechAt(),
+  /** The expert is mid-turn: Scribe heard speech and has not committed the turn yet (no endpoint). */
   isSpeaking: () => tracker.isSpeaking(),
+  /** A turn might be addressed to Helpy: Claude decides, and Helpy may be about to answer. */
+  replyPending: () => deciding > 0,
   active: () => useListener.getState().status === 'listening',
 }
 
@@ -74,10 +80,17 @@ function logUtterance(u: Utterance, toHelpy = false) {
 async function handleTurn(u: Utterance) {
   let toHelpy = false
   if (onMaybeToHelpy && mightBeToHelpy(u.text)) {
-    toHelpy = await Promise.race([
-      onMaybeToHelpy(u.text).catch(() => false),
-      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), DECIDE_TIMEOUT_MS)),
-    ])
+    deciding++
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      toHelpy = await Promise.race([
+        onMaybeToHelpy(u.text).catch(() => false),
+        new Promise<boolean>((resolve) => (timer = setTimeout(() => resolve(false), DECIDE_TIMEOUT_MS))),
+      ])
+    } finally {
+      clearTimeout(timer)
+      deciding--
+    }
   }
   logUtterance(toHelpy ? u : tracker.claimAnswer(u), toHelpy)
 }

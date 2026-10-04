@@ -72,7 +72,11 @@ export async function startVoice(mode: AgentMode) {
       }),
       'Listening',
     ).catch((err) => console.warn('[helpy] Scribe not started', err))
-    voice.startCaptureWithoutAgent((question) => void speak(question))
+    // A live question is only said if it is still a pause once its audio is ready; otherwise it waits.
+    voice.startCaptureWithoutAgent(async (question, control) => {
+      const said = await speak(question, { gate: control.stillQuiet, onStart: control.started })
+      return said === 'spoken'
+    })
     useVoice.setState({ mode, error: '' })
     return
   }
@@ -106,7 +110,8 @@ export async function answerIfForHelpy(text: string, mode: AgentMode): Promise<b
   if (turn.language !== 'keep') session().setLanguage(turn.language)
   if (!turn.toHelpy || !turn.reply) return false
   mascot.bubble(turn.reply, { ttlMs: 9000 })
-  void speak(turn.reply)
+  // Resolve once Helpy starts answering, so no live question slips in between (see speech.replyPending).
+  await new Promise<void>((resolve) => void speak(turn.reply, { onStart: resolve }).finally(resolve))
   return true
 }
 
@@ -155,20 +160,38 @@ export async function askWaitingQuestion() {
 let ttsAvailable = true
 let playing: HTMLAudioElement | null = null
 
-/** Says `text` out loud; resolves when it was said (or right away without TTS). Helpy shows "speaking" meanwhile, so Scribe does not hear it. */
-export async function speak(text: string): Promise<void> {
-  if (!ttsAvailable) return
+export interface SpeakOptions {
+  /** Checked once the audio is ready, right before it plays: false = do not say it now. */
+  gate?: () => boolean
+  /** Called right before the voice starts (or right away when there is no TTS). */
+  onStart?: () => void
+}
+
+/**
+ * Says `text` out loud; resolves 'spoken' when it was said (or right away without TTS), 'skipped' when
+ * the gate said no. Helpy shows "speaking" meanwhile, so Scribe does not hear it.
+ */
+export async function speak(text: string, { gate, onStart }: SpeakOptions = {}): Promise<'spoken' | 'skipped'> {
+  if (!ttsAvailable) {
+    if (gate && !gate()) return 'skipped'
+    onStart?.()
+    return 'spoken'
+  }
   try {
     const res = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) })
     if (!res.ok) {
       ttsAvailable = false
-      return
+      return speak(text, { gate, onStart })
     }
-    const url = URL.createObjectURL(await res.blob())
+    const blob = await res.blob()
+    // The expert may have started talking or typing while the audio was generated.
+    if (gate && !gate()) return 'skipped'
+    const url = URL.createObjectURL(blob)
     playing?.pause()
     const audio = new Audio(url)
     playing = audio
     mascot.setState('speaking')
+    onStart?.()
     await new Promise<void>((resolve) => {
       audio.onended = () => resolve()
       audio.onerror = () => resolve()
@@ -182,5 +205,8 @@ export async function speak(text: string): Promise<void> {
     }
   } catch {
     // Autoplay blocked or no network: the bubble still says it.
+    if (gate && !gate()) return 'skipped'
+    onStart?.()
   }
+  return 'spoken'
 }

@@ -72,13 +72,15 @@ export interface Deps {
     on(type: string, fn: (e: AppEvent) => void): () => void;
   };
   session: { t0: number };
-  activity: { lastInputAt(): number }; // P1
-  capture: { lastFrameChangeAt(): number }; // P3
+  /** P1. Typing only: pointer movement, clicks and scrolling never hold a question back. */
+  activity: { lastTypingAt(): number };
   /**
    * Optional: Scribe v2 Realtime listening in Capture mode (src/integration/listener.ts).
    * When active, the agent's own mic is muted in Capture, and speech activity comes from Scribe's VAD.
+   * turnOpen: the expert is mid-turn (Scribe has not committed it yet, i.e. no endpoint so far).
+   * replyPending: a finished turn might be meant for Helpy and is being decided or answered.
    */
-  speech?: { lastSpeechAt(): number; active(): boolean };
+  speech?: { lastSpeechAt(): number; active(): boolean; turnOpen?(): boolean; replyPending?(): boolean };
   /** Optional: Helpy is talking outside the agent (TTS); the pause detector treats it like the agent speaking. */
   isSpeaking?(): boolean;
   /** Optional: the language Helpy speaks with the expert ('de' after they asked for German). */

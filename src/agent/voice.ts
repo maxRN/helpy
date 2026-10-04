@@ -8,7 +8,7 @@
 import { emit, getDeps, mmss } from './deps';
 import { MOCK_WORK_MAP } from './mockWorkMap';
 import { startPauseLoop, type PauseInputs } from './pause';
-import { createQuestionPolicy, type QuestionPolicy } from './policy';
+import { createQuestionPolicy, type DeliveryControl, type QuestionPolicy } from './policy';
 import { buildClientTools } from './tools';
 import { createTranscript, type TranscriptHandle } from './transcript';
 import { SCREEN_EVENT_TYPES, type AppEvent, type Deps, type Mode, type Quote, type Speaker } from './types';
@@ -45,7 +45,7 @@ let startGen = 0;
 /** True while live questions can be asked: with the agent, or in Capture without one. */
 export const isActive = (): boolean => conv !== null || lite;
 
-export function startCaptureWithoutAgent(say: (question: string) => void): void {
+export function startCaptureWithoutAgent(say: Deliver): void {
   if (conv || lite) return;
   const deps = getDeps();
   mode = 'capture';
@@ -157,7 +157,12 @@ export async function start(m: Mode, opts: { workMapMarkdown?: string } = {}): P
   if (m === 'capture' && deps.speech?.active()) conv.setMicMuted(true);
   cleanup.push(startScreenFeed(deps));
 
-  if (m === 'capture') startCapture(deps, (q) => conv?.sendUserMessage(`[ASK] ${q}`));
+  if (m === 'capture') {
+    startCapture(deps, (q) => {
+      conv?.sendUserMessage(`[ASK] ${q}`);
+      return true;
+    });
+  }
   if (m === 'teach') cleanup.push(wireTutor(deps));
 }
 
@@ -279,8 +284,11 @@ export function setOffRecord(on: boolean, source: 'voice' | 'ui' = 'ui'): void {
 
 // ---------------------------------------------------------------- capture mode
 
-/** How a live question is spoken: by the agent, or (without one) by plain TTS. */
-type Deliver = (question: string) => void;
+/**
+ * How a live question is spoken: by the agent, or (without one) by plain TTS. Resolves false when it
+ * was not said because the expert became busy before the voice started (see DeliveryControl).
+ */
+type Deliver = (question: string, control: DeliveryControl) => Promise<boolean> | boolean;
 
 function startCapture(deps: Deps, deliver: Deliver): void {
   // What was said lately, from the shared bus: Scribe's turns (the agent's mic is muted in Capture) and the agent's lines.
@@ -302,11 +310,15 @@ function startCapture(deps: Deps, deliver: Deliver): void {
     const now = Date.now();
     // Scribe's VAD (when listening) and the agent's own VAD: whichever heard speech last.
     const lastSpeech = Math.max(lastUserSpeechAt, deps.speech?.lastSpeechAt() ?? 0);
+    // Scribe's endpointing: the expert is talking until Scribe commits the turn (no extra delay after that).
+    const endpointing = (deps.speech?.active() ?? false) && !!deps.speech?.turnOpen;
     return {
       now,
-      lastInputAt: deps.activity.lastInputAt(),
-      lastFrameChangeAt: deps.capture.lastFrameChangeAt(),
+      lastTypingAt: deps.activity.lastTypingAt(),
       userSilentForMs: now - lastSpeech,
+      endpointing,
+      turnOpen: endpointing ? deps.speech!.turnOpen!() : undefined,
+      replyPending: deps.speech?.replyPending?.() ?? false,
       // The agent, or Helpy's own TTS (questions, replies) when it speaks without the agent.
       agentSpeaking: agentSpeaking || (deps.isSpeaking?.() ?? false),
       offRecord,
@@ -327,7 +339,7 @@ function startCapture(deps: Deps, deliver: Deliver): void {
 
   // While the expert types, tell the agent so it never talks over them (it holds ~2 s per signal).
   const keepQuiet = setInterval(() => {
-    if (conv && Date.now() - deps.activity.lastInputAt() < 1500) conv.sendUserActivity();
+    if (conv && Date.now() - deps.activity.lastTypingAt() < 1500) conv.sendUserActivity();
   }, 1000);
   cleanup.push(() => clearInterval(keepQuiet));
 }

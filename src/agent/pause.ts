@@ -1,12 +1,24 @@
 // Answer to judge question 1: "When to ask?"
 // A moment counts as a pause only if ALL conditions hold. Every transition is logged
 // together with the reasons that blocked it, so you can show the log in Q&A.
+//
+// Only the expert's typing and speech hold a question back. Mouse movement, clicks, scrolling and
+// screen changes never do: someone who reads with the mouse in hand is still at a natural pause.
 
 export interface PauseInputs {
   now: number; // Date.now()
-  lastInputAt: number; // last key/click/scroll (P1)
-  lastFrameChangeAt: number; // last visible change on screen (P3)
-  userSilentForMs: number; // how long the expert has not spoken
+  lastTypingAt: number; // last keystroke (P1), epoch ms
+  /** How long the expert has not spoken (epoch-based, from Scribe's or the agent's VAD). */
+  userSilentForMs: number;
+  /**
+   * Speech endpointing is available (Scribe v2 Realtime): a turn is open from its first partial
+   * transcript until Scribe commits it after its own VAD silence. Then `turnOpen` decides, with no
+   * extra delay on top of Scribe's endpoint.
+   */
+  endpointing?: boolean;
+  turnOpen?: boolean;
+  /** A finished turn might be addressed to Helpy and is being decided or answered right now. */
+  replyPending?: boolean;
   agentSpeaking: boolean;
   offRecord: boolean;
 }
@@ -17,19 +29,24 @@ export interface PauseResult {
 }
 
 export const PAUSE_THRESHOLDS = {
-  sinceInputMs: 2500,
-  sinceFrameChangeMs: 2000,
+  sinceTypingMs: 2500,
+  /** Without endpointing (agent VAD only): silence that counts as the end of speech. */
   userSilentMs: 1200,
+  /** With endpointing: an open turn without any new speech for this long is stale (e.g. a lost commit). */
+  staleTurnMs: 6000,
 } as const;
 
 export function isPause(i: PauseInputs, th: typeof PAUSE_THRESHOLDS = PAUSE_THRESHOLDS): PauseResult {
   const blockers: string[] = [];
-  const sinceInput = i.now - i.lastInputAt;
-  const sinceFrame = i.now - i.lastFrameChangeAt;
+  const sinceTyping = i.now - i.lastTypingAt;
 
-  if (sinceInput < th.sinceInputMs) blockers.push(`typing/clicking ${sinceInput}ms ago`);
-  if (sinceFrame < th.sinceFrameChangeMs) blockers.push(`screen changed ${sinceFrame}ms ago`);
-  if (i.userSilentForMs < th.userSilentMs) blockers.push(`expert speaking (silent ${i.userSilentForMs}ms)`);
+  if (sinceTyping < th.sinceTypingMs) blockers.push(`typing ${sinceTyping}ms ago`);
+  if (i.endpointing) {
+    if (i.turnOpen && i.userSilentForMs < th.staleTurnMs) blockers.push('expert speaking (turn open)');
+  } else if (i.userSilentForMs < th.userSilentMs) {
+    blockers.push(`expert speaking (silent ${i.userSilentForMs}ms)`);
+  }
+  if (i.replyPending) blockers.push('answering the expert');
   if (i.agentSpeaking) blockers.push('agent speaking');
   if (i.offRecord) blockers.push('off the record');
 

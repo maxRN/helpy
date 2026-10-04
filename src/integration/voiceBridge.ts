@@ -10,7 +10,6 @@ import { getNextStep } from '../erp/stepTracker'
 import { erp } from '../erp/store'
 import { activity } from '../shared/activity'
 import { bus, emitEvent } from '../shared/bus'
-import { lastFrameChangeAt } from '../shared/frames'
 import { mascot, useMascot } from '../shared/mascot'
 import { session } from '../shared/session'
 import type { AppEvent, Quote, WorkMap } from '../shared/types'
@@ -143,9 +142,8 @@ export function installVoiceBridge() {
         return session().t0 ?? (voiceT0 ??= Date.now())
       },
     },
-    activity: { lastInputAt: activity.lastInputAt },
-    capture: { lastFrameChangeAt },
-    speech: { lastSpeechAt: speech.lastSpeechAt, active: speech.active },
+    activity: { lastTypingAt: activity.lastTypingAt },
+    speech: { lastSpeechAt: speech.lastSpeechAt, active: speech.active, turnOpen: speech.isSpeaking, replyPending: speech.replyPending },
     isSpeaking: () => useMascot.getState().state === 'speaking',
     language: () => session().language,
     mascot: {

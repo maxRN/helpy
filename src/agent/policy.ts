@@ -28,11 +28,22 @@ const FALLBACK_GUARDRAIL = {
 
 type ReadyQuestion = { question: string; kind: QuestionKind; eventId?: string };
 
+/** What deliver() gets to say a question at the right moment. */
+export interface DeliveryControl {
+  /** Is it still a pause? Check right before the voice starts (e.g. after the TTS audio arrived). */
+  stillQuiet(): boolean;
+  /** Call when the question actually starts being spoken (or shown); the question counts as asked from then on. */
+  started(): void;
+}
+
 export interface PolicyOpts {
   getInputs(): PauseInputs;
   tail(n: number): { speaker: Speaker; text: string }[];
-  /** Send "[ASK] ..." to the agent. */
-  deliver(question: string): void;
+  /**
+   * Say the question (agent "[ASK] ..." or TTS). Resolve false if it was not said because the expert
+   * became busy in the meantime: the question is held again and asked at the next pause.
+   */
+  deliver(question: string, control: DeliveryControl): Promise<boolean> | boolean | void;
   /** Tell the transcript to treat the next expert turn as the answer. */
   noteQuestion(q: { questionEventId: string; eventId?: string }): void;
   endpoint?: string; // default /api/policy
@@ -49,6 +60,7 @@ export function createQuestionPolicy(o: PolicyOpts) {
   let inFlight = false;
   let lastEvaluated: string | null = null; // newest event id we already evaluated and declined
   let ready: ReadyQuestion | null = null; // prepared while the expert was busy, asked at the next pause
+  let delivering: ReadyQuestion | null = null; // being spoken right now: never a second time in parallel
 
   const off = deps.bus.on('*', (e) => {
     if (!SCREEN_EVENT_TYPES.has(e.type) || !e.text) return;
@@ -120,8 +132,8 @@ export function createQuestionPolicy(o: PolicyOpts) {
     logPause({ t: nowRel(), pause: false, blockers: [], note: `holding (${q.kind}): ${q.question}` });
   }
 
-  function askNow(q: ReadyQuestion): void {
-    ready = null;
+  /** The question is being said: from now on it counts as asked (once). */
+  function commit(q: ReadyQuestion): void {
     deps.mascot.waiting?.(null);
     const qe = emit({
       type: 'question_asked',
@@ -138,12 +150,40 @@ export function createQuestionPolicy(o: PolicyOpts) {
     deps.mascot.setState('speaking');
     deps.mascot.bubble(q.question);
     o.noteQuestion({ questionEventId: qe.id, eventId: q.eventId });
-    o.deliver(q.question);
     logPause({ t: qe.t, pause: true, blockers: [], note: `asked (${q.kind}): ${q.question}` });
+  }
+
+  /**
+   * Says a question once. If the expert starts typing or talking before the voice starts, the
+   * question is not said and waits for the next pause instead (no talking over anyone).
+   */
+  async function askNow(q: ReadyQuestion): Promise<void> {
+    if (delivering) return;
+    delivering = q;
+    ready = null;
+    let committed = false;
+    const started = () => {
+      if (committed) return;
+      committed = true;
+      commit(q);
+    };
+    let said = true;
+    try {
+      said = (await o.deliver(q.question, { stillQuiet: () => isPause(o.getInputs()).pause, started })) !== false;
+    } catch (err) {
+      console.warn('[policy] delivery failed', err);
+    } finally {
+      delivering = null;
+    }
+    if (committed) return;
+    if (said) return started(); // delivered without reporting the start (e.g. the agent's [ASK])
+    if (!ready) hold(q);
+    note(`deferred, the expert became busy: ${q.question}`);
   }
 
   /** Called by the pause loop. Safe to call repeatedly. */
   async function onPause(_r: PauseResult): Promise<void> {
+    if (delivering) return;
     if (ready) return askNow(ready);
     if (inFlight) return;
     const why = canAsk(Date.now());
@@ -156,7 +196,8 @@ export function createQuestionPolicy(o: PolicyOpts) {
       if (!q) return;
       // The expert may have started typing/talking while we waited for the model.
       if (!isPause(o.getInputs()).pause) return hold(q);
-      askNow(q);
+      inFlight = false;
+      await askNow(q);
     } finally {
       inFlight = false;
     }
@@ -165,7 +206,7 @@ export function createQuestionPolicy(o: PolicyOpts) {
   // Think ahead while the expert is busy: a question that is ready waits for the next pause, and the
   // raised hand tells the expert there is one, so nobody is interrupted and nobody talks on unaware.
   const prepare = setInterval(() => {
-    if (ready || inFlight) return;
+    if (ready || inFlight || delivering) return;
     const inputs = o.getInputs();
     if (inputs.offRecord || isPause(inputs).pause) return; // pauses are handled by onPause
     if (canAsk(inputs.now) || pending[pending.length - 1].id === lastEvaluated) return;
@@ -181,8 +222,8 @@ export function createQuestionPolicy(o: PolicyOpts) {
 
   /** The expert said "ask me now" (clicked the raised hand). */
   function askReadyNow(): boolean {
-    if (!ready) return false;
-    askNow(ready);
+    if (!ready || delivering) return false;
+    void askNow(ready);
     return true;
   }
 

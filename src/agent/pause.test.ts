@@ -3,8 +3,7 @@ import { PAUSE_THRESHOLDS as TH, clearPauseLog, getPauseLog, isPause, startPause
 
 const base = (over: Partial<PauseInputs> = {}): PauseInputs => ({
   now: 100_000,
-  lastInputAt: 100_000 - 10_000,
-  lastFrameChangeAt: 100_000 - 10_000,
+  lastTypingAt: 100_000 - 10_000,
   userSilentForMs: 10_000,
   agentSpeaking: false,
   offRecord: false,
@@ -19,8 +18,7 @@ describe('isPause', () => {
   it('treats exactly-at-threshold as a pause (>=)', () => {
     const r = isPause(
       base({
-        lastInputAt: 100_000 - TH.sinceInputMs,
-        lastFrameChangeAt: 100_000 - TH.sinceFrameChangeMs,
+        lastTypingAt: 100_000 - TH.sinceTypingMs,
         userSilentForMs: TH.userSilentMs,
       }),
     );
@@ -28,17 +26,27 @@ describe('isPause', () => {
   });
 
   it('blocks while typing', () => {
-    const r = isPause(base({ lastInputAt: 100_000 - (TH.sinceInputMs - 1) }));
+    const r = isPause(base({ lastTypingAt: 100_000 - (TH.sinceTypingMs - 1) }));
     expect(r.pause).toBe(false);
     expect(r.blockers[0]).toMatch(/typing/);
   });
 
-  it('blocks while the screen is changing', () => {
-    expect(isPause(base({ lastFrameChangeAt: 100_000 - 500 })).pause).toBe(false);
+  it('blocks while the expert is talking (no endpointing: VAD silence)', () => {
+    expect(isPause(base({ userSilentForMs: 300 })).pause).toBe(false);
   });
 
-  it('blocks while the expert is talking', () => {
-    expect(isPause(base({ userSilentForMs: 300 })).pause).toBe(false);
+  it('with Scribe endpointing, an open turn blocks and a committed one does not, without extra delay', () => {
+    expect(isPause(base({ endpointing: true, turnOpen: true, userSilentForMs: 200 })).pause).toBe(false);
+    // Scribe just committed the turn (its own VAD silence): a pause right away.
+    expect(isPause(base({ endpointing: true, turnOpen: false, userSilentForMs: 0 })).pause).toBe(true);
+  });
+
+  it('an open turn without speech for a long time is stale and does not block forever', () => {
+    expect(isPause(base({ endpointing: true, turnOpen: true, userSilentForMs: TH.staleTurnMs })).pause).toBe(true);
+  });
+
+  it('blocks while a turn addressed to Helpy is being answered', () => {
+    expect(isPause(base({ replyPending: true })).blockers).toEqual(['answering the expert']);
   });
 
   it('blocks while the agent speaks or when off the record', () => {
@@ -49,6 +57,12 @@ describe('isPause', () => {
   it('lists every blocker', () => {
     const r = isPause(base({ agentSpeaking: true, offRecord: true, userSilentForMs: 0 }));
     expect(r.blockers).toHaveLength(3);
+  });
+
+  it('has no input for mouse movement or screen changes: they can never block', () => {
+    // Pointer activity is deliberately not part of PauseInputs (see src/shared/activity.ts).
+    expect(Object.keys(base())).not.toContain('lastPointerAt');
+    expect(Object.keys(base())).not.toContain('lastFrameChangeAt');
   });
 });
 
@@ -61,13 +75,12 @@ describe('startPauseLoop', () => {
   afterEach(() => vi.useRealTimers());
 
   it('fires once on the rising edge, retries every retryMs, re-arms after activity', () => {
-    let lastInputAt = 0; // long ago -> quiet
+    let lastTypingAt = 0; // long ago -> quiet
     const onPause = vi.fn();
     const stop = startPauseLoop({
       getInputs: () => ({
         now: Date.now(),
-        lastInputAt,
-        lastFrameChangeAt: 0,
+        lastTypingAt,
         userSilentForMs: 60_000,
         agentSpeaking: false,
         offRecord: false,
@@ -83,7 +96,7 @@ describe('startPauseLoop', () => {
     vi.advanceTimersByTime(3000);
     expect(onPause).toHaveBeenCalledTimes(2); // retry while still paused
 
-    lastInputAt = Date.now(); // expert types again
+    lastTypingAt = Date.now(); // expert types again
     vi.advanceTimersByTime(1000);
     expect(onPause).toHaveBeenCalledTimes(2); // silent while busy
 

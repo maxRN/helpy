@@ -95,7 +95,7 @@ function interruptible<T>(p: Promise<T>): Promise<T | null> {
 /** Waits until nobody talks or types; meanwhile Helpy raises its hand with the question ready. */
 async function waitForQuiet(question: string) {
   const { lastExpertSpeechAt } = await agent()
-  const busy = () => Date.now() - activity.lastInputAt() < QUIET_INPUT_MS || Date.now() - lastExpertSpeechAt() < QUIET_SPEECH_MS
+  const busy = () => Date.now() - activity.lastTypingAt() < QUIET_INPUT_MS || Date.now() - lastExpertSpeechAt() < QUIET_SPEECH_MS
   if (!busy()) return
   sharedMascot.waiting(question)
   while (busy() && run && !run.stopped && !run.skip) await sleep(250)

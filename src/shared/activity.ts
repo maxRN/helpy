@@ -1,21 +1,20 @@
-// Tracks the last keyboard/mouse input so the voice agent knows when the user is busy.
+// Tracks the user's last input so the voice agent knows when they are busy.
+// Typing and pointer activity are kept apart: only typing means "busy, do not interrupt".
+// Moving, clicking or scrolling with the mouse never holds Helpy's questions back.
 // No bus events per keystroke on purpose: that would flood the log.
 
-let last = 0
+let lastTyping = 0
+let lastPointer = 0
 let installed = false
-let lastMove = 0
 
-const touch = () => {
-  last = Date.now()
+const onTyping = () => {
+  lastTyping = Date.now()
 }
 
-const onMove = () => {
-  // Small mouse movements while reading count as activity, but throttle the work.
+const onPointer = () => {
+  // Throttled: pointermove fires many times a second.
   const now = Date.now()
-  if (now - lastMove > 200) {
-    lastMove = now
-    last = now
-  }
+  if (now - lastPointer > 200) lastPointer = now
 }
 
 /** Call once on the client, e.g. in a useEffect in the app shell. */
@@ -23,14 +22,16 @@ export function installActivityTracker() {
   if (installed || typeof window === 'undefined') return
   installed = true
   const opts = { capture: true, passive: true } as const
-  window.addEventListener('keydown', touch, opts)
-  window.addEventListener('input', touch, opts)
-  window.addEventListener('mousedown', touch, opts)
-  window.addEventListener('wheel', touch, opts)
-  window.addEventListener('pointermove', onMove, opts)
-  touch()
+  window.addEventListener('keydown', onTyping, opts)
+  window.addEventListener('input', onTyping, opts)
+  window.addEventListener('pointermove', onPointer, opts)
+  window.addEventListener('pointerdown', onPointer, opts)
+  window.addEventListener('wheel', onPointer, opts)
 }
 
 export const activity = {
-  lastInputAt: () => last,
+  /** Last keystroke or text input (epoch ms, 0 = never). The only input that blocks a spoken question. */
+  lastTypingAt: () => lastTyping,
+  /** Last mouse/pen move, click or scroll (epoch ms, 0 = never). Informational only, never blocks. */
+  lastPointerAt: () => lastPointer,
 }
