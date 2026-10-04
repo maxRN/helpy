@@ -13,7 +13,7 @@ import { bus, emitEvent } from '../shared/bus'
 import { mascot, useMascot } from '../shared/mascot'
 import { ungroundedInvoiceRefs } from '../shared/grounding'
 import { screenSummary } from '../shared/screen'
-import { session } from '../shared/session'
+import { session, sessionClock } from '../shared/session'
 import type { AppEvent, Quote, WorkMap } from '../shared/types'
 import { speech } from './listener'
 
@@ -139,9 +139,9 @@ export function installVoiceBridge() {
       },
     },
     session: {
-      // Recording start if there is one; otherwise the moment the voice session started.
+      // The session's timeline (recording start, kept for its debrief); else the moment the voice session started.
       get t0() {
-        return session().t0 ?? (voiceT0 ??= Date.now())
+        return sessionClock() ?? (voiceT0 ??= Date.now())
       },
     },
     activity: { lastTypingAt: activity.lastTypingAt, lastFieldAt: activity.lastFieldAt },

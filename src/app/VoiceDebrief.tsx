@@ -9,7 +9,7 @@ import { activity } from '../shared/activity'
 import { getEventLog } from '../shared/bus'
 import { scrubUngroundedInvoices, ungroundedInvoiceRefs } from '../shared/grounding'
 import { mascot as sharedMascot } from '../shared/mascot'
-import { session, useSession } from '../shared/session'
+import { session, sessionClock, useSession } from '../shared/session'
 import type { AppEvent } from '../shared/types'
 import { runDebriefFlow } from './debriefFlow'
 import { panel } from './panel/store'
@@ -159,7 +159,7 @@ async function debrief(convex: ConvexReactClient) {
     },
     scrub: scrubUngroundedInvoices,
     now: () => {
-      const t0 = session().t0
+      const t0 = sessionClock()
       return t0 === null ? 0 : Date.now() - t0
     },
     phase: (p) => {

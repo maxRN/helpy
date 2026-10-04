@@ -4,7 +4,7 @@
 import { create } from 'zustand'
 import { bus, emitEvent } from '../shared/bus'
 import { useMascot } from '../shared/mascot'
-import { session, useSession } from '../shared/session'
+import { session, sessionClock, useSession } from '../shared/session'
 import type { AppEvent, Quote } from '../shared/types'
 import { mightBeToHelpy, recordCommand, SpeechTracker, type Utterance } from './speech'
 
@@ -46,7 +46,7 @@ export const speech = {
 }
 
 const rel = (at: number) => {
-  const t0 = session().t0
+  const t0 = sessionClock()
   return t0 === null ? undefined : Math.max(0, at - t0)
 }
 
