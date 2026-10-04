@@ -29,10 +29,10 @@ describe('ERP store', () => {
   })
 
   it('keeps the hold reason on the invoice and in the event text', () => {
-    erp().commit('4472', 'hold', '  Kramer double-bills in December  ')
-    expect(erp().invoices['4472'].note).toBe('Kramer double-bills in December')
+    erp().commit('4472', 'hold', '  Kramer double-bills at quarter-end  ')
+    expect(erp().invoices['4472'].note).toBe('Kramer double-bills at quarter-end')
     const e = getEventLog().at(-1)!
-    expect(e).toMatchObject({ kind: 'action', action: 'hold', text: 'Kramer double-bills in December' })
+    expect(e).toMatchObject({ kind: 'action', action: 'hold', text: 'Kramer double-bills at quarter-end' })
   })
 
   it('does not enforce guardrails on the expert in Capture mode', () => {
@@ -54,7 +54,7 @@ describe('ERP store', () => {
     erp().update('5102', 'costCenter', '0400')
     expect(erp().commit('5102', 'post').violations.map((v) => v.guardrail.id)).toEqual(['G2'])
 
-    erp().update('5102', 'assetNumber', 'A-2025-131')
+    erp().update('5102', 'assetNumber', 'A-2026-131')
     expect(erp().commit('5102', 'post').ok).toBe(true)
     expect(kinds().at(-1)).toBe('action')
   })

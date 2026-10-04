@@ -12,7 +12,7 @@ import { answerQuestions, recordAgain, teach } from './actions'
 import { helpyApp } from './store'
 import { appPrimary, appSecondary, pageTitle, sectionTitle } from './ui'
 
-const when = (t: number) => new Date(t).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+const when = (t: number) => new Date(t).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 const howLong = (ms: number | null) => (ms === null ? '' : ms < 60_000 ? ' · under a minute' : ` · ${Math.round(ms / 60_000)} min`)
 
 /** Who recorded it and when: one line per recording, newest first. */

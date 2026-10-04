@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useSession } from '../shared/session'
-import { formatDate, formatUSD, type Invoice } from './model'
+import { formatDate, formatEUR, type Invoice } from './model'
 import { StatusPill } from './StatusPill'
 import { rowTarget, useErp } from './store'
 import { useTarget } from './useTarget'
@@ -24,7 +24,7 @@ function Row({ invoice }: { invoice: Invoice }) {
       <td className="px-3 py-2 text-slate-900">{invoice.supplierName}</td>
       <td className="px-3 py-2 text-slate-600">{formatDate(invoice.invoiceDate)}</td>
       <td className="px-3 py-2 text-slate-600">{invoice.poNumber || '—'}</td>
-      <td className="px-3 py-2 text-right font-mono tabular-nums text-slate-900">{formatUSD(invoice.amount)}</td>
+      <td className="px-3 py-2 text-right font-mono tabular-nums text-slate-900">{formatEUR(invoice.amount)}</td>
       <td className="px-3 py-2">
         <StatusPill status={invoice.status} />
       </td>
@@ -53,7 +53,7 @@ export function InvoiceInbox() {
         <div>
           <h2 className="text-[15px] font-semibold text-slate-900">Supplier invoices</h2>
           <p className="text-[12px] text-slate-600">
-            {openCount} open · {formatUSD(openTotal)} to process before close
+            {openCount} open · {formatEUR(openTotal)} to process before close
           </p>
         </div>
       </div>

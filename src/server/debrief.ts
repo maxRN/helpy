@@ -75,7 +75,7 @@ Turn them into short spoken questions (max 18 words each):
 - "exception": when the usual rule does not apply.
 - "unseen_case": a case that did not come up but obviously could (e.g. a supplier not in the vendor master, an amount just under a limit).
 Style: spoken aloud by a curious apprentice while the screen moment replays. Refer to that moment, use words not codes, e.g.
-"You held the December invoice. Is that for every supplier, and who decides when to release it?"
+"You held the Kramer invoice at the quarter-end. Is that for every supplier, and who decides when to release it?"
 Rules:
 - Never ask what the log already answers. Never repeat an earlier question.
 - aboutT: the t (ms) of the screen moment the question is about, copied from the log; for unseen cases use the closest related moment.

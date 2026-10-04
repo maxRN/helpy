@@ -1,10 +1,13 @@
 import { accountFor, type Category, type Invoice, type LineItem } from './model'
 
-// Company: Hartmann Machine Works, a machine builder. Sabine runs accounts payable.
+// Company: Hartmann Machine Works, a machine builder near Stuttgart. Sabine has run accounts payable for 24 years.
 export const COMPANY_NAME = 'Hartmann Machine Works'
+/** Where invoices are billed to (shown on every invoice document). */
+export const BILL_TO = 'Accounts Payable, Benzstraße 12, 71229 Leonberg, Germany'
 
-// Business date of the demo: two days before the December month-end close.
-export const BUSINESS_DATE = '2025-12-29'
+// Business date of the demo: two working days before the September close (books close on 6 October).
+export const BUSINESS_DATE = '2026-10-04'
+export const POSTING_PERIOD = 'Sep 2026'
 
 interface SeedInput {
   id: string
@@ -34,7 +37,7 @@ function invoice(s: SeedInput): Invoice {
     number: s.id,
     supplierId: s.supplierId,
     supplierName: s.supplierName,
-    supplierCountry: s.supplierCountry ?? 'US',
+    supplierCountry: s.supplierCountry ?? 'DE',
     supplierAddress: s.supplierAddress,
     supplierVerified: s.supplierVerified ?? true,
     invoiceDate: s.invoiceDate,
@@ -63,13 +66,13 @@ function invoice(s: SeedInput): Invoice {
  * Each one hides a judgment call that is written down nowhere.
  */
 export const DEMO_INVOICES: Invoice[] = [
-  // Equipment over $5,000 is capex; no asset number, no capex posting.
+  // Equipment over €5,000 is capex; no asset number, no capex posting.
   invoice({
     id: '4471',
     supplierId: 'SUP-1042',
-    supplierName: 'Midwest Machine Tools Inc.',
-    supplierAddress: '2200 Industrial Pkwy, Toledo, OH 43612',
-    invoiceDate: '2025-12-18',
+    supplierName: 'Neckartal Werkzeugmaschinen GmbH',
+    supplierAddress: 'Industriestraße 22, 73230 Kirchheim unter Teck',
+    invoiceDate: '2026-09-21',
     poNumber: 'PO-88213',
     lines: [
       { description: 'CNC spindle motor, 15 kW, model SP-1500', qty: 1, unitPrice: 6250 },
@@ -77,27 +80,27 @@ export const DEMO_INVOICES: Invoice[] = [
     ],
     category: 'equipment',
     costCenter: '4711', // pre-coded as opex: Sabine re-codes to 0400
-    contactName: 'Dana Whitfield',
-    contactEmail: 'd.whitfield@midwestmachine.example',
-    bankAccount: 'ACH 071000013 · 4419 2208 7731',
+    contactName: 'Daniela Weiss',
+    contactEmail: 'd.weiss@neckartal-wzm.example',
+    bankAccount: 'IBAN DE21 6005 0101 7402 1188 31',
   }),
-  // Kramer double-bills every December: hold, the controller releases it.
+  // Kramer double-bills at every quarter-end: hold, the controller releases it.
   invoice({
     id: '4472',
     supplierId: 'SUP-1007',
-    supplierName: 'Kramer Industrial Supply',
-    supplierAddress: '415 Foundry St, Milwaukee, WI 53204',
-    invoiceDate: '2025-12-15',
+    supplierName: 'Kramer Industriebedarf GmbH',
+    supplierAddress: 'Gießereistraße 15, 70565 Stuttgart',
+    invoiceDate: '2026-09-22',
     poNumber: 'PO-88190',
     lines: [
-      { description: 'Hydraulic hoses, 1/2" x 6 ft', qty: 40, unitPrice: 18.5 },
+      { description: 'Hydraulic hoses, DN12, 2 m', qty: 40, unitPrice: 18.5 },
       { description: 'Seal kit HK-220', qty: 10, unitPrice: 50 },
     ],
     category: 'raw_materials',
     costCenter: '4711',
-    contactName: 'Greg Kramer',
-    contactEmail: 'billing@kramersupply.example',
-    bankAccount: 'ACH 075000022 · 9001 3356 1180',
+    contactName: 'Georg Kramer',
+    contactEmail: 'rechnung@kramer-industriebedarf.example',
+    bankAccount: 'IBAN DE47 6004 0071 0533 4419 00',
   }),
   // Intercompany from the Czech subsidiary always needs a second approval.
   invoice({
@@ -106,8 +109,8 @@ export const DEMO_INVOICES: Invoice[] = [
     supplierName: 'Hartmann Machine Works s.r.o. (Brno)',
     supplierCountry: 'CZ',
     supplierAddress: 'Hrnčířská 12, 602 00 Brno, Czech Republic',
-    invoiceDate: '2025-12-20',
-    lines: [{ description: 'Engineering services, November (intercompany)', qty: 1, unitPrice: 3900 }],
+    invoiceDate: '2026-09-24',
+    lines: [{ description: 'Engineering services, September (intercompany)', qty: 1, unitPrice: 3900 }],
     category: 'intercompany',
     costCenter: '4800',
     contactName: 'Jana Novak',
@@ -118,18 +121,18 @@ export const DEMO_INVOICES: Invoice[] = [
   invoice({
     id: '4474',
     supplierId: 'SUP-1103',
-    supplierName: 'Officeworks Direct',
-    supplierAddress: '88 Commerce Dr, Columbus, OH 43219',
-    invoiceDate: '2025-12-22',
+    supplierName: 'Bürowelt Direkt GmbH',
+    supplierAddress: 'Königstraße 40, 70173 Stuttgart',
+    invoiceDate: '2026-09-25',
     lines: [
-      { description: 'Printer paper, letter, 10 reams', qty: 2, unitPrice: 42 },
+      { description: 'Printer paper, A4, 10 reams', qty: 2, unitPrice: 42 },
       { description: 'Toner cartridge TN-760', qty: 1, unitPrice: 36 },
     ],
     category: 'office',
     costCenter: '4100',
-    contactName: 'Sam Ortiz',
-    contactEmail: 'orders@officeworks.example',
-    bankAccount: 'ACH 044000037 · 2231 0045 8812',
+    contactName: 'Sven Ostertag',
+    contactEmail: 'auftrag@buerowelt-direkt.example',
+    bankAccount: 'IBAN DE64 6005 0101 0002 2310 45',
   }),
 ]
 
@@ -137,9 +140,9 @@ export const DEMO_INVOICES: Invoice[] = [
 export const TEACH_INVOICE: Invoice = invoice({
   id: '5102',
   supplierId: 'SUP-1088',
-  supplierName: 'Precision Laser Systems LLC',
-  supplierAddress: '91 Optics Way, Rochester, NY 14623',
-  invoiceDate: '2025-12-23',
+  supplierName: 'Albtal Lasersysteme GmbH',
+  supplierAddress: 'Am Lerchenbühl 9, 72770 Reutlingen',
+  invoiceDate: '2026-09-30',
   poNumber: 'PO-88241',
   lines: [
     { description: 'Laser cutter module LC-4, 2 kW', qty: 1, unitPrice: 6900 },
@@ -147,9 +150,9 @@ export const TEACH_INVOICE: Invoice = invoice({
   ],
   category: 'equipment',
   costCenter: '4711',
-  contactName: 'Priya Raman',
-  contactEmail: 'ar@precisionlaser.example',
-  bankAccount: 'ACH 022000046 · 7810 6624 0093',
+  contactName: 'Petra Ramsauer',
+  contactEmail: 'buchhaltung@albtal-laser.example',
+  bankAccount: 'IBAN DE18 6405 0000 0100 6624 93',
   teachOnly: true,
 })
 
@@ -158,20 +161,20 @@ export const TEACH_INVOICE: Invoice = invoice({
  * 5105 is the honest check: small equipment may stay opex, the tutor must NOT stop it.
  */
 export const EXTRA_TEACH_INVOICES: Invoice[] = [
-  // Kramer again, December: must be held.
+  // Kramer again, at the quarter-end: must be held.
   invoice({
     id: '5103',
     supplierId: 'SUP-1007',
-    supplierName: 'Kramer Industrial Supply',
-    supplierAddress: '415 Foundry St, Milwaukee, WI 53204',
-    invoiceDate: '2025-12-26',
+    supplierName: 'Kramer Industriebedarf GmbH',
+    supplierAddress: 'Gießereistraße 15, 70565 Stuttgart',
+    invoiceDate: '2026-09-30',
     poNumber: 'PO-88252',
     lines: [{ description: 'Pneumatic fittings assortment', qty: 1, unitPrice: 980 }],
     category: 'raw_materials',
     costCenter: '4711',
-    contactName: 'Greg Kramer',
-    contactEmail: 'billing@kramersupply.example',
-    bankAccount: 'ACH 075000022 · 9001 3356 1180',
+    contactName: 'Georg Kramer',
+    contactEmail: 'rechnung@kramer-industriebedarf.example',
+    bankAccount: 'IBAN DE47 6004 0071 0533 4419 00',
     teachOnly: true,
   }),
   // Brno intercompany again: needs a second approval.
@@ -181,7 +184,7 @@ export const EXTRA_TEACH_INVOICES: Invoice[] = [
     supplierName: 'Hartmann Machine Works s.r.o. (Brno)',
     supplierCountry: 'CZ',
     supplierAddress: 'Hrnčířská 12, 602 00 Brno, Czech Republic',
-    invoiceDate: '2025-12-27',
+    invoiceDate: '2026-09-30',
     lines: [{ description: 'Spare parts transfer (intercompany)', qty: 1, unitPrice: 2450 }],
     category: 'intercompany',
     costCenter: '4800',
@@ -190,36 +193,36 @@ export const EXTRA_TEACH_INVOICES: Invoice[] = [
     bankAccount: 'IBAN CZ65 0800 0000 1920 0014 5399',
     teachOnly: true,
   }),
-  // Equipment under $5,000: opex is correct, nothing to stop.
+  // Equipment under €5,000: opex is correct, nothing to stop.
   invoice({
     id: '5105',
     supplierId: 'SUP-1125',
-    supplierName: 'Northline Tool Supply',
-    supplierAddress: '30 Mill Rd, Grand Rapids, MI 49503',
-    invoiceDate: '2025-12-27',
+    supplierName: 'Nordstern Werkzeughandel GmbH',
+    supplierAddress: 'Mühlstraße 30, 73728 Esslingen am Neckar',
+    invoiceDate: '2026-10-01',
     poNumber: 'PO-88255',
-    lines: [{ description: 'Bench grinder, 8", variable speed', qty: 1, unitPrice: 1900 }],
+    lines: [{ description: 'Bench grinder, 200 mm, variable speed', qty: 1, unitPrice: 1900 }],
     category: 'equipment',
     costCenter: '4711',
-    contactName: 'Luis Ortega',
-    contactEmail: 'invoices@northline.example',
-    bankAccount: 'ACH 072000326 · 5530 1189 2207',
+    contactName: 'Lukas Ott',
+    contactEmail: 'rechnungen@nordstern-werkzeug.example',
+    bankAccount: 'IBAN DE02 6115 0020 0102 2077 13',
     teachOnly: true,
   }),
   // Supplier not in the vendor master: Sabine never saw one, the rule comes from the debrief.
   invoice({
     id: '5106',
     supplierId: 'SUP-9001',
-    supplierName: 'Apex Industrial Parts LLC',
-    supplierAddress: 'PO Box 4471, Wilmington, DE 19801',
+    supplierName: 'Apex Industrieteile GmbH',
+    supplierAddress: 'Postfach 10 22 33, 20095 Hamburg',
     supplierVerified: false,
-    invoiceDate: '2025-12-28',
+    invoiceDate: '2026-10-02',
     lines: [{ description: 'Hydraulic pump repair kit', qty: 3, unitPrice: 640 }],
     category: 'raw_materials',
     costCenter: '4711',
-    contactName: 'Accounts Dept.',
-    contactEmail: 'payments@apex-parts.example',
-    bankAccount: 'ACH 031100209 · 0099 4410 7765',
+    contactName: 'Buchhaltung',
+    contactEmail: 'zahlung@apex-teile.example',
+    bankAccount: 'IBAN DE75 2004 1155 0899 4410 76',
     teachOnly: true,
   }),
 ]
@@ -244,26 +247,26 @@ const filler = (
     lines: [{ description, qty, unitPrice }],
     category,
     costCenter,
-    contactName: 'Accounts Receivable',
-    contactEmail: 'ar@supplier.example',
-    bankAccount: 'ACH on file',
+    contactName: 'Debitorenbuchhaltung',
+    contactEmail: 'rechnung@lieferant.example',
+    bankAccount: 'IBAN on file',
   })
 
 /** Background invoices so the inbox looks like a real month-end. */
 export const FILLER_INVOICES: Invoice[] = [
-  filler('4458', 'SUP-1015', 'Great Lakes Freight', '2025-12-02', 'Inbound freight, Nov', 1, 1840, 'services', '4500'),
-  filler('4460', 'SUP-1103', 'Officeworks Direct', '2025-12-04', 'Desk chairs', 4, 189, 'office', '4100'),
-  filler('4462', 'SUP-1201', 'Cloudline Software', '2025-12-05', 'CAD licenses, annual', 5, 420, 'software', '4300'),
-  // Kramer in November: posted normally. The December double-billing only shows up in December.
-  filler('4463', 'SUP-1007', 'Kramer Industrial Supply', '2025-11-28', 'Bearings 6205-2RS', 120, 6.4, 'raw_materials', '4711'),
-  filler('4465', 'SUP-1032', 'Allied Steel Service', '2025-12-08', 'Cold-rolled sheet, 2 mm', 30, 96, 'raw_materials', '4711'),
-  filler('4466', 'SUP-1150', 'Brightway Facility Services', '2025-12-09', 'Cleaning, December', 1, 2150, 'services', '4100'),
-  filler('4467', 'SUP-1015', 'Great Lakes Freight', '2025-12-10', 'Outbound freight, wk 49', 1, 960, 'services', '4500'),
-  filler('4468', 'SUP-1220', 'Norwood Electric', '2025-12-11', 'Panel repair, line 3', 1, 1325, 'services', '4711'),
-  filler('4469', 'SUP-1032', 'Allied Steel Service', '2025-12-12', 'Steel tubing, 40 mm', 50, 31.2, 'raw_materials', '4711'),
-  filler('4470', 'SUP-1201', 'Cloudline Software', '2025-12-15', 'ERP support hours', 12, 140, 'software', '4300'),
-  filler('4475', 'SUP-1240', 'SafeGuard PPE', '2025-12-23', 'Safety gloves, cut level 5', 200, 4.75, 'raw_materials', '4711'),
-  filler('4476', 'SUP-1015', 'Great Lakes Freight', '2025-12-24', 'Outbound freight, wk 51', 1, 1120, 'services', '4500'),
+  filler('4458', 'SUP-1015', 'Rhein-Neckar Spedition GmbH', '2026-09-01', 'Inbound freight, August', 1, 1840, 'services', '4500'),
+  filler('4460', 'SUP-1103', 'Bürowelt Direkt GmbH', '2026-09-02', 'Desk chairs', 4, 189, 'office', '4100'),
+  filler('4462', 'SUP-1201', 'Cloudline Software GmbH', '2026-09-03', 'CAD licences, annual', 5, 420, 'software', '4300'),
+  // Kramer in August: posted normally. The double-billing only shows up at a quarter-end (March, June, September, December).
+  filler('4463', 'SUP-1007', 'Kramer Industriebedarf GmbH', '2026-08-31', 'Bearings 6205-2RS', 120, 6.4, 'raw_materials', '4711'),
+  filler('4465', 'SUP-1032', 'Remstal Stahlhandel GmbH', '2026-09-07', 'Cold-rolled sheet, 2 mm', 30, 96, 'raw_materials', '4711'),
+  filler('4466', 'SUP-1150', 'Glanzwerk Gebäudeservice GmbH', '2026-09-08', 'Cleaning, September', 1, 2150, 'services', '4100'),
+  filler('4467', 'SUP-1015', 'Rhein-Neckar Spedition GmbH', '2026-09-09', 'Outbound freight, week 37', 1, 960, 'services', '4500'),
+  filler('4468', 'SUP-1220', 'Filder Elektrotechnik GmbH', '2026-09-10', 'Panel repair, line 3', 1, 1325, 'services', '4711'),
+  filler('4469', 'SUP-1032', 'Remstal Stahlhandel GmbH', '2026-09-11', 'Steel tubing, 40 mm', 50, 31.2, 'raw_materials', '4711'),
+  filler('4470', 'SUP-1201', 'Cloudline Software GmbH', '2026-09-14', 'ERP support hours', 12, 140, 'software', '4300'),
+  filler('4475', 'SUP-1240', 'SafeGuard Arbeitsschutz GmbH', '2026-09-28', 'Safety gloves, cut level 5', 200, 4.75, 'raw_materials', '4711'),
+  filler('4476', 'SUP-1015', 'Rhein-Neckar Spedition GmbH', '2026-09-30', 'Outbound freight, week 40', 1, 1120, 'services', '4500'),
 ].map((inv, i) => ({ ...inv, status: i < 8 ? 'posted' : 'open' }) as Invoice)
 
 export const TEACH_INVOICES: Invoice[] = [TEACH_INVOICE, ...EXTRA_TEACH_INVOICES]

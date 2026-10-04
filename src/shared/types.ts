@@ -93,7 +93,7 @@ export interface Condition {
 
 export interface Guardrail {
   id: string
-  text: string // "Equipment over $5,000 is always capex"
+  text: string // "Equipment over €5,000 is always capex"
   quote: Quote
   when: Condition[] // all match → rule is relevant
   require: Condition[] // any fails → violation

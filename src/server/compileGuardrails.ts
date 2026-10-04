@@ -7,7 +7,7 @@ import { generateJson, MODELS } from './anthropic'
 const ConditionSchema = z.object({
   field: z.enum(INVOICE_FIELDS as [Condition['field'], ...Condition['field'][]]),
   op: z.enum(['eq', 'neq', 'gt', 'lt', 'in', 'empty', 'not_empty']),
-  value: z.union([z.string(), z.number(), z.boolean(), z.array(z.string()), z.null()]),
+  value: z.union([z.string(), z.number(), z.boolean(), z.array(z.union([z.string(), z.number()])), z.null()]),
 })
 
 const CompiledSchema = z.object({
@@ -42,6 +42,7 @@ How a rule is evaluated when someone tries to post an invoice:
 Rules:
 - Use only the listed fields, operators (eq, neq, gt, lt, in, empty, not_empty) and allowed values. Map supplier names to supplier ids.
 - Use value null for empty and not_empty. Use numbers for amount and month, booleans for approvalRequested.
+- A rule about some months uses op "in" with the month numbers, e.g. "at every quarter-end" is month in [3, 6, 9, 12].
 - Keep the expert's meaning. Do not add conditions she did not state or clearly imply.
 - If a rule cannot be expressed with these fields (for example it depends on something the ERP does not record), set checkable to false, leave when and require empty, and say why in note.
 - Return one entry per input rule, with the same id.`

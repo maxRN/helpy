@@ -7,7 +7,7 @@ import { checkAgainstExpert, startTeach } from './teach'
 
 const sabineDidHerJob = () => {
   erp().update('4471', 'costCenter', '0400')
-  erp().update('4471', 'assetNumber', 'A-2025-117')
+  erp().update('4471', 'assetNumber', 'A-2026-117')
   erp().commit('4471', 'post')
   erp().commit('4472', 'hold')
   erp().commit('4473', 'request_approval')

@@ -15,8 +15,8 @@ export const MOCK_WORK_MAP = `# Work Map: supplier invoice processing (expert: S
 - G1 (step S4) Equipment over EUR 5,000 is always capex (0400), never opex (4711).
   Sabine: "Equipment over 5,000 euros is always capex."
   Also: no asset number, no capex booking.
-- G2 (step S5) A December invoice from a supplier known to double-bill is held, not posted.
-  Sabine: "That supplier double-bills every December, so I hold it until the controller releases it."
+- G2 (step S5) A quarter-end invoice from a supplier known to double-bill is held, not posted.
+  Sabine: "That supplier double-bills at every quarter-end, so I hold it until the controller releases it."
 - G3 (step S5) Invoices from the Czech subsidiary need a second approval.
   Sabine: "Czech subsidiary always goes to a second approval."
 - G4 (step S2) Unknown supplier: stop and ask the controller.

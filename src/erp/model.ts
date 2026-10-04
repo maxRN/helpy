@@ -13,7 +13,7 @@ export interface Invoice {
   number: string
   supplierId: string
   supplierName: string
-  supplierCountry: string // ISO code, e.g. "US", "CZ"
+  supplierCountry: string // ISO code, e.g. "DE", "CZ"
   supplierAddress: string
   supplierVerified: boolean // false: supplier is not in the vendor master yet
   invoiceDate: string // ISO date
@@ -21,7 +21,7 @@ export interface Invoice {
   month: number // 1–12, derived from invoiceDate, used by guardrails
   poNumber: string
   lines: LineItem[]
-  amount: number // USD, sum of lines
+  amount: number // EUR, sum of lines
   category: Category
   costCenter: string
   account: Account
@@ -74,8 +74,10 @@ export const STATUS_LABEL: Record<InvoiceStatus, string> = {
 export const accountFor = (costCenter: string): Account =>
   COST_CENTERS.find((c) => c.code === costCenter)?.account ?? 'opex'
 
-export const formatUSD = (n: number) =>
-  n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+/** Euro amounts, English UI: "€6,800.00". */
+export const formatEUR = (n: number) =>
+  n.toLocaleString('en-IE', { style: 'currency', currency: 'EUR' })
 
+/** European date order: "21 Sep 2026". */
 export const formatDate = (iso: string) =>
-  new Date(`${iso}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  new Date(`${iso}T12:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })

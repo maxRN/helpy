@@ -9,7 +9,7 @@ import type { AppEvent, Quote } from '../shared/types'
 import { mightBeToHelpy, recordCommand, SpeechTracker, type Utterance } from './speech'
 
 // Words Scribe should not mishear in this demo (max 20 characters each).
-const KEYTERMS = ['capex', 'opex', 'ProcureFlow', 'cost center', 'asset number', 'Kramer', 'Brno', 'vendor master', 'Hartmann', 'Weber', 'second approval']
+const KEYTERMS = ['capex', 'opex', 'ProcureFlow', 'cost center', 'asset number', 'Kramer', 'Brno', 'vendor master', 'Hartmann', 'Weber', 'second approval', 'quarter-end', 'Quartalsende']
 
 /** Seconds of silence after which Scribe's VAD ends a turn. */
 export const VAD_SILENCE_SECS = 0.8

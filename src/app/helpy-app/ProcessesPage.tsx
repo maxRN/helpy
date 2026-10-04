@@ -3,7 +3,7 @@ import { field } from '../panel/ui'
 import { helpyApp, useHelpyApp } from './store'
 import { pageTitle } from './ui'
 
-export const day = (t: number) => new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+export const day = (t: number) => new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 const lastRecorded = (p: Process) => p.recordings[0]?.startedAt ?? 0
 
 /** Search by process name, category, step or person ("what did Sabine record?"). */

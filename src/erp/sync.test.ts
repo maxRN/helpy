@@ -23,8 +23,8 @@ describe('ERP → database sync', () => {
   })
 
   it('sends status and note for a hold', () => {
-    erp().commit('4472', 'hold', 'December double billing')
-    expect(sync.patchInvoice).toHaveBeenCalledWith('4472', { status: 'on_hold', note: 'December double billing' })
+    erp().commit('4472', 'hold', 'Quarter-end double billing')
+    expect(sync.patchInvoice).toHaveBeenCalledWith('4472', { status: 'on_hold', note: 'Quarter-end double billing' })
   })
 
   it('writes nothing when a guardrail blocks the post', () => {

@@ -9,8 +9,8 @@ import { TITLE_BAR, TITLE_TEXT, TrafficLights, windowPlacement } from './Traffic
 
 type WindowState = 'closed' | 'open' | 'minimized'
 
-// The story's moment: Thursday-afternoon feeling, two days before the December close.
-const STORY_START = new Date(2025, 11, 29, 16, 10)
+// The story's moment: 4:10 pm, two working days before the September close (see BUSINESS_DATE in src/erp/seed.ts).
+const STORY_START = new Date(2026, 9, 4, 16, 10)
 
 function useStoryClock() {
   const [now, setNow] = useState(STORY_START)

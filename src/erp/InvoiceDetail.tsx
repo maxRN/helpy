@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import { COMPANY_NAME } from './seed'
+import { BILL_TO, COMPANY_NAME } from './seed'
 import {
   APPROVERS,
   CATEGORIES,
   COST_CENTERS,
   formatDate,
-  formatUSD,
+  formatEUR,
   type Invoice,
 } from './model'
 import { StatusPill } from './StatusPill'
@@ -39,7 +39,7 @@ function PaperInvoice({ invoice }: { invoice: Invoice }) {
       </header>
 
       <div className="py-3 text-slate-600">
-        Bill to: <span className="text-slate-800">{COMPANY_NAME}, Accounts Payable, 1200 Harbor Rd, Erie, PA 16507</span>
+        Bill to: <span className="text-slate-800">{COMPANY_NAME}, {BILL_TO}</span>
       </div>
 
       <div className="overflow-x-auto">
@@ -57,17 +57,17 @@ function PaperInvoice({ invoice }: { invoice: Invoice }) {
               <tr key={i} className="border-b border-slate-100">
                 <td className="py-1.5 pr-2">{l.description}</td>
                 <td className="py-1.5 pr-2 text-right tabular-nums">{l.qty}</td>
-                <td className="py-1.5 pr-2 text-right tabular-nums">{formatUSD(l.unitPrice)}</td>
-                <td className="py-1.5 text-right tabular-nums">{formatUSD(l.qty * l.unitPrice)}</td>
+                <td className="py-1.5 pr-2 text-right tabular-nums">{formatEUR(l.unitPrice)}</td>
+                <td className="py-1.5 text-right tabular-nums">{formatEUR(l.qty * l.unitPrice)}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr>
               <td colSpan={3} className="pt-3 text-right font-semibold">
-                Total due (USD)
+                Total due (EUR)
               </td>
-              <td className="pt-3 text-right text-[14px] font-semibold tabular-nums">{formatUSD(invoice.amount)}</td>
+              <td className="pt-3 text-right text-[14px] font-semibold tabular-nums">{formatEUR(invoice.amount)}</td>
             </tr>
           </tfoot>
         </table>
@@ -251,7 +251,7 @@ export function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
             <dt className="text-[12px] font-medium text-slate-600">Country</dt>
             <dd>{invoice.supplierCountry}</dd>
             <dt className="text-[12px] font-medium text-slate-600">Amount</dt>
-            <dd className="font-mono tabular-nums">{formatUSD(invoice.amount)}</dd>
+            <dd className="font-mono tabular-nums">{formatEUR(invoice.amount)}</dd>
           </dl>
 
           <SelectField
@@ -277,7 +277,7 @@ export function InvoiceDetail({ invoiceId }: { invoiceId: string }) {
             invoiceId={invoiceId}
             field="assetNumber"
             label="Asset no."
-            placeholder="e.g. A-2025-117"
+            placeholder="e.g. A-2026-117"
             disabled={locked}
           />
           <SelectField

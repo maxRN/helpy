@@ -7,7 +7,7 @@ import type { Guardrail, Step, WorkMap } from '../shared/types'
 export const FIXTURE_GUARDRAILS: Guardrail[] = [
   {
     id: 'G1',
-    text: 'Equipment over $5,000 is always capex (cost center 0400).',
+    text: 'Equipment over €5,000 is always capex (cost center 0400).',
     quote: { text: 'Equipment over five thousand is always capex.', t: 192_000, speaker: 'expert' },
     when: [
       { field: 'category', op: 'eq', value: 'equipment' },
@@ -28,11 +28,11 @@ export const FIXTURE_GUARDRAILS: Guardrail[] = [
   },
   {
     id: 'G3',
-    text: 'Kramer Industrial Supply double-bills in December: hold it, the controller releases it.',
-    quote: { text: 'Kramer bills us twice every December, so I hold it and Weber releases it.', t: 265_000, speaker: 'expert' },
+    text: 'Kramer Industriebedarf double-bills at every quarter-end: hold it, the controller releases it.',
+    quote: { text: 'Kramer bills us twice at every quarter-end, so I hold it and Weber releases it.', t: 265_000, speaker: 'expert' },
     when: [
       { field: 'supplierId', op: 'eq', value: 'SUP-1007' },
-      { field: 'month', op: 'eq', value: 12 },
+      { field: 'month', op: 'in', value: [3, 6, 9, 12] },
     ],
     require: [{ field: 'status', op: 'eq', value: 'on_hold' }],
     severity: 'block',
@@ -69,7 +69,7 @@ export const FIXTURE_STEPS: Step[] = [
   { id: 'S2', index: 2, title: 'Check the category', targetId: 'field-category', clip: clip(150_000), decision: 'Category confirmed as equipment', guardrailIds: [], isJudgmentCall: false, confidence: 0.8 },
   { id: 'S3', index: 3, title: 'Code the invoice to a cost center', targetId: 'field-costCenter', clip: clip(192_000), decision: 'Re-coded from opex (4711) to capex (0400)', reason: { text: 'Equipment over five thousand is always capex.', t: 192_000, speaker: 'expert' }, guardrailIds: ['G1'], isJudgmentCall: true, confidence: 0.9 },
   { id: 'S4', index: 4, title: 'Enter the asset number', targetId: 'field-assetNumber', clip: clip(201_000), decision: 'Asset number from the PO entered', reason: { text: 'No asset number, no capex booking. Never.', t: 201_000, speaker: 'expert' }, guardrailIds: ['G2'], isJudgmentCall: false, confidence: 0.85 },
-  { id: 'S5', index: 5, title: 'Hold known December double-billers', targetId: 'action-hold', clip: clip(265_000), decision: 'Kramer invoice put on hold', reason: { text: 'Kramer bills us twice every December, so I hold it and Weber releases it.', t: 265_000, speaker: 'expert' }, guardrailIds: ['G3'], isJudgmentCall: true, confidence: 0.75 },
+  { id: 'S5', index: 5, title: 'Hold known quarter-end double-billers', targetId: 'action-hold', clip: clip(265_000), decision: 'Kramer invoice put on hold', reason: { text: 'Kramer bills us twice at every quarter-end, so I hold it and Weber releases it.', t: 265_000, speaker: 'expert' }, guardrailIds: ['G3'], isJudgmentCall: true, confidence: 0.75 },
   { id: 'S6', index: 6, title: 'Request a second approval for intercompany invoices from Brno', targetId: 'action-request_approval', clip: clip(330_000), decision: 'Second approval requested from J. Novak', reason: { text: 'Anything from Brno gets a second pair of eyes.', t: 330_000, speaker: 'expert' }, guardrailIds: ['G4'], isJudgmentCall: true, confidence: 0.8 },
   { id: 'S8', index: 7, title: 'Hold invoices from suppliers not in the vendor master', targetId: 'action-hold', clip: clip(600_000), decision: 'Not seen live; rule from the debrief', reason: { text: "If they're not in the vendor master, I don't pay. I hold it and ask Weber.", t: 610_000, speaker: 'expert' }, guardrailIds: ['G5'], isJudgmentCall: true, confidence: 0.7 },
   { id: 'S7', index: 8, title: 'Post the invoice', targetId: 'action-post', clip: clip(360_000), decision: 'Invoice posted', guardrailIds: [], isJudgmentCall: false, confidence: 0.95 },
@@ -82,6 +82,6 @@ export const FIXTURE_WORKMAP: WorkMap = {
   language: 'en',
   steps: FIXTURE_STEPS,
   guardrails: FIXTURE_GUARDRAILS,
-  openQuestions: ['Does the December hold apply to other suppliers too?'],
+  openQuestions: ['Does the quarter-end hold apply to other suppliers too?'],
   teachback: { text: '', confirmed: true, corrections: [] },
 }

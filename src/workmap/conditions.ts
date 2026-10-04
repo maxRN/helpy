@@ -1,6 +1,6 @@
 // Guardrail conditions in plain English, for the Work Map view and the agent export.
 import { SUPPLIERS } from '../erp/catalog'
-import { CATEGORIES, formatUSD, STATUS_LABEL, type InvoiceStatus } from '../erp/model'
+import { CATEGORIES, formatEUR, STATUS_LABEL, type InvoiceStatus } from '../erp/model'
 import type { Condition, Guardrail, InvoiceField } from '../shared/types'
 
 const FIELD_LABEL: Record<InvoiceField, string> = {
@@ -23,7 +23,7 @@ function formatOne(field: InvoiceField, v: unknown): string {
   if (typeof v === 'boolean') return v ? 'yes' : 'no'
   switch (field) {
     case 'amount':
-      return Number.isInteger(Number(v)) ? `$${Number(v).toLocaleString('en-US')}` : formatUSD(Number(v))
+      return Number.isInteger(Number(v)) ? `€${Number(v).toLocaleString('en-IE')}` : formatEUR(Number(v))
     case 'month':
       return MONTHS[Number(v) - 1] ?? String(v)
     case 'supplierId':

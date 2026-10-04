@@ -5,7 +5,7 @@ import { setDeps } from '../agent/deps'
 import type { AppEvent as AgentEvent, Deps, Guardrail as AgentGuardrail } from '../agent/types'
 import { TARGETS } from '../erp/catalog'
 import { isRelevant } from '../erp/guardrails'
-import { formatUSD, type Invoice } from '../erp/model'
+import { formatEUR, type Invoice } from '../erp/model'
 import { getNextStep } from '../erp/stepTracker'
 import { erp } from '../erp/store'
 import { activity } from '../shared/activity'
@@ -40,7 +40,7 @@ export function describeScreenEvent(e: AppEvent): string | undefined {
   switch (e.kind) {
     case 'invoice_opened':
       if (!inv) return `Opened invoice ${e.invoiceId}`
-      return `Opened invoice ${inv.number} from ${inv.supplierName} (${formatUSD(inv.amount)}, ${inv.category}${inv.supplierVerified ? '' : ', supplier not in vendor master'})`
+      return `Opened invoice ${inv.number} from ${inv.supplierName} (${formatEUR(inv.amount)}, ${inv.category}${inv.supplierVerified ? '' : ', supplier not in vendor master'})`
     case 'field_changed':
       return `Invoice ${e.invoiceId}: ${targetLabel(e.targetId)} ${e.from || '(empty)'} → ${e.to || '(empty)'}`
     case 'action':

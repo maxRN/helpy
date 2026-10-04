@@ -8,7 +8,7 @@ import { Robot } from './Robot'
 import { useHelpyExtras, type BubbleAction, type BubbleInput } from './store'
 
 export const SIZE = { width: 84, height: 105 }
-/** Flying to a field takes its time, so the eye can follow where Helpy goes (Sabine, 68). */
+/** Flying to a field takes its time, so the eye can follow where Helpy goes (Sabine, 57). */
 const FLY_MS = 1300
 /** First guess before the bubble is measured (it is measured before it is painted). */
 const BUBBLE_GUESS = { width: 336, height: 80 }

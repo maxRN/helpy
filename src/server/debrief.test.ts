@@ -7,7 +7,7 @@ vi.mock('./anthropic', () => ({ generateJson: (...args: unknown[]) => generateJs
 const { buildWorkMap, clipAround, findExpertQuote, findGaps, MAX_DEBRIEF_QUESTIONS, NotEnoughWorkError } = await import('./debrief')
 
 const log: LogLine[] = [
-  { t: 30_000, who: 'screen', text: 'Opened invoice 4471 from Midwest Machine Tools Inc. ($6,800.00, equipment)' },
+  { t: 30_000, who: 'screen', text: 'Opened invoice 4471 from Neckartal Werkzeugmaschinen GmbH (€6,800.00, equipment)' },
   { t: 41_000, who: 'screen', text: 'Invoice 4471: cost center 4711 → 0400 (capex)' },
   { t: 52_000, who: 'agent', text: 'What made you do that?' },
   { t: 55_000, who: 'expert', text: "Equipment over five thousand is always capex. That's our policy." },
@@ -15,7 +15,7 @@ const log: LogLine[] = [
 ]
 
 const chatter: LogLine[] = [
-  { t: 30_000, who: 'screen', text: 'Opened invoice 4458 from Great Lakes Freight ($1,840.00, services)' },
+  { t: 30_000, who: 'screen', text: 'Opened invoice 4458 from Rhein-Neckar Spedition GmbH (€1,840.00, services)' },
   { t: 48_000, who: 'expert', text: 'Ist das dein Whisper Flow? Nein, das ist ElevenLabs.' },
   { t: 58_000, who: 'expert', text: 'Willst du nicht wissen, ob es funktioniert?' },
 ]
@@ -70,7 +70,7 @@ describe('buildWorkMap', () => {
         { title: 'Call the supplier', targetId: 'phone', startT: 60_000, endT: 61_000, decision: 'Called', reasonQuote: 'I always call them first.', isJudgmentCall: false, confidence: 0.8, guardrailIds: [] },
       ],
       guardrails: [
-        { id: 'G1', text: 'Equipment over $5,000 is capex.', quote: 'Equipment over five thousand is always capex.' },
+        { id: 'G1', text: 'Equipment over €5,000 is capex.', quote: 'Equipment over five thousand is always capex.' },
         { id: 'G2', text: 'Never pay on Fridays.', quote: 'We never pay on Fridays.' },
       ],
       openQuestions: [],

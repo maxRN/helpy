@@ -2,6 +2,7 @@ import { ConvexError, v } from 'convex/values'
 import type { MutationCtx } from './_generated/server'
 import { mutation, query } from './_generated/server'
 import { ALL_INVOICES } from '../src/erp/seed'
+import { isStaleSeed } from '../src/erp/seedVersion'
 import { invoiceChanges } from './invoiceValidators'
 
 const seedDocs = () => ALL_INVOICES.map(({ id, ...rest }) => ({ invoiceId: id, ...rest }))
@@ -15,12 +16,17 @@ export const list = query({
   handler: async (ctx) => ctx.db.query('invoices').collect(),
 })
 
-/** Seeds the demo ledger once. Safe to call from every client on load. */
+/**
+ * Seeds the demo ledger once, and again when the seed itself changed (other suppliers, dates or amounts),
+ * so every deployment shows the current demo story. Safe to call from every client on load.
+ */
 export const ensureSeeded = mutation({
   args: {},
   returns: v.boolean(),
   handler: async (ctx) => {
-    if (await ctx.db.query('invoices').first()) return false
+    const docs = await ctx.db.query('invoices').collect()
+    if (docs.length && !isStaleSeed(docs, ALL_INVOICES)) return false
+    for (const doc of docs) await ctx.db.delete('invoices', doc._id)
     await insertSeed(ctx)
     return true
   },

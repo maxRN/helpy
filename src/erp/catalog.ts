@@ -46,12 +46,12 @@ interface FieldInfo {
 }
 
 export const FIELD_VOCABULARY: Record<InvoiceField, FieldInfo> = {
-  amount: { type: 'number', description: 'Invoice total in USD.' },
+  amount: { type: 'number', description: 'Invoice total in EUR.' },
   category: { type: 'string', description: 'What was bought.', values: CATEGORIES.map((c) => c.value) },
   supplierId: { type: 'string', description: 'Supplier id. Map supplier names to ids with the supplier list.', values: SUPPLIERS.map((s) => s.id) },
   supplierCountry: { type: 'string', description: 'ISO country code of the supplier.', values: [...new Set(SUPPLIERS.map((s) => s.country))] },
   supplierVerified: { type: 'boolean', description: 'False when the supplier is not in the vendor master yet (a new or unknown supplier).' },
-  month: { type: 'number', description: 'Month of the invoice date, 1–12 (December is 12).' },
+  month: { type: 'number', description: 'Month of the invoice date, 1–12 (December is 12). Quarter-end months are 3, 6, 9 and 12.' },
   costCenter: { type: 'string', description: 'Cost center code.', values: COST_CENTERS.map((c) => c.code) },
   account: { type: 'string', description: 'GL account, derived from the cost center.', values: ['opex', 'capex'] },
   assetNumber: { type: 'string', description: 'Fixed-asset number, empty if none.' },
@@ -70,7 +70,7 @@ export function catalogForPrompt(): string {
   const suppliers = SUPPLIERS.map((s) => `- ${s.id}: ${s.name} (${s.country})`).join('\n')
   const costCenters = COST_CENTERS.map((c) => `- ${c.code}: ${c.name} (${c.account})`).join('\n')
   return [
-    'ERP: ProcureFlow, accounts payable. All amounts in USD.',
+    'ERP: ProcureFlow, accounts payable at Hartmann Machine Works, a machine builder near Stuttgart, Germany. All amounts in EUR.',
     `Screen elements (use these ids as targetId). Inbox rows are ${ROW_TARGET_PATTERN}.\n${targets}`,
     `Invoice fields (use these in guardrail conditions):\n${fields}`,
     `Suppliers:\n${suppliers}`,

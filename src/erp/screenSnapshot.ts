@@ -1,7 +1,7 @@
 // ProcureFlow describes its own visible screen for Helpy: exact values from the app state, and only
 // what is actually rendered (nothing when the window is closed or minimized). No model is involved,
 // so nothing here can be invented.
-import { CATEGORIES, COST_CENTERS, formatUSD, STATUS_LABEL, type Invoice } from './model'
+import { CATEGORIES, COST_CENTERS, formatEUR, STATUS_LABEL, type Invoice } from './model'
 import { PREVIEW_TARGET, rowTarget } from './targetIds'
 
 export interface ErpScreenInput {
@@ -23,7 +23,7 @@ function describeInvoice(i: Invoice, blockedBy: string[] = []): string {
     `ProcureFlow, invoice ${i.number} open: ${i.supplierName}`,
     `supplier ${i.supplierVerified ? 'verified in the vendor master' : 'NOT in the vendor master'}`,
     `country ${i.supplierCountry}`,
-    `amount ${formatUSD(i.amount)}`,
+    `amount ${formatEUR(i.amount)}`,
     `category ${label(CATEGORIES, i.category)}`,
     `cost center ${i.costCenter}${cc ? ` ${cc.name} (${cc.account})` : ''}`,
     `asset no. ${i.assetNumber || 'empty'}`,
@@ -45,7 +45,7 @@ export function describeErpScreen({ invoices, openId, visible, blockedBy }: ErpS
   const waiting = rows.filter((i) => i.status === 'open')
   const listed = waiting
     .slice(0, MAX_ROWS)
-    .map((i) => `${i.number} ${i.supplierName} ${formatUSD(i.amount)}`)
+    .map((i) => `${i.number} ${i.supplierName} ${formatEUR(i.amount)}`)
     .join('; ')
   const more = waiting.length > MAX_ROWS ? `; and ${waiting.length - MAX_ROWS} more` : ''
   return `ProcureFlow inbox, no invoice open. ${waiting.length} open invoices${listed ? `: ${listed}${more}` : ''}.`

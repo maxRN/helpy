@@ -1,4 +1,4 @@
-// Shared class names for Helpy's panel: large targets and plain contrast, so Sabine (68) can use it alone.
+// Shared class names for Helpy's panel: large targets and plain contrast, so Sabine (57) can use it alone.
 export const primaryBtn =
   'flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-helpy px-5 text-[17px] font-semibold text-white transition-colors duration-150 hover:bg-helpy-dark active:scale-[0.98] disabled:opacity-50'
 export const secondaryBtn =

@@ -7,6 +7,8 @@ export interface Violation {
 }
 
 const norm = (v: unknown) => (typeof v === 'string' ? v.trim().toLowerCase() : v)
+/** Same value, whether the rule says 9 or "9" (models do not always keep numbers as numbers). */
+const same = (a: unknown, b: unknown) => norm(a) === norm(b) || (a !== null && b !== null && a !== undefined && b !== undefined && a !== '' && b !== '' && String(norm(a)) === String(norm(b)))
 
 const isEmpty = (v: unknown) => v === undefined || v === null || v === '' || v === false
 
@@ -18,15 +20,15 @@ export function conditionHolds(invoice: Invoice, c: Condition): boolean {
   const actual = fieldValue(invoice, c.field)
   switch (c.op) {
     case 'eq':
-      return norm(actual) === norm(c.value)
+      return same(actual, c.value)
     case 'neq':
-      return norm(actual) !== norm(c.value)
+      return !same(actual, c.value)
     case 'gt':
       return Number(actual) > Number(c.value)
     case 'lt':
       return Number(actual) < Number(c.value)
     case 'in':
-      return Array.isArray(c.value) && c.value.map(norm).includes(norm(actual))
+      return Array.isArray(c.value) && c.value.some((v) => same(actual, v))
     case 'empty':
       return isEmpty(actual)
     case 'not_empty':

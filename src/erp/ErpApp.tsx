@@ -8,7 +8,7 @@ import { useSession } from '../shared/session'
 import { ConvexSync } from './ConvexSync'
 import { InvoiceDetail } from './InvoiceDetail'
 import { InvoiceInbox } from './InvoiceInbox'
-import { COMPANY_NAME } from './seed'
+import { COMPANY_NAME, POSTING_PERIOD } from './seed'
 import { installStepTracker, resetStepTracker } from './stepTracker'
 import { erpFacts } from './facts'
 import { describeErpScreen } from './screenSnapshot'
@@ -83,7 +83,7 @@ export function ErpApp() {
         </div>
         <div className="flex flex-wrap items-center gap-3 text-[12px] text-slate-300">
           <span>
-            Posting period <span className="font-medium text-white">Dec 2025</span> · Close in{' '}
+            Posting period <span className="font-medium text-white">{POSTING_PERIOD}</span> · Close in{' '}
             <span className="font-medium text-amber-300">2 days</span> · Signed in as {user}
           </span>
           <ResetDemoButton />

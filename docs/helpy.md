@@ -1,6 +1,6 @@
 # Helpy (P4)
 
-In the product, Helpy is an app installed on the computer: a small robot that always sits on the screen. The website only simulates that screen (Max's fake desktop with the ERP open). Open Helpy through the robot or by clicking its desktop icon. Benchmark for every screen: Sabine (68) can use it alone.
+In the product, Helpy is an app installed on the computer: a small robot that always sits on the screen. The website only simulates that screen (Max's fake desktop with the ERP open). Open Helpy through the robot or by clicking its desktop icon. Benchmark for every screen: Sabine (57) can use it alone.
 
 ## Mount it
 
