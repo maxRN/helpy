@@ -6,6 +6,7 @@ import { mascot as sharedMascot, useMascot } from '../shared/mascot'
 import { useSession } from '../shared/session'
 import { TeachLayer } from '../teach-ui/TeachLayer'
 import { auth, useAuth } from './auth'
+import { HelpyApp } from './helpy-app/HelpyApp'
 import { HelpyPanel } from './panel/HelpyPanel'
 import { panel, usePanel } from './panel/store'
 import { askQuestions } from './panel/questions'
@@ -145,6 +146,7 @@ export function Helpy({ boundsRef }: { boundsRef?: RefObject<HTMLElement | null>
 
   return (
     <>
+      <HelpyApp />
       <MascotLayer
         boundsRef={boundsRef}
         hideBubble={open}

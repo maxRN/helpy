@@ -13,6 +13,7 @@ import { useMascot } from '../shared/mascot'
 import { session } from '../shared/session'
 import type { AppEvent } from '../shared/types'
 import { auth } from './auth'
+import { helpyApp } from './helpy-app/store'
 import { panel } from './panel/store'
 import { titleFromAnswer, UNNAMED } from './recordName'
 import { askWaitingQuestion, setOffRecord, speak, startVoice } from './voice'
@@ -44,6 +45,7 @@ export const recordFlow = {
   /** Start recording (from a click: the browser only allows screen sharing right after one). */
   open(process?: { name: string; id: string }) {
     panel.close()
+    helpyApp.close() // show the work, not Helpy's app
     mascot.pointTo(null)
     set({ kind: 'ready', target: process ? { projectId: process.id, name: process.name } : {}, auto: true })
   },

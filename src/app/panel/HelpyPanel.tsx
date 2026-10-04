@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { HelpyMark, MASCOT_SIZE, useHelpyExtras, visibleBounds } from '../../mascot'
 import { HomeView } from './HomeView'
-import { LibraryWindow } from './LibraryWindow'
 import { LearningView, MomentView, ReportView } from './LearningViews'
-import { ProcessView } from './ProcessView'
 import { SignInView } from './SignInView'
 import { panel, usePanel, type View } from './store'
 
@@ -15,13 +13,10 @@ function backOf(view: View): View | null {
   switch (view.name) {
     case 'home':
     case 'signin':
-      return null
     case 'moment':
-      return view.processId ? { name: 'process', processId: view.processId } : null
+      return null
     case 'report':
       return { name: 'learning' }
-    case 'process':
-      return { name: 'library', processId: view.processId }
     default:
       return { name: 'home' }
   }
@@ -79,8 +74,6 @@ export function HelpyPanel({ boundsRef }: { boundsRef?: RefObject<HTMLElement | 
   }, [open])
 
   if (!open) return null
-  // "Recorded processes" is too much for the small window next to the robot: it gets a large one.
-  if (view.name === 'library') return <LibraryWindow processId={view.processId} />
   const back = backOf(view)
 
   return (
@@ -109,10 +102,9 @@ export function HelpyPanel({ boundsRef }: { boundsRef?: RefObject<HTMLElement | 
       <div className="min-h-0 overflow-y-auto overscroll-contain px-5 pb-5 pt-2">
         {view.name === 'signin' ? <SignInView /> : null}
         {view.name === 'home' ? <HomeView /> : null}
-        {view.name === 'process' ? <ProcessView processId={view.processId} /> : null}
         {view.name === 'learning' ? <LearningView /> : null}
         {view.name === 'report' ? <ReportView /> : null}
-        {view.name === 'moment' ? <MomentView stepId={view.stepId} processId={view.processId} /> : null}
+        {view.name === 'moment' ? <MomentView stepId={view.stepId} /> : null}
       </div>
     </section>
   )
