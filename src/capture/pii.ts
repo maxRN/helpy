@@ -44,7 +44,7 @@ async function loadModel() {
   } finally { window.fetch = originalFetch }
 }
 
-function getModel() {
+export function loadPiiModel() {
   modelPromise ??= loadModel().catch((error: unknown) => {
     const failure = error instanceof Error ? error : new Error(String(error))
     modelPromise = undefined
@@ -54,11 +54,15 @@ function getModel() {
   return modelPromise
 }
 
-export function redactPii(text: string): Promise<string> {
+export function detectPii(text: string) {
   const job = queue.then(async () => {
-    const model = await getModel()
-    return (await model.redaction(text)).redactedText
+    const model = await loadPiiModel()
+    return model.redaction(text)
   })
   queue = job.then(() => undefined, () => undefined)
   return job
+}
+
+export async function redactPii(text: string): Promise<string> {
+  return (await detectPii(text)).redactedText
 }

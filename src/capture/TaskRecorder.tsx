@@ -10,8 +10,10 @@ import { processFrame, resetFrameEvents } from './frameEvents'
 import { useSession } from '../shared/session'
 import { formatDuration, openScreenCapture } from './screen'
 import type { ScreenRecording } from './screen'
-import { analyzeScreenshot, loadOcrModel, useOcrModel } from './ocr'
+import { loadOcrModel, useOcrModel } from './ocr'
 import { OCR_MODELS } from './ocr-contract'
+import { loadPiiModel, usePiiModel } from './pii'
+import { processScreenshot } from './pipeline'
 
 const uploadResponse = z.object({ storageId: z.string() })
 type Project = Pick<Doc<'projects'>, '_id' | 'name'>
@@ -39,7 +41,6 @@ function useRecordingController() {
   const createTask = useMutation(api.tasks.create)
   const generateUploadUrl = useMutation(api.tasks.generateUploadUrl)
   const addScreenshot = useMutation(api.tasks.addScreenshot)
-  const annotateScreenshot = useMutation(api.tasks.annotateScreenshot)
   const finishTask = useMutation(api.tasks.finish)
   const navigate = useNavigate()
   const [state, setState] = useState<RecordingState>({ kind: 'idle' })
@@ -99,6 +100,7 @@ function useRecordingController() {
   useEffect(() => {
     mounted.current = true
     loadOcrModel()
+    void loadPiiModel().catch(() => undefined)
     return () => {
       mounted.current = false
       pendingCapture.current?.close()
@@ -113,8 +115,8 @@ function useRecordingController() {
 
   async function start(project: Project, { stay = false }: { stay?: boolean } = {}) {
     if (busy) return
-    if (useOcrModel.getState().state.kind !== 'ready') {
-      setError('Wait for the local text recognition model to finish loading before starting a task.')
+    if (useOcrModel.getState().state.kind !== 'ready' || usePiiModel.getState().state.kind !== 'ready') {
+      setError('Wait for text recognition and PII redaction to finish loading before starting a task.')
       return
     }
     setState({ kind: 'starting', project })
@@ -137,21 +139,30 @@ function useRecordingController() {
       }
       const recording = capture.start({
         onScreenshot: async ({ blob, ...timestamps }) => {
-          // Screen events for the voice agent (thumbnail diff + Haiku), in parallel with the upload.
-          void processFrame(blob, timestamps.capturedAt, timestamps.offsetMs).catch((failure: unknown) => console.warn('[frame]', failure))
-          const storageId = await upload(createdTaskId, blob)
-          const screenshotId = await addScreenshot({ taskId: createdTaskId, storageId, ...timestamps })
-          if (mounted.current) setSavedCount((count) => count + 1)
-          emitEvent({ source: 'system', kind: 'screenshot_saved', t: timestamps.offsetMs, meta: { taskId: createdTaskId, storageId } })
-          try {
-            const result = await analyzeScreenshot(blob)
-            await annotateScreenshot({ screenshotId, ocr: { kind: 'completed', result } })
-            emitEvent({ source: 'system', kind: 'screenshot_analyzed', t: timestamps.offsetMs, meta: { taskId: createdTaskId, screenshotId, model: result.model, regions: result.regions.length } })
-          } catch (failure) {
-            const message = failure instanceof Error ? failure.message : 'Could not recognize screenshot text.'
-            await annotateScreenshot({ screenshotId, ocr: { kind: 'failed', error: message } })
+          let processed: Awaited<ReturnType<typeof processScreenshot>>
+          try { processed = await processScreenshot(blob) }
+          catch (failure) {
+            const storageId = await upload(createdTaskId, blob)
+            const screenshotId = await addScreenshot({ taskId: createdTaskId, storageId, ...timestamps, processing: {
+              kind: 'failed', error: failure instanceof Error ? failure.message : 'Screenshot processing failed.',
+            } })
+            if (mounted.current) setSavedCount((count) => count + 1)
+            emitEvent({ source: 'system', kind: 'screenshot_saved', t: timestamps.offsetMs, meta: { taskId: createdTaskId, screenshotId, storageId, processingFailed: true } })
             throw failure
           }
+          void processFrame(processed.redacted, timestamps.capturedAt, timestamps.offsetMs).catch((failure: unknown) => console.warn('[frame]', failure))
+          const uploadStarted = performance.now()
+          const [storageId, redactedStorageId] = await Promise.all([upload(createdTaskId, processed.original), upload(createdTaskId, processed.redacted)])
+          const screenshotId = await addScreenshot({ taskId: createdTaskId, storageId, ...timestamps, processing: { kind: 'completed', redactedStorageId,
+            result: processed.ocr, redaction: { ...processed.redaction, timings: {
+              ...processed.redaction.timings, uploadMs: performance.now() - uploadStarted,
+            } } } })
+          if (mounted.current) setSavedCount((count) => count + 1)
+          emitEvent({ source: 'system', kind: 'screenshot_saved', t: timestamps.offsetMs, meta: { taskId: createdTaskId, storageId } })
+          emitEvent({ source: 'system', kind: 'screenshot_analyzed', t: timestamps.offsetMs, meta: {
+            taskId: createdTaskId, screenshotId, model: processed.ocr.model, regions: processed.ocr.regions.length,
+            redactions: processed.redaction.spans.length, ...processed.redaction.timings,
+          } })
         },
         onStopped: () => { void finish() },
       })
@@ -187,6 +198,8 @@ function useRecordingController() {
 export function TaskRecorder({ project }: { project: Project }) {
   const { state, error, savedCount, start } = useTaskRecording()
   const { state: model, modelId } = useOcrModel()
+  const { state: pii } = usePiiModel()
+  const ready = model.kind === 'ready' && pii.kind === 'ready'
   const busy = state.kind !== 'idle'
   const owner = state.kind === 'idle' ? null : state.kind === 'starting' ? state.project : state.task.project
 
@@ -210,20 +223,20 @@ export function TaskRecorder({ project }: { project: Project }) {
         </div>
       ) : (
         <p className="muted">
-          {state.kind === 'saving' ? 'Recording stopped. Saving audio and finishing text recognition and screenshot uploads…'
+          {state.kind === 'saving' ? 'Recording stopped. Saving audio and finishing PII redaction and screenshot uploads…'
             : state.kind === 'save-failed' ? 'Recording stopped. Retry saving to open your summary.'
               : 'Share an entire screen and allow microphone access. We save screenshots every 2 seconds and record your narration. Click Done when you finish.'}
         </p>
       )}
       {busy && <p className="muted">{savedCount} screenshots saved</p>}
       <div className="task-actions">
-        {busy ? <FinishTaskButton /> : <button disabled={model.kind !== 'ready'} onClick={() => { void start(project) }}>
-          {model.kind === 'ready' ? 'New task' : 'Preparing text recognition…'}
+        {busy ? <FinishTaskButton /> : <button disabled={!ready} onClick={() => { void start(project) }}>
+          {ready ? 'New task' : 'Preparing screenshot pipeline…'}
         </button>}
         <Link to="/" className="task-link">Example ERP</Link>
       </div>
       {error && <p className="error" role="alert">{error}</p>}
-      {!busy && model.kind === 'ready' && <p className="muted model-ready">{OCR_MODELS[modelId].label} is ready on this device. Text and pixel coordinates will be saved with every screenshot.</p>}
+      {!busy && ready && <p className="muted model-ready">{OCR_MODELS[modelId].label} and PII redaction are ready. Original and redacted screenshots will both be saved.</p>}
     </section>
   )
 }

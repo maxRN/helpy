@@ -1,7 +1,7 @@
 import { ConvexError, v } from 'convex/values'
 import { mutation, query } from './_generated/server'
 import { deleteTask } from './taskCleanup'
-import { screenshotAnnotation } from './ocrValidators'
+import { screenshotProcessing } from './ocrValidators'
 import { ocrResultSchema } from '../src/capture/ocr-contract'
 
 export const list = query({
@@ -31,6 +31,7 @@ export const get = query({
       screenshots: await Promise.all(screenshots.map(async (screenshot) => ({
         ...screenshot,
         url: await ctx.storage.getUrl(screenshot.storageId),
+        redactedUrl: screenshot.redactedStorageId ? await ctx.storage.getUrl(screenshot.redactedStorageId) : null,
       }))),
     }
   },
@@ -72,11 +73,12 @@ export const addScreenshot = mutation({
   args: {
     taskId: v.id('tasks'),
     storageId: v.string(),
+    processing: screenshotProcessing,
     capturedAt: v.number(),
     offsetMs: v.number(),
   },
   returns: v.id('screenshots'),
-  handler: async (ctx, { taskId, storageId: rawStorageId, capturedAt, offsetMs }) => {
+  handler: async (ctx, { taskId, storageId: rawStorageId, processing, capturedAt, offsetMs }) => {
     const task = await ctx.db.get('tasks', taskId)
     if (!task || task.completion) throw new ConvexError('This task is not recording.')
     if (!Number.isFinite(offsetMs) || offsetMs < 0 || !Number.isFinite(capturedAt) || capturedAt < 0) {
@@ -87,22 +89,26 @@ export const addScreenshot = mutation({
     if (!storageId || !file || file.contentType !== 'image/jpeg') {
       throw new ConvexError('A JPEG screenshot is required.')
     }
-    return ctx.db.insert('screenshots', { taskId, storageId, capturedAt, offsetMs, ocr: { kind: 'pending' } })
-  },
-})
-
-export const annotateScreenshot = mutation({
-  args: { screenshotId: v.id('screenshots'), ocr: screenshotAnnotation },
-  returns: v.null(),
-  handler: async (ctx, { screenshotId, ocr }) => {
-    const screenshot = await ctx.db.get('screenshots', screenshotId)
-    if (!screenshot) throw new ConvexError('Screenshot not found.')
-    if (ocr.kind === 'completed') {
-      const parsed = ocrResultSchema.safeParse(ocr.result)
-      if (!parsed.success) throw new ConvexError('Invalid screenshot text or positions.')
+    if (processing.kind === 'failed') return ctx.db.insert('screenshots', { taskId, storageId, capturedAt, offsetMs, ocr: processing })
+    const { result, redaction } = processing
+    const redactedStorageId = ctx.db.system.normalizeId('_storage', processing.redactedStorageId)
+    const redactedFile = redactedStorageId ? await ctx.db.system.get('_storage', redactedStorageId) : null
+    if (!redactedStorageId || !redactedFile || !['image/png', 'image/jpeg'].includes(redactedFile.contentType ?? '')) {
+      throw new ConvexError('A redacted screenshot is required.')
     }
-    await ctx.db.patch('screenshots', screenshotId, { ocr })
-    return null
+    const parsed = ocrResultSchema.safeParse(result)
+    if (!parsed.success) throw new ConvexError('Invalid screenshot text or positions.')
+    for (const box of redaction.boxes) {
+      if (![box.x0, box.y0, box.x1, box.y1].every(Number.isFinite) || box.x0 < 0 || box.y0 < 0 || box.x0 >= box.x1 || box.y0 >= box.y1 || box.x1 > result.width || box.y1 > result.height) {
+        throw new ConvexError('Invalid redaction coordinates.')
+      }
+    }
+    const text = parsed.data.model === 'tesseract.js' ? parsed.data.text : parsed.data.regions.map((region) => region.text).join('\n')
+    for (const span of redaction.spans) {
+      if (!Number.isInteger(span.start) || !Number.isInteger(span.end) || span.start < 0 || span.start >= span.end || span.end > text.length) throw new ConvexError('Invalid PII text offsets.')
+    }
+    if (Object.values(redaction.timings).some((ms) => !Number.isFinite(ms) || ms < 0)) throw new ConvexError('Invalid pipeline timings.')
+    return ctx.db.insert('screenshots', { taskId, storageId, redactedStorageId, redaction, capturedAt, offsetMs, ocr: { kind: 'completed', result } })
   },
 })
 

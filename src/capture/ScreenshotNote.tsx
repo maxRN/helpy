@@ -3,10 +3,20 @@ import type { Doc } from '../../convex/_generated/dataModel'
 import { SMOLVLM_MODEL, TESSERACT_MODEL } from './ocr-contract'
 import { redactPii, usePiiModel } from './pii'
 
-export function ScreenshotNote({ ocr }: { ocr: Doc<'screenshots'>['ocr'] }) {
+export function ScreenshotNote({ ocr, redaction }: Pick<Doc<'screenshots'>, 'ocr' | 'redaction'>) {
+  if (redaction) return (
+    <details className="screenshot-note">
+      <summary>Redacted text · {redaction.spans.length} PII spans</summary>
+      <p className="muted">Desert Ant Labs Redact · {redaction.boxes.length} word boxes painted.</p>
+      <p className="ocr-text">{redaction.text || 'No text detected.'}</p>
+      <p className="muted">
+        OCR {Math.round(redaction.timings.ocrMs)} ms · PII {Math.round(redaction.timings.piiMs)} ms · Mask {Math.round(redaction.timings.maskMs)} ms · Upload {Math.round(redaction.timings.uploadMs)} ms
+      </p>
+    </details>
+  )
   if (!ocr) return <p className="screenshot-note muted">This screenshot was captured before text recognition was added.</p>
   if (ocr.kind === 'pending') return <p className="screenshot-note muted" role="status">Text recognition pending.</p>
-  if (ocr.kind === 'failed') return <p className="screenshot-note error">Text recognition failed: {ocr.error}</p>
+  if (ocr.kind === 'failed') return <p className="screenshot-note error">Screenshot processing failed: {ocr.error}</p>
   return <ExtractedTextNote result={ocr.result} />
 }
 

@@ -75,16 +75,20 @@ function TaskSummary() {
                 {task.screenshots.map((screenshot, index) => (
                   <li key={screenshot._id}>
                     <figure>
-                      {screenshot.url ? (
-                        <a href={screenshot.url} target="_blank" rel="noreferrer">
-                          <img src={screenshot.url} alt={`Screenshot ${index + 1} at ${formatDuration(screenshot.offsetMs)}`} loading="lazy" />
+                      {(screenshot.redactedUrl ?? screenshot.url) ? (
+                        <a href={screenshot.redactedUrl ?? screenshot.url ?? undefined} target="_blank" rel="noreferrer">
+                          <img src={screenshot.redactedUrl ?? screenshot.url ?? undefined} alt={`${screenshot.redactedUrl ? 'Redacted screenshot' : 'Screenshot'} ${index + 1} at ${formatDuration(screenshot.offsetMs)}`} loading="lazy" />
                         </a>
                       ) : <p className="error">This screenshot is unavailable.</p>}
                       <figcaption>
                         <span className="duration">+{formatDuration(screenshot.offsetMs)}</span>
                         <RecordedTime timestamp={screenshot.capturedAt} timeOnly />
                       </figcaption>
-                      <ScreenshotNote ocr={screenshot.ocr} />
+                      <p className="task-actions">
+                        {screenshot.url && <a href={screenshot.url} target="_blank" rel="noreferrer">Original screenshot</a>}
+                        {screenshot.redactedUrl && <a href={screenshot.redactedUrl} target="_blank" rel="noreferrer">Redacted screenshot</a>}
+                      </p>
+                      <ScreenshotNote ocr={screenshot.ocr} redaction={screenshot.redaction} />
                     </figure>
                   </li>
                 ))}

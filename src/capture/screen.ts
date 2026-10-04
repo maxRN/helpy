@@ -1,4 +1,3 @@
-import { maskPii } from '../shared/pii'
 import { session, useSession } from '../shared/session'
 
 export type Screenshot = {
@@ -58,7 +57,6 @@ export async function openScreenCapture() {
     if (!context) throw new Error('This browser cannot capture screenshots.')
     const drawScreenshot = () => {
       context.drawImage(video, 0, 0)
-      maskPii(context, video.videoWidth) // personal data never leaves the browser unmasked
     }
     const startedAt = Date.now()
     const startTime = performance.now()

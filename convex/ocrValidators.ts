@@ -31,3 +31,17 @@ export const screenshotAnnotation = v.union(
   v.object({ kind: v.literal('failed'), error: v.string() }),
 )
 export const screenshotOcr = v.union(v.object({ kind: v.literal('pending') }), screenshotAnnotation)
+
+export const screenshotRedaction = v.object({
+  model: v.literal('desert-ant-labs/redact'),
+  revision: v.literal('v0.4.0'),
+  text: v.string(),
+  spans: v.array(v.object({ start: v.number(), end: v.number(), label: v.string() })),
+  boxes: v.array(v.object({ x0: v.number(), y0: v.number(), x1: v.number(), y1: v.number() })),
+  timings: v.object({ ocrMs: v.number(), piiMs: v.number(), maskMs: v.number(), totalMs: v.number(), uploadMs: v.number() }),
+})
+
+export const screenshotProcessing = v.union(
+  v.object({ kind: v.literal('completed'), result: ocrResult, redactedStorageId: v.string(), redaction: screenshotRedaction }),
+  v.object({ kind: v.literal('failed'), error: v.string() }),
+)

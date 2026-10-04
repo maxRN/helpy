@@ -1,7 +1,7 @@
 import { defineSchema, defineTable } from 'convex/server'
 import { v } from 'convex/values'
 import { invoiceFields } from './invoiceValidators'
-import { screenshotOcr } from './ocrValidators'
+import { screenshotOcr, screenshotRedaction } from './ocrValidators'
 
 export default defineSchema({
   projects: defineTable({ name: v.string() }),
@@ -29,6 +29,8 @@ export default defineSchema({
   screenshots: defineTable({
     taskId: v.id('tasks'),
     storageId: v.id('_storage'),
+    redactedStorageId: v.optional(v.id('_storage')),
+    redaction: v.optional(screenshotRedaction),
     capturedAt: v.number(),
     offsetMs: v.number(),
     ocr: v.optional(screenshotOcr),
