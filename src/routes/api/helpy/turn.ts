@@ -12,7 +12,7 @@ const BodySchema = z.object({
   /** What is visible on the expert's screen right now (src/shared/screen.ts). */
   screen: z.string().max(4000).default(''),
   /** The question Helpy asked and is still waiting to have answered; the turn is classified against it. */
-  question: z.string().max(600).optional(),
+  question: z.string().max(2000).optional(),
 })
 
 const TurnSchema = z.object({
@@ -21,6 +21,8 @@ const TurnSchema = z.object({
   intent: z.enum(['answer', 'clarify', 'skip', 'other']),
   reply: z.string(),
   language: z.enum(['de', 'en', 'keep']),
+  /** Only for a teach-back ("Is that how it works?"): the expert agrees without correcting anything. */
+  confirmed: z.boolean(),
 })
 
 
@@ -37,6 +39,7 @@ If "Helpy is waiting for an answer to" names a question, also decide the intent 
 - "skip": they clearly decline: "not now", "skip it", "später", "nächste Frage", "keine Ahnung", "I don't know". toHelpy = true, reply: a short okay (max 6 words), no new question.
 - "other": anything else (narration about something else, talk with a colleague, a different request to Helpy). The question stays open; reply only if it was to you.
 Without a waiting question the intent is always "other".
+If the waiting question asks whether Helpy's explanation of the process is right (a teach-back): an agreement ("Ja, genau", "Yes, that's it") or a correction is an "answer"; confirmed = true only if they agree without correcting or adding anything. Otherwise confirmed = false.
 
 If it is to you and not an answer, reply like an attentive colleague in one or two short spoken sentences (max 30 words), no lists:
 - Asked whether you understood: say concretely what you understood from the recent session, in your own words. If you understood nothing yet, say so.

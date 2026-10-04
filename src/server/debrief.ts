@@ -139,6 +139,18 @@ export const hasEnoughWork = (log: LogLine[]) => log.filter((l) => l.who === 'sc
 export const NOT_ENOUGH_WORK =
   'I saw too little work on screen to ask good questions. Record the task again and work through a few invoices while you explain.'
 
+/** The language Helpy speaks with the expert: debrief questions, its reasons and the teach-back are written in it. */
+export type DebriefLanguage = 'de' | 'en'
+
+const NOT_ENOUGH_WORK_DE =
+  'Ich habe zu wenig Arbeit auf dem Bildschirm gesehen, um gute Fragen zu stellen. Nimm die Aufgabe bitte noch einmal auf und bearbeite ein paar Rechnungen, während du erklärst.'
+
+/** How Helpy writes for the expert in `language` (appended to the model's instructions). */
+export const writeIn = (language: DebriefLanguage) =>
+  language === 'de'
+    ? 'Write every question, doneReason and spoken text in natural spoken German with "du" (the expert speaks German with Helpy). Keep supplier names as they are.'
+    : 'Write every question, doneReason and spoken text in English.'
+
 /** A debrief question already asked in this debrief, and whether the expert answered it. */
 export const AskedGapSchema = z.object({ question: z.string(), answered: z.boolean() })
 export type AskedGap = z.infer<typeof AskedGapSchema>
@@ -181,17 +193,18 @@ const DECISION = /→|put on hold|second approval/
  * questions about exceptions, stop-and-ask moments and unseen cases, each tied to a real screen moment
  * of the log. They ask; they never state a fact about the process.
  */
-export function fallbackGaps(log: LogLine[], count: number, avoid: readonly { question: string }[], idStart: number): Gap[] {
+export function fallbackGaps(log: LogLine[], count: number, avoid: readonly { question: string }[], idStart: number, language: DebriefLanguage = 'en'): Gap[] {
   const screen = log.filter((l) => l.who === 'screen')
   const decisions = screen.filter((l) => DECISION.test(l.text))
   const at = (decisions[decisions.length - 1] ?? screen[screen.length - 1])?.t ?? 0
   const first = (decisions[0] ?? screen[0])?.t ?? at
+  const de = language === 'de'
   const candidates: { question: string; kind: Gap['kind']; t: number }[] = [
-    { question: 'Looking at that moment again: when would you not do it the way you just did?', kind: 'exception', t: at },
-    { question: 'When do you stop on an invoice like this and ask someone, and who is that?', kind: 'guardrail', t: first },
-    { question: 'What do you do with an invoice from a supplier you have never seen before?', kind: 'unseen_case', t: first },
-    { question: 'What if the amount were just under one of your limits? Would you still do the same?', kind: 'unseen_case', t: at },
-    { question: 'Is there anything you would never do with an invoice like this one?', kind: 'guardrail', t: at },
+    { question: de ? 'Wenn du dir den Moment noch mal anschaust: Wann würdest du es nicht so machen?' : 'Looking at that moment again: when would you not do it the way you just did?', kind: 'exception', t: at },
+    { question: de ? 'Wann hörst du bei so einer Rechnung auf und fragst jemanden, und wen?' : 'When do you stop on an invoice like this and ask someone, and who is that?', kind: 'guardrail', t: first },
+    { question: de ? 'Was machst du mit einer Rechnung von einem Lieferanten, den du noch nie gesehen hast?' : 'What do you do with an invoice from a supplier you have never seen before?', kind: 'unseen_case', t: first },
+    { question: de ? 'Und wenn der Betrag knapp unter einer deiner Grenzen läge, würdest du es genauso machen?' : 'What if the amount were just under one of your limits? Would you still do the same?', kind: 'unseen_case', t: at },
+    { question: de ? 'Gibt es etwas, das du bei so einer Rechnung nie machen würdest?' : 'Is there anything you would never do with an invoice like this one?', kind: 'guardrail', t: at },
   ]
   const out: Gap[] = []
   for (const c of candidates) {
@@ -216,19 +229,24 @@ const describeAsked = (live: LiveQuestion[], debrief: readonly AskedGap[]) =>
  * far (a number is accepted from older clients and only counts).
  */
 export const FALLBACK_GUARDRAIL_GAP = 'Is there a limit, or a case where you would stop and ask someone before doing this?'
+const FALLBACK_GUARDRAIL_GAP_DE = 'Gibt es eine Grenze, oder einen Fall, in dem du vorher aufhörst und jemanden fragst?'
 
 /**
  * `needGuardrail`: no guardrail question was asked during the task (the brief requires one), so the
  * debrief's first question must be one; if the model does not deliver it, a fixed one goes first.
  */
-export async function findGaps(log: LogLine[], asked: readonly AskedGap[] | number, needGuardrail = false): Promise<GapsResult> {
+export async function findGaps(log: LogLine[], asked: readonly AskedGap[] | number, needGuardrail = false, language: DebriefLanguage = 'en'): Promise<GapsResult> {
+  const de = language === 'de'
   const debrief: AskedGap[] = typeof asked === 'number' ? Array.from({ length: asked }, () => ({ question: '', answered: true })) : [...asked]
   const live = liveQuestions(log, debrief)
   const askedSoFar = debrief.length
   const required = Math.max(0, MIN_DEBRIEF_QUESTIONS - askedSoFar)
-  if (!hasEnoughWork(log)) return { gaps: [], done: true, doneReason: NOT_ENOUGH_WORK, notEnoughWork: true, required: 0, live }
+  if (!hasEnoughWork(log)) return { gaps: [], done: true, doneReason: de ? NOT_ENOUGH_WORK_DE : NOT_ENOUGH_WORK, notEnoughWork: true, required: 0, live }
   if (askedSoFar >= MAX_DEBRIEF_QUESTIONS) {
-    return { gaps: [], done: true, doneReason: `I asked all ${MAX_DEBRIEF_QUESTIONS} questions I had; anything still open is noted in the Work Map.`, required: 0, live }
+    const doneReason = de
+      ? `Ich habe alle ${MAX_DEBRIEF_QUESTIONS} Fragen gestellt, die ich hatte; was noch offen ist, steht in der Work Map.`
+      : `I asked all ${MAX_DEBRIEF_QUESTIONS} questions I had; anything still open is noted in the Work Map.`
+    return { gaps: [], done: true, doneReason, required: 0, live }
   }
   const room = Math.min(3, MAX_DEBRIEF_QUESTIONS - askedSoFar)
   const mustGuardrail = needGuardrail && askedSoFar === 0
@@ -255,7 +273,7 @@ export async function findGaps(log: LogLine[], asked: readonly AskedGap[] | numb
       model: MODELS.deep,
       schema: GapsSchema,
       system: GAPS_SYSTEM,
-      content: `Session log:\n${formatLog(log)}\n\n${describeAsked(live, debrief)}\n\nRequired new questions: ${required}. Questions left in the budget: ${MAX_DEBRIEF_QUESTIONS - askedSoFar}.${guardrailRule}`,
+      content: `Session log:\n${formatLog(log)}\n\n${describeAsked(live, debrief)}\n\nRequired new questions: ${required}. Questions left in the budget: ${MAX_DEBRIEF_QUESTIONS - askedSoFar}.${guardrailRule}\n\n${writeIn(language)}`,
       effort: 'medium',
     })
     gaps = usable(out.gaps, []).slice(0, room)
@@ -267,7 +285,7 @@ export async function findGaps(log: LogLine[], asked: readonly AskedGap[] | numb
         model: MODELS.deep,
         schema: GapsSchema,
         system: GAPS_SYSTEM,
-        content: `Session log:\n${formatLog(log)}\n\n${describeAsked(live, debrief)}\nAlready chosen this round: ${gaps.map((g) => g.question).join(' | ') || 'none'}\n\nRequired new questions: ${required - gaps.length}. Every question must be new: about an exception, a rule you are unsure about, a case that did not come up, or who decides. Ground each in a moment of the log.`,
+        content: `Session log:\n${formatLog(log)}\n\n${describeAsked(live, debrief)}\nAlready chosen this round: ${gaps.map((g) => g.question).join(' | ') || 'none'}\n\nRequired new questions: ${required - gaps.length}. Every question must be new: about an exception, a rule you are unsure about, a case that did not come up, or who decides. Ground each in a moment of the log.\n\n${writeIn(language)}`,
         effort: 'low',
       })
       gaps = [...gaps, ...usable(more.gaps, gaps)].slice(0, room)
@@ -276,21 +294,25 @@ export async function findGaps(log: LogLine[], asked: readonly AskedGap[] | numb
     console.warn('[debrief/gaps] model failed', err)
   }
   // Still short of the required questions (model down or repeating itself): grounded fallback questions.
-  if (gaps.length < Math.min(required, room)) gaps = [...gaps, ...fallbackGaps(log, Math.min(required, room) - gaps.length, [...avoid, ...gaps], askedSoFar + gaps.length)]
+  if (gaps.length < Math.min(required, room)) gaps = [...gaps, ...fallbackGaps(log, Math.min(required, room) - gaps.length, [...avoid, ...gaps], askedSoFar + gaps.length, language)]
 
   // The guardrail question goes first when none came live (the model's, else a fixed one).
   if (mustGuardrail) {
     const g = gaps.findIndex((x) => x.kind === 'guardrail')
     if (g > 0) gaps = [gaps[g], ...gaps.filter((_, i) => i !== g)]
-    if (g < 0 && !isDuplicateQuestion(FALLBACK_GUARDRAIL_GAP, avoid)) {
+    const fixed = de ? FALLBACK_GUARDRAIL_GAP_DE : FALLBACK_GUARDRAIL_GAP
+    if (g < 0 && !isDuplicateQuestion(fixed, avoid)) {
       const lastScreen = [...log].reverse().find((l) => l.who === 'screen')
-      gaps = [{ id: '', question: FALLBACK_GUARDRAIL_GAP, kind: 'guardrail' as const, clip: clipAround(lastScreen?.t ?? 0) }, ...gaps].slice(0, room)
+      gaps = [{ id: '', question: fixed, kind: 'guardrail' as const, clip: clipAround(lastScreen?.t ?? 0) }, ...gaps].slice(0, room)
     }
     gaps = gaps.map((x, i) => ({ ...x, id: `gap-${askedSoFar + i + 1}` }))
   }
 
   const done = required === 0 && (modelDone || gaps.length === 0)
-  if (done && !doneReason) doneReason = 'I think I understand it now: the decisions I saw have their reasons, and I know when to stop and ask.'
+  if (done && !doneReason)
+    doneReason = de
+      ? 'Ich glaube, jetzt habe ich es verstanden: Die Entscheidungen, die ich gesehen habe, haben ihre Gründe, und ich weiß, wann ich aufhören und fragen muss.'
+      : 'I think I understand it now: the decisions I saw have their reasons, and I know when to stop and ask.'
   return { gaps: done ? [] : gaps, done, doneReason, required, live }
 }
 
@@ -411,13 +433,14 @@ export async function buildWorkMap(sessionId: string, log: LogLine[], expert = '
 
 const TeachbackSchema = z.object({ text: z.string() })
 
-export async function writeTeachback(workMap: WorkMap): Promise<string> {
+export async function writeTeachback(workMap: WorkMap, language: DebriefLanguage = 'en'): Promise<string> {
   const out = await generateJson({
     model: MODELS.deep,
     schema: TeachbackSchema,
     system: `You are the apprentice. Explain the expert's process back to them in your own words, in under 60 seconds of speech (max 140 words).
 Spoken style, second person ("you"), plain sentences, no lists or markdown. Cover every step in order, each judgment call with its reason, and every guardrail.
-Do not ask a question at the end; the agent asks "Is that how it works?" itself.`,
+Do not ask a question at the end; Helpy asks "Is that how it works?" itself.
+${language === 'de' ? 'Write it in natural spoken German with "du": the expert speaks German with Helpy.' : 'Write it in English.'}`,
     content: JSON.stringify({ task: workMap.task, expert: workMap.expert, steps: workMap.steps, guardrails: workMap.guardrails }),
     effort: 'low',
   })

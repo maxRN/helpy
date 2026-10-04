@@ -14,6 +14,8 @@ export interface DebriefIO {
   sessionId: string
   /** No guardrail question was asked during the task: the debrief starts with one. */
   needGuardrail?: boolean
+  /** The language Helpy speaks with the expert (from the task): questions and teach-back are written in it. */
+  language?: 'de' | 'en'
   log(): Promise<LogLine[]>
   post<T>(url: string, body: unknown): Promise<T>
   /** Asks out loud; resolves with the answer, or null when it was skipped or not answered. */
@@ -53,6 +55,7 @@ export async function runDebriefFlow(io: DebriefIO): Promise<DebriefOutcome> {
       log: await io.log(),
       asked: questions.map((q) => ({ question: q.question, answered: q.status === 'answered' })),
       needGuardrail: io.needGuardrail ?? false,
+      language: io.language ?? 'en',
     })
     // Too little of the task was recorded: say so instead of inventing questions or a Work Map.
     if (res.notEnoughWork) return { kind: 'not_enough_work', reason: res.doneReason }
@@ -88,7 +91,7 @@ export async function runDebriefFlow(io: DebriefIO): Promise<DebriefOutcome> {
   let confirmed = false
   let rounds = 0
   for (; rounds < MAX_TEACHBACK_ROUNDS && !io.stopped(); ) {
-    text = io.scrub((await io.post<{ text: string }>('/api/debrief/teachback', { workMap })).text)
+    text = io.scrub((await io.post<{ text: string }>('/api/debrief/teachback', { workMap, language: io.language ?? 'en' })).text)
     io.phase('teachback')
     await io.waitForQuiet('Here’s how I understood it.')
     rounds++

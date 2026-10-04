@@ -3,12 +3,11 @@
 import { create } from 'zustand'
 import { toLogLines } from '../debrief/sessionLog'
 import { resumeAudio } from '../integration/audioUnlock'
-import { getEventLog } from '../shared/bus'
+import { emitEvent, getEventLog } from '../shared/bus'
 import { ungroundedInvoiceRefs } from '../shared/grounding'
 import { screenSummary } from '../shared/screen'
-import { speech, startListening, stopListening } from '../integration/listener'
-import type { Quote } from '../agent/types'
-import type { TurnVerdict } from '../integration/speech'
+import { logAnswer, logHeard, speech, startListening, stopListening } from '../integration/listener'
+import { looksLikeQuestionBack, type TurnVerdict, type Utterance } from '../integration/speech'
 import { installVoiceBridge, resetVoiceClock } from '../integration/voiceBridge'
 import { mascot, type BubbleAction } from '../mascot'
 import { useMascot } from '../shared/mascot'
@@ -96,6 +95,21 @@ export async function startVoice(mode: AgentMode) {
     return
   }
   stopListening()
+  // The follow-up questions after a task use the same ears and voice as the task itself (see askAloud).
+  if (mode === 'debrief') {
+    if (voice.isActive()) await voice.stop()
+    resetVoiceClock()
+    heard = []
+    try {
+      await withWatchdog(startListening({ onRawTurn: (u) => void heard.push(u), onRecordCommand: (cmd) => cmd === 'off' && void debriefOffRecord() }), 'Listening')
+      useVoice.setState({ mode, error: '' })
+    } catch (err) {
+      console.warn('[helpy] Scribe not started for the debrief', err)
+      stopListening()
+      useVoice.setState({ mode: null, error: 'Voice is not available right now. Helpy works quietly with speech bubbles.' })
+    }
+    return
+  }
   try {
     if (voice.isActive()) await voice.stop()
     resetVoiceClock()
@@ -171,52 +185,174 @@ export async function setOffRecord(on: boolean) {
   } else session().setOffRecord(on)
 }
 
-/** How long Helpy waits for the agent to explain its question by itself before it sends the explanation. */
-const AGENT_EXPLAINS_WITHIN_MS = 1500
+// ---------------------------------------------------------------- debrief
+// The follow-up questions after a task run like the task itself: Scribe listens (so "Helpy hears" shows what it
+// heard), Helpy's TTS speaks (same voice, model and audio quality as during the task, in the language the expert
+// spoke) and Claude decides what each reply is. The ElevenLabs agent did this before: it streamed 16 kHz audio,
+// which sounded worse, and said the English questions it was given.
 
 /**
- * Debrief: the agent asks out loud until the question is really answered. A question back ("Wie meinst du
- * das?") is explained (by the agent itself, which heard it, or with Claude's explanation) and the same question
- * stays open; only a real answer is logged as the answer. `wrap` makes waits interruptible (skip, stop).
+ * A reply ends this long after Scribe closed its last sentence with no new one started: with Scribe's own 0.8 s
+ * that is about 1.5 s of silence, so a breath between two sentences does not cut an answer in half.
  */
-export async function askAloud(
-  question: string,
-  opts: { wrap?: <T>(p: Promise<T>) => Promise<T | null>; stopped?: () => boolean } = {},
-): Promise<ReplyOutcome | null> {
-  const voice = await load()
-  if (!voice.isConnected()) return null
-  const wrap = opts.wrap ?? (<T,>(p: Promise<T>) => p.catch(() => null))
-  let last: Quote | null = null
-  let repliedAt = 0
-  const take = (q: Quote | null) => {
-    last = q
-    repliedAt = Date.now()
-    return q?.text?.trim() || null
-  }
-  const outcome = await askUntilAnswered({
-    ask: async () => take(await wrap(voice.ask(question, { emitAnswer: false }))),
-    listen: async () => take(await wrap(voice.listenAgain({ emitAnswer: false }))),
-    classify: (reply) => classifyTurn(reply, 'debrief', question),
-    explain: async (text) => {
-      // The agent heard the question back too and usually explains on its own (its prompt says so). If it
-      // does not, it says Claude's explanation; either way Helpy listens again once it is done.
-      const since = repliedAt - TURN_FLUSH_MS
-      const end = Date.now() + AGENT_EXPLAINS_WITHIN_MS
-      while (!voice.agentSpokeSince(since) && Date.now() < end) await new Promise((r) => setTimeout(r, 150))
-      if (!voice.agentSpokeSince(since)) {
-        mascot.bubble(text)
-        await wrap(voice.say(text))
-      }
-      await wrap(voice.agentQuiet())
-    },
-    stopped: opts.stopped,
+const REPLY_END_MS = 700
+const REPLY_WAIT_MS = 120_000
+
+/** Finished turns heard in the debrief that no question took yet. */
+let heard: Utterance[] = []
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+/** True while the debrief can talk and listen (Scribe runs). */
+export const debriefListening = () => useVoice.getState().mode === 'debrief' && speech.active()
+
+/**
+ * "Off the record" said in the debrief: Helpy stops listening at once (Scribe is muted, no audio leaves the
+ * computer), so coming back is a click on "Continue", like in a lesson.
+ */
+async function debriefOffRecord() {
+  await setOffRecord(true)
+  const de = session().language === 'de'
+  mascot.bubble(de ? 'Inoffiziell: Ich höre nicht zu. Klick auf Weiter, wenn du so weit bist.' : 'Off the record: I’m not listening. Click Continue when you’re ready.', {
+    topic: 'prompt',
+    actions: [{ label: de ? 'Weiter' : 'Continue', primary: true, onClick: () => void setOffRecord(false) }],
   })
-  if (outcome.kind === 'answered' && last) voice.recordAnswer(last)
-  return outcome
+  void speak(de ? 'Okay, inoffiziell.' : 'Okay, off the record.')
 }
 
-/** The transcript ends a reply after this much silence (src/agent/transcript.ts): the agent may start meanwhile. */
-const TURN_FLUSH_MS = 1500
+/** The expert's next reply: their sentences until REPLY_END_MS of quiet, joined. null when none came or cancelled. */
+async function nextReply(cancelled: () => boolean): Promise<Utterance | null> {
+  let end = Date.now() + REPLY_WAIT_MS
+  while (!heard.length) {
+    if (cancelled() || Date.now() > end || !debriefListening()) return null
+    if (session().offRecord) end = Date.now() + REPLY_WAIT_MS // paused: the question waits as long as it takes
+    await sleep(150)
+  }
+  // The same reply goes on while they keep talking (a breath between sentences is not the end).
+  while ((speech.isSpeaking() || Date.now() - speech.lastSpeechAt() < REPLY_END_MS) && !cancelled()) await sleep(150)
+  const parts = heard.splice(0)
+  return { text: parts.map((p) => p.text).join(' '), startedAt: parts[0].startedAt, endedAt: parts[parts.length - 1].endedAt }
+}
+
+/** Says a line in the debrief; the bubble shows `bubble` (default: the line) from the moment the voice starts. */
+async function sayLine(text: string, o: { bubble?: string; onStart?: () => void } = {}) {
+  await speak(text, {
+    onStart: () => {
+      mascot.bubble(o.bubble ?? text, { topic: 'question' })
+      o.onStart?.()
+    },
+  })
+  if (useMascot.getState().state !== 'speaking') mascot.setState('listening')
+}
+
+/** Never name an invoice that does not exist (grounding); ask which one instead. */
+function grounded(text: string) {
+  if (!ungroundedInvoiceRefs(text).length) return text
+  return session().language === 'de' ? 'Welche Rechnung meinst du genau?' : 'Which invoice do you mean exactly?'
+}
+
+type Wrap = <T>(p: Promise<T>) => Promise<T | null>
+
+/** The verdict for an obvious question back when Claude could not decide: say the question again. */
+const questionBack = (question: string): TurnVerdict => ({ toHelpy: true, intent: 'clarify', reply: question, language: 'keep' })
+
+/**
+ * Debrief: Helpy asks out loud until the question is really answered. A question back ("Wie meinst du das?") is
+ * explained and the same question stays open; only a real answer is logged as the answer, a skip moves on.
+ * `wrap` / `stopped` make the waits interruptible (skip, stop).
+ */
+export async function askAloud(question: string, opts: { wrap?: Wrap; stopped?: () => boolean } = {}): Promise<ReplyOutcome | null> {
+  if (!debriefListening()) return null
+  const cancelled = () => !!opts.stopped?.()
+  const wrap: Wrap = opts.wrap ?? (<T,>(p: Promise<T>) => p.catch(() => null))
+  let questionId = ''
+  let last: Utterance | null = null
+  const take = (u: Utterance | null) => {
+    last = u
+    return u?.text.trim() || null
+  }
+  return askUntilAnswered({
+    ask: async () => {
+      await sayLine(question, {
+        onStart: () => {
+          heard = [] // what was said before the question is not its answer
+          questionId = emitEvent({ source: 'voice', kind: 'question_asked', speaker: 'agent', text: question, meta: { phase: 'debrief' } }).id
+        },
+      })
+      return take(await wrap(nextReply(cancelled)))
+    },
+    listen: async () => take(await wrap(nextReply(cancelled))),
+    classify: async (reply) => {
+      // Without Claude an obvious question back still gets the question again, never counts as the answer.
+      const verdict = (await classifyTurn(reply, 'debrief', question)) ?? (looksLikeQuestionBack(reply) ? questionBack(question) : null)
+      // Logged once it is clear what it was: the answer as the answer, a question back as said to Helpy.
+      const answer = !verdict || verdict.intent === 'answer'
+      if (last) {
+        logHeard(last, !answer)
+        if (answer) logAnswer(last, questionId)
+      }
+      return verdict
+    },
+    explain: (text) => sayLine(grounded(text)),
+    stopped: opts.stopped,
+  })
+}
+
+/** Says a line of the debrief (e.g. why it ends) with the same voice. */
+export async function sayAloud(text: string) {
+  await sayLine(text)
+}
+
+const AGREES = /^\s*(ja|jap|jo|genau|richtig|stimmt|korrekt|passt|yes|yeah|yep|exactly|correct|right|that's it)\b/i
+
+/**
+ * Debrief: Helpy explains the process back and asks "Is that how it works?". Resolves with the expert's verdict:
+ * confirmed, or their correction in their own words. A question back is explained first, like any question.
+ */
+export async function teachBackAloud(text: string, opts: { wrap?: Wrap; stopped?: () => boolean } = {}): Promise<{ confirmed: boolean; correction?: string } | null> {
+  if (!debriefListening()) return null
+  const de = session().language === 'de'
+  const ask = de ? 'Stimmt das so?' : 'Is that how it works?'
+  const bubble = de ? `So habe ich es verstanden. ${ask} Sag mir, wenn etwas nicht stimmt.` : `Here’s how I understood it. ${ask} Tell me if something is wrong.`
+  const cancelled = () => !!opts.stopped?.()
+  const wrap: Wrap = opts.wrap ?? (<T,>(p: Promise<T>) => p.catch(() => null))
+  const question = `${ask} (Helpy just explained the process back: "${text.slice(0, 1500)}")`
+  let verdict: TurnVerdict | null = null
+  let last: Utterance | null = null
+  const take = (u: Utterance | null) => {
+    last = u
+    return u?.text.trim() || null
+  }
+  const outcome = await askUntilAnswered({
+    ask: async () => {
+      await sayLine(`${text} ${ask}`, {
+        bubble,
+        onStart: () => {
+          heard = []
+          emitEvent({ source: 'voice', kind: 'teachback_given', speaker: 'agent', text })
+        },
+      })
+      return take(await wrap(nextReply(cancelled)))
+    },
+    listen: async () => take(await wrap(nextReply(cancelled))),
+    classify: async (reply) => {
+      verdict = (await classifyTurn(reply, 'debrief', question)) ?? (looksLikeQuestionBack(reply) ? questionBack(`${text} ${ask}`) : null)
+      if (last) logHeard(last, !!verdict && verdict.intent !== 'answer')
+      return verdict
+    },
+    explain: (line) => sayLine(grounded(line)),
+    stopped: opts.stopped,
+  })
+  if (cancelled()) return null
+  const result =
+    outcome.kind === 'answered'
+      ? (verdict as TurnVerdict | null)?.confirmed ?? AGREES.test(outcome.answer)
+        ? { confirmed: true }
+        : { confirmed: false, correction: outcome.answer }
+      : { confirmed: false, correction: '(no response)' }
+  emitEvent({ source: 'voice', kind: 'teachback_result', speaker: 'expert', text: result.correction, meta: { confirmed: result.confirmed } })
+  return result
+}
 
 let tutorMuted = 0
 
@@ -258,11 +394,6 @@ export async function sayStep(text: string, o: SayStepOptions = {}): Promise<voi
       voice.tellAgent(o.context ?? `[GUIDE] Helpy just told the trainee: "${text}"`)
     }
   }
-}
-
-export async function teachBackAloud(text: string): Promise<{ confirmed: boolean; correction?: string } | null> {
-  const voice = await load()
-  return voice.isConnected() ? voice.teachBack(text) : null
 }
 
 /**

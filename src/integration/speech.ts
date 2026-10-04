@@ -30,6 +30,15 @@ export function mightBeToHelpy(text: string): boolean {
   return MAYBE_TO_HELPY.test(text.trim())
 }
 
+// Only when Claude cannot decide (no network, timeout): an obvious question back is still not an answer.
+const QUESTION_BACK = /^\W*(wie meinst du|was meinst du|wie bitte|welche[rsn]? (rechnung|meinst)|was genau|kannst du (das|die frage)? ?(noch ?mal )?wiederholen|nochmal bitte|hä|what do you mean|what does that mean|which (one|invoice)|sorry\?|pardon|can you repeat|could you repeat|say that again)(?![\p{L}])/iu
+
+/** A short reply that obviously asks back about Helpy's question (the fallback when Claude gives no verdict). */
+export function looksLikeQuestionBack(text: string): boolean {
+  const t = text.trim()
+  return t.split(/\s+/).length <= 8 && QUESTION_BACK.test(t)
+}
+
 /** What a turn does with the question Helpy is waiting on (decided by Claude, /api/helpy/turn). */
 export type TurnIntent = 'answer' | 'clarify' | 'skip' | 'other'
 
@@ -38,6 +47,8 @@ export interface TurnVerdict {
   intent: TurnIntent
   reply: string
   language: 'de' | 'en' | 'keep'
+  /** Teach-back only: the expert agreed without a correction. */
+  confirmed?: boolean
 }
 
 /**
@@ -62,8 +73,8 @@ export function normalizeTurn(out: TurnVerdict, question?: string): TurnVerdict 
  */
 export type TurnRoute = 'answer' | 'clarified' | 'skipped' | 'toHelpy' | 'narration'
 
-export function routeTurn(verdict: Pick<TurnVerdict, 'toHelpy' | 'intent'> | null, questionOpen: boolean): TurnRoute {
-  if (!verdict) return 'answer'
+export function routeTurn(verdict: Pick<TurnVerdict, 'toHelpy' | 'intent'> | null, questionOpen: boolean, text = ''): TurnRoute {
+  if (!verdict) return questionOpen && looksLikeQuestionBack(text) ? 'clarified' : 'answer'
   if (questionOpen) {
     if (verdict.intent === 'answer') return 'answer'
     if (verdict.intent === 'clarify') return 'clarified'

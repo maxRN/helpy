@@ -31,6 +31,7 @@ let onAnswer: ((q: Quote) => void) | null = null
 let onRecordCommand: ((cmd: 'off' | 'on') => void) | null = null
 let onTurn: ((text: string, question?: string) => Promise<TurnVerdict | null>) | null = null
 let onQuestionSkipped: (() => void) | null = null
+let onRawTurn: ((u: Utterance) => void) | null = null
 
 const DECIDE_TIMEOUT_MS = 8000 // if Claude takes longer, treat the turn as narration
 
@@ -49,6 +50,16 @@ export const speech = {
 const rel = (at: number) => {
   const t0 = sessionClock()
   return t0 === null ? undefined : Math.max(0, at - t0)
+}
+
+/** A turn the debrief heard (raw mode), logged once it knows what it was. toHelpy: a question back, not content. */
+export function logHeard(u: Pick<Utterance, 'text' | 'startedAt'>, toHelpy = false) {
+  logUtterance({ text: u.text, startedAt: u.startedAt, endedAt: u.startedAt }, toHelpy)
+}
+
+/** The debrief's answer to its question `questionId` (raw mode): logged as the answer. */
+export function logAnswer(u: Pick<Utterance, 'text' | 'startedAt'>, questionId: string) {
+  emitEvent({ source: 'voice', kind: 'answer_given', speaker: 'expert', text: u.text, t: rel(u.startedAt), meta: { questionId, phase: 'debrief', stt: 'scribe_v2_realtime' } })
 }
 
 /** toHelpy: said to Helpy, not about the work; kept in the log but left out of the debrief and Work Map. */
@@ -81,6 +92,8 @@ function logUtterance(u: Utterance, toHelpy = false) {
  * logged as the answer; narration that does not answer it leaves the question open.
  */
 async function handleTurn(u: Utterance) {
+  // The debrief decides about every turn itself (see src/app/voice.ts, askAloud).
+  if (onRawTurn) return onRawTurn(u)
   const open = tracker.openQuestion(Date.now())
   let verdict: TurnVerdict | null = null
   if (onTurn && (open || mightBeToHelpy(u.text))) {
@@ -98,7 +111,7 @@ async function handleTurn(u: Utterance) {
     // Without a verdict a turn that could only have been a remark to Helpy is still plain narration.
     if (!verdict && !open) verdict = { toHelpy: false, intent: 'other', reply: '', language: 'keep' }
   }
-  switch (routeTurn(verdict, !!open)) {
+  switch (routeTurn(verdict, !!open, u.text)) {
     case 'answer':
       return logUtterance(tracker.claimAnswer(u))
     case 'clarified':
@@ -160,6 +173,11 @@ export interface ListenerCallbacks {
   onTurn?: (text: string, question?: string) => Promise<TurnVerdict | null>
   /** The expert declined the open question ("not now"): it is closed without an answer. */
   onQuestionSkipped?: () => void
+  /**
+   * Debrief: every finished turn goes here, nothing is decided or logged by the listener (the caller logs it
+   * with logHeard / logAnswer once it knows what the turn was). Replaces onTurn.
+   */
+  onRawTurn?: (u: Utterance) => void
 }
 
 /** Starts listening; resolves once Scribe confirmed the session. */
@@ -169,6 +187,7 @@ export async function startListening(callbacks: ListenerCallbacks = {}): Promise
   onRecordCommand = callbacks.onRecordCommand ?? null
   onTurn = callbacks.onTurn ?? null
   onQuestionSkipped = callbacks.onQuestionSkipped ?? null
+  onRawTurn = callbacks.onRawTurn ?? null
   useListener.setState({ status: 'connecting', error: '' })
   try {
     const res = await fetch('/api/elevenlabs/scribe-token', { signal: AbortSignal.timeout(8000) })
@@ -280,6 +299,7 @@ export function stopListening() {
   onRecordCommand = null
   onTurn = null
   onQuestionSkipped = null
+  onRawTurn = null
   tracker.dropTurn()
   conn?.close()
   useListener.setState({ status: 'off', speaking: false, partial: '', muted: false })

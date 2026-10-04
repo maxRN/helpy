@@ -17,7 +17,7 @@ import { mmss } from './panel/ui'
 import { offRecordPrompt } from './offRecordPrompt'
 import { RecordDialog, recordFlow } from './RecordDialog'
 import { tour } from './tour'
-import { VoiceDebrief, voiceDebrief } from './VoiceDebrief'
+import { useVoiceDebrief, VoiceDebrief, voiceDebrief } from './VoiceDebrief'
 import { askWaitingQuestion, stopVoice } from './voice'
 
 /** Small red light with the time on the robot while it records. */
@@ -203,6 +203,9 @@ export function Helpy({ boundsRef }: { boundsRef?: RefObject<HTMLElement | null>
     return () => clearTimeout(timer)
   }, [waiting, activity?.kind])
 
+  // The follow-up questions listen with the same ears: what Helpy hears shows there too.
+  const debriefing = useVoiceDebrief((s) => s.phase !== 'idle')
+
   // Teach mode can start from Helpy or from P3's debrief panel; the guidance runs in both cases.
   const teaching = useSession((s) => s.mode === 'teach' && s.workMap !== null)
 
@@ -217,7 +220,7 @@ export function Helpy({ boundsRef }: { boundsRef?: RefObject<HTMLElement | null>
         boundsRef={boundsRef}
         hideBubble={open}
         badge={activity?.kind === 'recording' ? <RecordingLight startedAt={'task' in recorder ? recorder.task.startedAt : null} /> : null}
-        status={activity?.kind === 'recording' ? <StatusCard waiting={!!waiting} /> : null}
+        status={activity?.kind === 'recording' ? <StatusCard waiting={!!waiting} /> : debriefing ? <StatusCard waiting={false} /> : null}
       />
       <HelpyPanel boundsRef={boundsRef} />
       <RecordDialog />

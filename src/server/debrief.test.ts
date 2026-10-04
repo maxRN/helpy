@@ -191,3 +191,29 @@ describe('screen moments', () => {
     expect(workMap.guardrails[0].moment).toBeNull()
   })
 })
+
+describe('the debrief speaks the language of the task', () => {
+  it('asks the model for German questions when Helpy spoke German with the expert', async () => {
+    generateJson.mockReset()
+    generateJson.mockResolvedValue({ gaps: [{ question: 'Gilt das immer, oder nur für Maschinen?', kind: 'exception', aboutT: 41_000 }], done: false, doneReason: '' })
+    await findGaps(log, 0, false, 'de')
+    expect(generateJson.mock.calls[0][0].content).toContain('natural spoken German')
+  })
+
+  it('falls back to German questions, not English ones, when the model is down', async () => {
+    generateJson.mockReset()
+    generateJson.mockRejectedValue(new Error('model down'))
+    const res = await findGaps(log, 0, true, 'de')
+    expect(res.gaps).toHaveLength(3)
+    expect(res.gaps[0]).toMatchObject({ kind: 'guardrail', question: 'Wann hörst du bei so einer Rechnung auf und fragst jemanden, und wen?' })
+    expect(res.gaps.every((g) => / du /.test(` ${g.question} `))).toBe(true)
+  })
+
+  it('writes the teach-back in German', async () => {
+    const { writeTeachback } = await import('./debrief')
+    generateJson.mockReset()
+    generateJson.mockResolvedValue({ text: 'Du öffnest die Rechnung …' })
+    await writeTeachback({ sessionId: 's', task: 't', expert: 'Sabine', language: 'en', steps: [], guardrails: [], openQuestions: [] }, 'de')
+    expect(generateJson.mock.calls[0][0].system).toContain('spoken German')
+  })
+})

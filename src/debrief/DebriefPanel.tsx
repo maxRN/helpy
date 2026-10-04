@@ -32,7 +32,8 @@ async function post<T>(url: string, body: unknown): Promise<T> {
   return data as T
 }
 
-const voice = () => import('../agent/voice')
+// The window talks with the same voice and ears as the spoken debrief (Scribe + Helpy's TTS, see src/app/voice.ts).
+const voice = () => import('../app/voice')
 
 /**
  * The debrief: clip + spoken question for every gap, answers by voice (or typed),
@@ -68,6 +69,7 @@ export function DebriefPanel() {
         log: log(),
         asked: count,
         needGuardrail: needsGuardrailQuestion(stored && stored.length > 0 ? stored : getEventLog()),
+        language: useSession.getState().language,
       })
       setDoneReason(res.doneReason)
       // Too little task on screen: say so honestly instead of inventing questions or a Work Map.
@@ -84,7 +86,7 @@ export function DebriefPanel() {
     try {
       const { workMap, warnings: w } = await post<{ workMap: WorkMap; warnings: string[] }>('/api/workmap', { sessionId, log: log() })
       setWarnings(w)
-      const { text } = await post<{ text: string }>('/api/debrief/teachback', { workMap })
+      const { text } = await post<{ text: string }>('/api/debrief/teachback', { workMap, language: useSession.getState().language })
       setPhase({ kind: 'teachback', workMap, text })
     } catch (err) {
       setPhase({ kind: 'error', message: String(err instanceof Error ? err.message : err), retry: () => void build() })
@@ -107,7 +109,7 @@ export function DebriefPanel() {
     if (askedFor.current === gap.id) return
     askedFor.current = gap.id
     void voice().then(async (v) => {
-      if (!v.isConnected()) {
+      if (!v.debriefListening()) {
         emitEvent({ source: 'voice', kind: 'question_asked', speaker: 'agent', text: gap.question, meta: { phase: 'debrief', gapId: gap.id } })
         return
       }
@@ -133,8 +135,9 @@ export function DebriefPanel() {
 
   const runTeachback = async (workMap: WorkMap, text: string) => {
     const v = await voice()
-    if (!v.isConnected()) return
-    const verdict = await v.teachBack(text)
+    if (!v.debriefListening()) return
+    const verdict = await v.teachBackAloud(text)
+    if (!verdict) return
     if (verdict.confirmed) confirm(workMap, text)
     else if (verdict.correction) void correct(verdict.correction)
   }

@@ -13,7 +13,7 @@ import { session, sessionClock, useSession } from '../shared/session'
 import type { AppEvent } from '../shared/types'
 import { runDebriefFlow } from './debriefFlow'
 import { panel } from './panel/store'
-import { askAloud, startVoice, stopVoice } from './voice'
+import { askAloud, debriefListening, sayAloud, startVoice, stopVoice, teachBackAloud } from './voice'
 
 // Helpy's follow-up questions after a recording, spoken only: no window, nothing to type.
 // Same steps as P3's debrief (gaps -> answers -> Work Map -> teach-back -> confirmation), but before every
@@ -22,6 +22,8 @@ import { askAloud, startVoice, stopVoice } from './voice'
 /** Quiet means: no keyboard or mouse for this long, and nobody speaking for this long. */
 const QUIET_INPUT_MS = 2500
 const QUIET_SPEECH_MS = 1500
+/** How long the debrief waits for the stored session events before it goes on with the ones in this page. */
+const STORED_EVENTS_WAIT_MS = 4000
 
 type Phase = 'idle' | 'finding' | 'asking' | 'building' | 'teachback'
 
@@ -53,10 +55,10 @@ export const voiceDebrief = {
   /** Robot clicked during the debrief: skip the question or stop for now, as buttons in the bubble. */
   controls() {
     const asking = useVoiceDebrief.getState().phase === 'asking'
-    mascot.bubble(asking ? 'Shall I skip this question?' : 'I’m still working on your questions.', {
+    mascot.bubble(asking ? say('Soll ich die Frage überspringen?', 'Shall I skip this question?') : say('Ich arbeite noch an meinen Fragen.', 'I’m still working on your questions.'), {
       actions: [
-        ...(asking ? [{ label: 'Skip this question', primary: true, onClick: skip }] : []),
-        { label: 'Stop for now', onClick: () => voiceDebrief.stop() },
+        ...(asking ? [{ label: say('Frage überspringen', 'Skip this question'), primary: true, onClick: skip }] : []),
+        { label: say('Für jetzt aufhören', 'Stop for now'), onClick: () => voiceDebrief.stop() },
       ],
     })
   },
@@ -68,11 +70,14 @@ export const voiceDebrief = {
     setPhase('idle')
     void stopVoice()
     mascot.setState('idle')
-    mascot.bubble('Okay, we’ll continue later. Click me and choose “Answer my questions”.')
+    mascot.bubble(say('Okay, wir machen später weiter. Klick mich an und wähle „Answer my questions“.', 'Okay, we’ll continue later. Click me and choose “Answer my questions”.'))
   },
 }
 
 const agent = () => import('../agent/voice')
+
+/** Helpy's own lines in the language it spoke with the expert during the task. */
+const say = (de: string, en: string) => (session().language === 'de' ? de : en)
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 async function post<T>(url: string, body: unknown): Promise<T> {
@@ -105,7 +110,9 @@ async function debrief(convex: ConvexReactClient) {
   const sessionId = session().sessionId
   // Answers just given may not be stored yet, and after a reload only Convex has the session: use both.
   const events = async () => {
-    const stored = ((await convex.query(api.events.list, { sessionId }).catch(() => [])) ?? []) as AppEvent[]
+    // Without a connection to Convex the query never settles: after a few seconds this page's own log has to do.
+    const timeout = new Promise<AppEvent[]>((resolve) => setTimeout(() => resolve([]), STORED_EVENTS_WAIT_MS))
+    const stored = ((await Promise.race([convex.query(api.events.list, { sessionId }).catch(() => []), timeout])) ?? []) as AppEvent[]
     const byId = new Map<string, AppEvent>()
     for (const e of [...stored, ...getEventLog()]) byId.set(e.id, e)
     return [...byId.values()].sort((a, b) => a.t - b.t)
@@ -117,19 +124,21 @@ async function debrief(convex: ConvexReactClient) {
   panel.close()
   setPhase('finding')
   mascot.setState('thinking')
-  mascot.bubble('Let me think about what I didn’t understand yet…')
+  mascot.bubble(say('Ich überlege, was ich noch nicht verstanden habe…', 'Let me think about what I didn’t understand yet…'))
   await startVoice('debrief')
-  const voice = await agent()
-  if (!voice.isConnected()) {
+  // Same ears (Scribe, "Helpy hears") and voice (Helpy's TTS) as during the task.
+  if (!debriefListening()) {
     setPhase('idle')
     mascot.setState('idle')
-    mascot.bubble('I have a few questions, but I can’t talk right now. Click me later and choose “Answer my questions”.')
+    mascot.bubble(say('Ich habe ein paar Fragen, kann aber gerade nicht sprechen. Klick mich später an und wähle „Answer my questions“.', 'I have a few questions, but I can’t talk right now. Click me later and choose “Answer my questions”.'))
     return
   }
+  const stoppedOrSkipped = () => !run || run.stopped || run.skip
 
   const outcome = await runDebriefFlow({
     sessionId,
     needGuardrail,
+    language: session().language,
     log,
     post,
     ask: async (question) => {
@@ -137,18 +146,13 @@ async function debrief(convex: ConvexReactClient) {
       mascot.setState('listening')
       if (takeSkip()) return null
       // Until it is really answered: "Wie meinst du das?" gets an explanation and the same question stays open.
-      const outcome = await askAloud(question, { wrap: interruptible, stopped: () => !run || run.stopped || run.skip })
+      const outcome = await askAloud(question, { wrap: interruptible, stopped: stoppedOrSkipped })
       takeSkip()
       return outcome?.kind === 'answered' ? outcome.answer : null // no answer or skipped: go on
     },
-    teachBack: async (text) => {
-      mascot.bubble('Here’s how I understood it. Tell me if something is wrong.')
-      return interruptible(voice.teachBack(text))
-    },
+    teachBack: (text) => teachBackAloud(text, { wrap: interruptible, stopped: () => !run || run.stopped }),
     say: async (text) => {
-      mascot.setState('speaking')
-      mascot.bubble(text)
-      await interruptible(voice.say(text))
+      await interruptible(sayAloud(text))
     },
     waitForQuiet,
     stopped: () => !!run?.stopped,
@@ -168,7 +172,7 @@ async function debrief(convex: ConvexReactClient) {
       if (p === 'teachback') return setPhase('teachback')
       setPhase(p === 'finding' ? 'finding' : 'building')
       mascot.setState('thinking')
-      if (p === 'building') mascot.bubble('Thank you! I’m writing down how you work…')
+      if (p === 'building') mascot.bubble(say('Danke! Ich schreibe auf, wie du arbeitest…', 'Thank you! I’m writing down how you work…'))
     },
   })
 
@@ -176,8 +180,9 @@ async function debrief(convex: ConvexReactClient) {
   if (outcome.kind === 'not_enough_work') {
     setPhase('idle')
     mascot.setState('idle')
-    mascot.bubble(outcome.reason || 'I saw too little work on screen. Record the task again.')
-    if (voice.isConnected()) void voice.say(outcome.reason || 'I saw too little work on screen. Please record the task again.').catch(() => undefined)
+    const reason = outcome.reason || say('Ich habe zu wenig Arbeit auf dem Bildschirm gesehen. Nimm die Aufgabe bitte noch einmal auf.', 'I saw too little work on screen. Please record the task again.')
+    await sayAloud(reason).catch(() => undefined)
+    await stopVoice()
     return
   }
 
@@ -190,10 +195,10 @@ async function debrief(convex: ConvexReactClient) {
   if (outcome.confirmed) {
     mascot.setState('speaking')
     mascot.pose('cheer', 2200)
-    mascot.bubble(`Got it, thank you! Now your team can learn “${final.task}” from you.`)
+    mascot.bubble(say(`Verstanden, danke! Jetzt kann dein Team „${final.task}“ von dir lernen.`, `Got it, thank you! Now your team can learn “${final.task}” from you.`))
   } else {
     mascot.setState('idle')
-    mascot.bubble('I wrote it down. Some parts still need your okay: click me later and choose “Answer my questions”.')
+    mascot.bubble(say('Ich habe es aufgeschrieben. Ein paar Teile brauchen noch dein Okay: klick mich später an und wähle „Answer my questions“.', 'I wrote it down. Some parts still need your okay: click me later and choose “Answer my questions”.'))
   }
 }
 

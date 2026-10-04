@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ANSWER_WINDOW_MS, mightBeToHelpy, normalizeTurn, recordCommand, routeTurn, SpeechTracker } from './speech'
+import { ANSWER_WINDOW_MS, looksLikeQuestionBack, mightBeToHelpy, normalizeTurn, recordCommand, routeTurn, SpeechTracker } from './speech'
 
 describe('mightBeToHelpy (first filter before Claude decides)', () => {
   it('lets through everything that could be meant for Helpy', () => {
@@ -115,7 +115,13 @@ describe('routeTurn: a clarification is not an answer', () => {
   })
 
   it('without a verdict (Claude unavailable) a turn after a question counts as the answer, as before', () => {
-    expect(routeTurn(null, true)).toBe('answer')
+    expect(routeTurn(null, true, 'Weil Kramer doppelt abrechnet.')).toBe('answer')
+  })
+
+  it('without a verdict an obvious question back is still not the answer', () => {
+    for (const t of ['Wie meinst du das?', 'Was meinst du?', 'Welche Rechnung?', 'What do you mean?', 'Which one?', 'Can you repeat that?'])
+      expect(routeTurn(null, true, t), t).toBe('clarified')
+    expect(looksLikeQuestionBack('Wie meinst du das? Ich habe die Rechnung gehalten, weil Kramer am Quartalsende immer doppelt abrechnet und Weber sie freigibt.')).toBe(false)
   })
 
   it('without an open question nothing is a clarification', () => {
