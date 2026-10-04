@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import { HelpyMark, MASCOT_SIZE, useHelpyExtras, visibleBounds } from '../../mascot'
 import { HomeView } from './HomeView'
 import { LibraryWindow } from './LibraryWindow'
@@ -59,11 +59,23 @@ export function HelpyPanel({ boundsRef }: { boundsRef?: RefObject<HTMLElement | 
   const view = usePanel((s) => s.view)
   const style = usePlacement(boundsRef)
 
+  const box = useRef<HTMLElement>(null)
+
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && panel.close()
+    // A click anywhere else closes the window. Not on Helpy or its bubbles: clicking the robot toggles it itself.
+    const onPointer = (e: PointerEvent) => {
+      const target = e.target as Element | null
+      if (!target || box.current?.contains(target) || target.closest('[data-helpy]')) return
+      panel.close()
+    }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('pointerdown', onPointer, true)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('pointerdown', onPointer, true)
+    }
   }, [open])
 
   if (!open) return null
@@ -73,6 +85,7 @@ export function HelpyPanel({ boundsRef }: { boundsRef?: RefObject<HTMLElement | 
 
   return (
     <section
+      ref={box}
       role="dialog"
       aria-label="Helpy"
       className="helpy-pop fixed z-[55] flex flex-col overflow-hidden rounded-2xl bg-white font-helpy shadow-float ring-1 ring-black/5"
