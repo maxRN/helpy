@@ -22,6 +22,7 @@ export default defineSchema({
     projectId: v.id('projects'),
     startedAt: v.number(),
     recordedBy: v.optional(v.string()),
+    audioStorageId: v.optional(v.id('_storage')),
     completion: v.union(v.null(), v.object({
       durationMs: v.number(),
       error: v.union(v.null(), v.string()),

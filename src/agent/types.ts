@@ -72,6 +72,11 @@ export interface Deps {
   session: { t0: number };
   activity: { lastInputAt(): number }; // P1
   capture: { lastFrameChangeAt(): number }; // P3
+  /**
+   * Optional: Scribe v2 Realtime listening in Capture mode (src/integration/listener.ts).
+   * When active, the agent's own mic is muted in Capture, and speech activity comes from Scribe's VAD.
+   */
+  speech?: { lastSpeechAt(): number; active(): boolean };
   mascot: {
     // P4
     setState(s: 'idle' | 'listening' | 'speaking' | 'thinking'): void;

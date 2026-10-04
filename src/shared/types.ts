@@ -23,6 +23,7 @@ export interface AppEvent {
     | 'task_started'
     | 'task_finished'
     | 'screenshot_saved'
+    | 'audio_saved'
     | 'screenshot_analyzed'
     // Voice layer (P2), source 'voice'
     | 'teachback_given'

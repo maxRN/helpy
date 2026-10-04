@@ -5,6 +5,7 @@ import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import { loadOcrModel, useOcrModel } from '../capture/ocr'
 import { useTaskRecording } from '../capture/TaskRecorder'
+import { useListener } from '../integration/listener'
 import { mascot } from '../mascot'
 import { session } from '../shared/session'
 import { useMascot } from '../shared/mascot'
@@ -59,7 +60,7 @@ export function RecordDialog() {
   const controlsAt = useRecordFlow((s) => s.controlsAt)
   const model = useOcrModel((s) => s.state.kind)
   const processes = useProcesses()
-  const { start, finish, state: recorder } = useTaskRecording()
+  const { start, finish, state: recorder, error } = useTaskRecording()
   const createProject = useMutation(api.projects.create)
   const removeProject = useMutation(api.projects.remove)
   const spoken = useRef('')
@@ -154,11 +155,11 @@ export function RecordDialog() {
       }
       case 'starting':
         mascot.setState('thinking')
-        mascot.bubble('When your browser asks, choose “Entire screen” and click Share.')
+        mascot.bubble('When your browser asks, choose “Entire screen”, click Share and allow the microphone.')
         return
       case 'failed':
         mascot.setState('idle')
-        mascot.bubble('I couldn’t see your screen. When your browser asks, choose “Entire screen” and click Share.', {
+        mascot.bubble('I couldn’t start. Choose “Entire screen”, click Share and allow the microphone, then try again.', {
           actions: [
             { label: 'Try again', primary: true, onClick: () => void begin(step.target) },
             { label: 'Not now', onClick: notNow },
@@ -169,19 +170,35 @@ export function RecordDialog() {
     // `own` changes with every Convex update; the dialog only follows its step and the model.
   }, [step, model])
 
+  const done = async () => {
+    if (session().offRecord) await setOffRecord(false)
+    mascot.setState('thinking')
+    mascot.bubble('Saving…')
+    await finish()
+  }
+
+  // Saving failed (upload, network): say so and offer to try again; the recording is still there.
+  useEffect(() => {
+    if (recorder.kind !== 'save-failed') return
+    mascot.setState('idle')
+    mascot.bubble(`I couldn’t save the recording yet.${error ? ` (${error})` : ''}`, {
+      actions: [{ label: 'Try again', primary: true, onClick: () => void done() }],
+    })
+    // done() only needs the latest finish(), which is stable per recording.
+  }, [recorder.kind, error])
+
   // Clicked during a recording: pause, ask the waiting question, or finish, right in the bubble.
   useEffect(() => {
     if (!controlsAt || recorder.kind === 'idle') return
     const offRecord = session().offRecord
     const waiting = useMascot.getState().waiting !== null
-    const done = async () => {
-      if (session().offRecord) await setOffRecord(false)
-      mascot.setState('thinking')
-      mascot.bubble('Saving…')
-      await finish()
-    }
+    // Scribe (live listening): say when Helpy can't hear, so nobody talks into the void.
+    const ears = useListener.getState()
+    const hearing = ears.status === 'error' ? ` I can’t hear you right now (${ears.error}), but I still watch the screen.` : ears.status === 'connecting' ? ' I’m turning on my ears…' : ''
     mascot.bubble(
-      offRecord ? 'I’m not looking or listening. Continue when you’re ready.' : waiting ? 'I’m watching and listening. I also have a question for you.' : 'I’m watching and listening.',
+      offRecord
+        ? 'I’m not looking or listening. Continue when you’re ready.'
+        : `I’m watching and listening.${hearing}${waiting ? ' I also have a question for you.' : ''}`,
       {
         ttlMs: 12_000,
         actions: [

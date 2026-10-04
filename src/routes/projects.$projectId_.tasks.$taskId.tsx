@@ -51,13 +51,22 @@ function TaskSummary() {
             )}
             {task.completion && (
               <>
-                <p className="muted">Deleting this task permanently removes all its screenshots.</p>
+                <p className="muted">Deleting this task permanently removes its screenshots and microphone recording.</p>
                 <button className="danger" disabled={isActiveTask || removeTask.isPending} onClick={() => removeTask.mutate({ taskId: task._id })}>
                   {removeTask.isPending ? 'Deleting…' : 'Delete task'}
                 </button>
                 {removeTask.error && <p className="error" role="alert">{removeTask.error.message}</p>}
               </>
             )}
+          </section>
+          <section className="panel tasks-section" aria-labelledby="audio-heading">
+            <h2 id="audio-heading">Microphone recording</h2>
+            {task.audioUrl ? (
+              <>
+                <audio controls preload="metadata" src={task.audioUrl} aria-label="Task microphone recording" />
+                <p><a href={task.audioUrl} target="_blank" rel="noreferrer">Open audio recording</a></p>
+              </>
+            ) : <p className="muted">{isActiveTask ? 'Your narration will be saved when you finish the task.' : 'No microphone recording was saved for this task.'}</p>}
           </section>
           <section className="tasks-section" aria-labelledby="screenshots-heading">
             <h2 id="screenshots-heading">Screenshot timeline</h2>

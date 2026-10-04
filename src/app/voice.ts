@@ -1,6 +1,7 @@
 // Starts and stops P2's voice agent from Helpy's panel (replaces P1's temporary VoicePanel).
 // Without ElevenLabs keys the agent cannot start; Helpy then keeps working silently with bubbles.
 import { create } from 'zustand'
+import { startListening, stopListening } from '../integration/listener'
 import { installVoiceBridge, resetVoiceClock } from '../integration/voiceBridge'
 import { mascot } from '../mascot'
 import { session } from '../shared/session'
@@ -22,8 +23,14 @@ export async function startVoice(mode: AgentMode) {
     installVoiceBridge()
     installed = true
   }
+  const voice = await load()
+  // Capture: Scribe v2 Realtime listens first (transcript + "is the expert talking?"), independent of the agent.
+  if (mode === 'capture') {
+    await startListening((answer) => voice.noteAnswer(answer)).catch((err) => console.warn('[helpy] Scribe not started', err))
+  } else {
+    stopListening()
+  }
   try {
-    const voice = await load()
     if (voice.isConnected()) await voice.stop()
     resetVoiceClock()
     await voice.start(mode)
@@ -35,6 +42,7 @@ export async function startVoice(mode: AgentMode) {
 }
 
 export async function stopVoice() {
+  stopListening()
   const voice = await load()
   if (voice.isConnected()) await voice.stop()
   useVoice.setState({ mode: null })

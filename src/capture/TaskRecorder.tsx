@@ -21,7 +21,7 @@ type RecordingState =
   | { kind: 'starting'; project: Project }
   | { kind: 'recording' | 'saving' | 'save-failed'; task: Task }
 /** `stay`: after finishing, keep the user where they are instead of opening the task summary (Helpy). */
-type ActiveTask = { task: Task; recording: ScreenRecording; saving: boolean; stay: boolean }
+type ActiveTask = { task: Task; recording: ScreenRecording; audioStorageId: string | null; saving: boolean; stay: boolean }
 const TaskRecordingContext = createContext<ReturnType<typeof useRecordingController> | null>(null)
 
 export function TaskRecordingProvider({ children }: { children: ReactNode }) {
@@ -55,6 +55,26 @@ function useRecordingController() {
     enableBeforeUnload: busy,
   })
 
+  const upload = useCallback(async (taskId: Id<'tasks'>, blob: Blob) => {
+    const url = await generateUploadUrl({ taskId })
+    const response = await fetch(url, {
+      method: 'POST', headers: { 'Content-Type': blob.type }, body: blob, signal: AbortSignal.timeout(120_000),
+    })
+    if (!response.ok) throw new Error(`Recording upload failed (${response.status}).`)
+    const data: unknown = await response.json()
+    return uploadResponse.parse(data).storageId
+  }, [generateUploadUrl])
+
+  const saveRecording = useCallback(async (task: ActiveTask) => {
+    const { durationMs, error, audio } = await task.recording.finish()
+    if (audio && !task.audioStorageId) {
+      task.audioStorageId = await upload(task.task.taskId, audio)
+      emitEvent({ source: 'system', kind: 'audio_saved', t: durationMs, meta: { taskId: task.task.taskId, storageId: task.audioStorageId } })
+    }
+    await finishTask({ taskId: task.task.taskId, durationMs, error, ...(task.audioStorageId ? { audioStorageId: task.audioStorageId } : {}) })
+    return { durationMs, error }
+  }, [finishTask, upload])
+
   const finish = useCallback(async () => {
     const task = active.current
     if (!task || task.saving) return
@@ -62,8 +82,7 @@ function useRecordingController() {
     setState({ kind: 'saving', task: task.task })
     setError('')
     try {
-      const result = await task.recording.finish()
-      await finishTask({ taskId: task.task.taskId, ...result })
+      const result = await saveRecording(task)
       useSession.getState().setT0(null)
       emitEvent({ source: 'system', kind: 'task_finished', t: result.durationMs, meta: { taskId: task.task.taskId } })
       active.current = null
@@ -75,7 +94,7 @@ function useRecordingController() {
     } finally {
       task.saving = false
     }
-  }, [finishTask, navigate])
+  }, [saveRecording, navigate])
 
   useEffect(() => {
     mounted.current = true
@@ -85,12 +104,12 @@ function useRecordingController() {
       pendingCapture.current?.close()
       const task = active.current
       if (task) {
-        void task.recording.finish().then((result) => finishTask({ taskId: task.task.taskId, ...result }))
+        if (!task.saving) void saveRecording(task)
           .catch((error: unknown) => console.error('Could not finish the task after closing the app.', error))
         useSession.getState().setT0(null)
       }
     }
-  }, [finishTask])
+  }, [saveRecording])
 
   async function start(project: Project, { stay = false, recordedBy }: { stay?: boolean; recordedBy?: string } = {}) {
     if (busy) return
@@ -120,16 +139,7 @@ function useRecordingController() {
         onScreenshot: async ({ blob, ...timestamps }) => {
           // Screen events for the voice agent (thumbnail diff + Haiku), in parallel with the upload.
           void processFrame(blob, timestamps.capturedAt, timestamps.offsetMs).catch((failure: unknown) => console.warn('[frame]', failure))
-          const url = await generateUploadUrl({ taskId: createdTaskId })
-          const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': blob.type },
-            body: blob,
-            signal: AbortSignal.timeout(120_000),
-          })
-          if (!response.ok) throw new Error(`Screenshot upload failed (${response.status}).`)
-          const data: unknown = await response.json()
-          const { storageId } = uploadResponse.parse(data)
+          const storageId = await upload(createdTaskId, blob)
           const screenshotId = await addScreenshot({ taskId: createdTaskId, storageId, ...timestamps })
           if (mounted.current) setSavedCount((count) => count + 1)
           emitEvent({ source: 'system', kind: 'screenshot_saved', t: timestamps.offsetMs, meta: { taskId: createdTaskId, storageId } })
@@ -146,7 +156,7 @@ function useRecordingController() {
         onStopped: () => { void finish() },
       })
       const task = { project, taskId, startedAt: capture.startedAt }
-      active.current = { task, recording, saving: false, stay }
+      active.current = { task, recording, audioStorageId: null, saving: false, stay }
       useSession.getState().newSession(taskId)
       useSession.getState().setMode('capture')
       useSession.getState().setT0(capture.startedAt)
@@ -156,7 +166,7 @@ function useRecordingController() {
       setState({ kind: 'recording', task })
     } catch (failure) {
       pendingCapture.current?.close()
-      const message = failure instanceof Error ? failure.message : 'Could not start screen capture.'
+      const message = failure instanceof Error ? failure.message : 'Could not start screen and microphone recording.'
       setError(message)
       if (taskId) {
         try {
@@ -196,13 +206,13 @@ export function TaskRecorder({ project }: { project: Project }) {
       {state.kind === 'recording' ? (
         <div className="recording-status" role="status">
           <span className="recording-dot" aria-hidden="true" />
-          Recording your screen · <RecordingClock startedAt={state.task.startedAt} />
+          Recording your screen and microphone · <RecordingClock startedAt={state.task.startedAt} />
         </div>
       ) : (
         <p className="muted">
-          {state.kind === 'saving' ? 'Screen capture stopped. Finishing text recognition and screenshot uploads…'
-            : state.kind === 'save-failed' ? 'Screen capture stopped. Retry saving to open your summary.'
-              : 'Share an entire screen to save a screenshot every 2 seconds. Click Done when you finish.'}
+          {state.kind === 'saving' ? 'Recording stopped. Saving audio and finishing text recognition and screenshot uploads…'
+            : state.kind === 'save-failed' ? 'Recording stopped. Retry saving to open your summary.'
+              : 'Share an entire screen and allow microphone access. We save screenshots every 2 seconds and record your narration. Click Done when you finish.'}
         </p>
       )}
       {busy && <p className="muted">{savedCount} screenshots saved</p>}
@@ -227,7 +237,7 @@ export function ActiveTaskBar() {
     <aside className="recording-bar" aria-label="Active task">
       <div className="recording-bar-details" role="status">
         <span>
-          {state.kind === 'recording' ? 'Recording' : state.kind === 'starting' ? 'Starting task' : state.kind === 'saving' ? 'Saving task' : 'Task needs saving'}
+          {state.kind === 'recording' ? 'Recording screen and microphone' : state.kind === 'starting' ? 'Starting task' : state.kind === 'saving' ? 'Saving task' : 'Task needs saving'}
           {' · '}{project.name}
         </span>
         {state.kind === 'recording' && <RecordingClock startedAt={state.task.startedAt} />}

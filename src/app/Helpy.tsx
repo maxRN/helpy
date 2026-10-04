@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { useTaskRecording } from '../capture/TaskRecorder'
 import { useDebriefUi } from '../debrief/DebriefPanel'
+import { useListener } from '../integration/listener'
 import { mascot, MascotLayer, setMascotClickHandler } from '../mascot'
 import { mascot as sharedMascot, useMascot } from '../shared/mascot'
 import { useSession } from '../shared/session'
@@ -36,6 +37,13 @@ function QuestionSign() {
       <span aria-hidden>?</span> Question
     </span>
   )
+}
+
+/** What Helpy hears right now (ElevenLabs Scribe v2 Realtime), live while the expert talks. */
+function HearingCaption() {
+  const { speaking, partial } = useListener()
+  if (!speaking || !partial) return null
+  return <span className="block max-w-[240px] truncate rounded-full bg-helpy-ink/85 px-2.5 py-0.5 text-[12px] text-white shadow-soft">I hear: “{partial}”</span>
 }
 
 /** After this long with a question held back, Helpy says so quietly in its bubble (it never speaks over you). */
@@ -145,6 +153,7 @@ export function Helpy({ boundsRef }: { boundsRef?: RefObject<HTMLElement | null>
         badge={
           activity?.kind === 'recording' ? (
             <div className="flex flex-col items-center gap-1">
+              <HearingCaption />
               {waiting ? <QuestionSign /> : null}
               <RecordingLight startedAt={'task' in recorder ? recorder.task.startedAt : null} />
             </div>

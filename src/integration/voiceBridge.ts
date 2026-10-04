@@ -14,6 +14,7 @@ import { lastFrameChangeAt } from '../shared/frames'
 import { mascot } from '../shared/mascot'
 import { session } from '../shared/session'
 import type { AppEvent, Quote, WorkMap } from '../shared/types'
+import { speech } from './listener'
 
 const SCREEN_KINDS = new Set<AppEvent['kind']>(['invoice_opened', 'field_changed', 'action'])
 const AGENT_KINDS = new Set<AppEvent['kind']>([
@@ -144,6 +145,7 @@ export function installVoiceBridge() {
     },
     activity: { lastInputAt: activity.lastInputAt },
     capture: { lastFrameChangeAt },
+    speech: { lastSpeechAt: speech.lastSpeechAt, active: speech.active },
     mascot: {
       setState: (s) => mascot.setState(s),
       bubble: (text) => mascot.bubble(text),
