@@ -21,6 +21,7 @@ import { Route as ApiDebriefTeachbackRouteImport } from './routes/api/debrief/te
 import { Route as ApiElevenlabsScribeTokenRouteImport } from './routes/api/elevenlabs/scribe-token'
 import { Route as ApiElevenlabsSignedUrlRouteImport } from './routes/api/elevenlabs/signed-url'
 import { Route as ApiGuardrailsCompileRouteImport } from './routes/api/guardrails/compile'
+import { Route as ApiHelpyNameRouteImport } from './routes/api/helpy/name'
 import { Route as ApiHelpyTurnRouteImport } from './routes/api/helpy/turn'
 import { Route as ProjectsProjectIdTasksTaskIdRouteImport } from './routes/projects.$projectId_.tasks.$taskId'
 
@@ -85,6 +86,11 @@ const ApiGuardrailsCompileRoute = ApiGuardrailsCompileRouteImport.update({
   path: '/api/guardrails/compile',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiHelpyNameRoute = ApiHelpyNameRouteImport.update({
+  id: '/api/helpy/name',
+  path: '/api/helpy/name',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiHelpyTurnRoute = ApiHelpyTurnRouteImport.update({
   id: '/api/helpy/turn',
   path: '/api/helpy/turn',
@@ -110,6 +116,7 @@ export interface FileRoutesByFullPath {
   '/api/elevenlabs/scribe-token': typeof ApiElevenlabsScribeTokenRoute
   '/api/elevenlabs/signed-url': typeof ApiElevenlabsSignedUrlRoute
   '/api/guardrails/compile': typeof ApiGuardrailsCompileRoute
+  '/api/helpy/name': typeof ApiHelpyNameRoute
   '/api/helpy/turn': typeof ApiHelpyTurnRoute
   '/projects/$projectId/tasks/$taskId': typeof ProjectsProjectIdTasksTaskIdRoute
 }
@@ -126,6 +133,7 @@ export interface FileRoutesByTo {
   '/api/elevenlabs/scribe-token': typeof ApiElevenlabsScribeTokenRoute
   '/api/elevenlabs/signed-url': typeof ApiElevenlabsSignedUrlRoute
   '/api/guardrails/compile': typeof ApiGuardrailsCompileRoute
+  '/api/helpy/name': typeof ApiHelpyNameRoute
   '/api/helpy/turn': typeof ApiHelpyTurnRoute
   '/projects/$projectId/tasks/$taskId': typeof ProjectsProjectIdTasksTaskIdRoute
 }
@@ -143,6 +151,7 @@ export interface FileRoutesById {
   '/api/elevenlabs/scribe-token': typeof ApiElevenlabsScribeTokenRoute
   '/api/elevenlabs/signed-url': typeof ApiElevenlabsSignedUrlRoute
   '/api/guardrails/compile': typeof ApiGuardrailsCompileRoute
+  '/api/helpy/name': typeof ApiHelpyNameRoute
   '/api/helpy/turn': typeof ApiHelpyTurnRoute
   '/projects/$projectId_/tasks/$taskId': typeof ProjectsProjectIdTasksTaskIdRoute
 }
@@ -161,6 +170,7 @@ export interface FileRouteTypes {
     | '/api/elevenlabs/scribe-token'
     | '/api/elevenlabs/signed-url'
     | '/api/guardrails/compile'
+    | '/api/helpy/name'
     | '/api/helpy/turn'
     | '/projects/$projectId/tasks/$taskId'
   fileRoutesByTo: FileRoutesByTo
@@ -177,6 +187,7 @@ export interface FileRouteTypes {
     | '/api/elevenlabs/scribe-token'
     | '/api/elevenlabs/signed-url'
     | '/api/guardrails/compile'
+    | '/api/helpy/name'
     | '/api/helpy/turn'
     | '/projects/$projectId/tasks/$taskId'
   id:
@@ -193,6 +204,7 @@ export interface FileRouteTypes {
     | '/api/elevenlabs/scribe-token'
     | '/api/elevenlabs/signed-url'
     | '/api/guardrails/compile'
+    | '/api/helpy/name'
     | '/api/helpy/turn'
     | '/projects/$projectId_/tasks/$taskId'
   fileRoutesById: FileRoutesById
@@ -210,6 +222,7 @@ export interface RootRouteChildren {
   ApiElevenlabsScribeTokenRoute: typeof ApiElevenlabsScribeTokenRoute
   ApiElevenlabsSignedUrlRoute: typeof ApiElevenlabsSignedUrlRoute
   ApiGuardrailsCompileRoute: typeof ApiGuardrailsCompileRoute
+  ApiHelpyNameRoute: typeof ApiHelpyNameRoute
   ApiHelpyTurnRoute: typeof ApiHelpyTurnRoute
   ProjectsProjectIdTasksTaskIdRoute: typeof ProjectsProjectIdTasksTaskIdRoute
 }
@@ -300,6 +313,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiGuardrailsCompileRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/helpy/name': {
+      id: '/api/helpy/name'
+      path: '/api/helpy/name'
+      fullPath: '/api/helpy/name'
+      preLoaderRoute: typeof ApiHelpyNameRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/helpy/turn': {
       id: '/api/helpy/turn'
       path: '/api/helpy/turn'
@@ -330,6 +350,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiElevenlabsScribeTokenRoute: ApiElevenlabsScribeTokenRoute,
   ApiElevenlabsSignedUrlRoute: ApiElevenlabsSignedUrlRoute,
   ApiGuardrailsCompileRoute: ApiGuardrailsCompileRoute,
+  ApiHelpyNameRoute: ApiHelpyNameRoute,
   ApiHelpyTurnRoute: ApiHelpyTurnRoute,
   ProjectsProjectIdTasksTaskIdRoute: ProjectsProjectIdTasksTaskIdRoute,
 }

@@ -25,7 +25,7 @@ function Project() {
     <main className="projects-page">
       <Link to="/projects" className="back-link">← All projects</Link>
       <header>
-        <p className="eyebrow">Sabine AI / Project</p>
+        <p className="eyebrow">Helpy / Project</p>
         <h1>{project ? project.name : 'Project not found'}</h1>
       </header>
       {project ? (

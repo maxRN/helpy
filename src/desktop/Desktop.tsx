@@ -4,7 +4,7 @@ import { helpyApp, useHelpyApp } from '../app/helpy-app/store'
 import { HelpyMark } from '../mascot'
 import { TITLE_BAR, TITLE_TEXT, TrafficLights, windowPlacement } from './TrafficLights'
 
-// A mock desktop for the demo: it makes clear that Sabine AI sits on top of any desktop app,
+// A mock desktop for the demo: it makes clear that Helpy sits on top of any desktop app,
 // and that the ERP is only the example app.
 
 type WindowState = 'closed' | 'open' | 'minimized'
@@ -127,7 +127,7 @@ export function Desktop({ app }: { app: ReactNode }) {
         </span>
         <span className="ml-auto flex items-center gap-4 tabular-nums">
           <Link to="/projects" className="text-white/80 hover:text-white hover:underline">
-            Sabine AI · Projects
+            Helpy · Projects
           </Link>
           <span>{clock}</span>
         </span>

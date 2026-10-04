@@ -1,3 +1,4 @@
+import { useConvex } from 'convex/react'
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { useTaskRecording } from '../capture/TaskRecorder'
 import { useListener } from '../integration/listener'
@@ -7,6 +8,7 @@ import { mascot as sharedMascot, useMascot } from '../shared/mascot'
 import { useSession } from '../shared/session'
 import { TeachLayer } from '../teach-ui/TeachLayer'
 import { auth, useAuth } from './auth'
+import { nameRecording } from './autoName'
 import { installBubbleLifecycle } from './bubbleLifecycle'
 import { HelpyApp } from './helpy-app/HelpyApp'
 import { HelpyPanel } from './panel/HelpyPanel'
@@ -115,6 +117,7 @@ export function Helpy({ boundsRef }: { boundsRef?: RefObject<HTMLElement | null>
 
   // End of a recording, from "I'm done" or the browser's "Stop sharing": thank, then ask the follow-up questions.
   const { state: recorder, error } = useTaskRecording()
+  const convex = useConvex()
   const wasRecording = useRef(false)
   useEffect(() => {
     const recording = recorder.kind !== 'idle'
@@ -130,6 +133,8 @@ export function Helpy({ boundsRef }: { boundsRef?: RefObject<HTMLElement | null>
         mascot.setState('speaking')
         mascot.pose('cheer', 2200)
         mascot.bubble('Thank you! I have a few questions about what I saw.')
+        // Claude names the process from what was done (it can be renamed later in Helpy's app).
+        void nameRecording(convex, current.processId)
         void stopVoice().then(() => setTimeout(askQuestions, 1500))
       }
     }

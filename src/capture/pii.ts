@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { Redact } from '@desert-ant-labs/redact'
+import { businessFacts, withoutBusinessTerms } from '../shared/grounding'
 import type { ModelState } from './ocr-contract'
 
 export const usePiiModel = create<{ state: ModelState | { kind: 'idle' } }>(() => ({ state: { kind: 'idle' } }))
@@ -57,12 +58,18 @@ export function loadPiiModel() {
 export function detectPii(text: string) {
   const job = queue.then(async () => {
     const model = await loadPiiModel()
-    return model.redaction(text)
+    const { DEFAULT_LABELS } = await import('@desert-ant-labs/redact')
+    return model.redaction(text, { labels: DEFAULT_LABELS.filter((label) => label !== 'BUILDING_NUMBER') })
   })
   queue = job.then(() => undefined, () => undefined)
   return job
 }
 
 export async function redactPii(text: string): Promise<string> {
-  return (await detectPii(text)).redactedText
+  const { items } = await detectPii(text)
+  const spans = withoutBusinessTerms(text, items, businessFacts().terms)
+  for (const span of [...spans].reverse()) {
+    text = text.slice(0, span.start) + span.placeholder + text.slice(span.end)
+  }
+  return text
 }
