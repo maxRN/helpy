@@ -144,7 +144,7 @@ export function installVoiceBridge() {
         return session().t0 ?? (voiceT0 ??= Date.now())
       },
     },
-    activity: { lastTypingAt: activity.lastTypingAt },
+    activity: { lastTypingAt: activity.lastTypingAt, lastFieldAt: activity.lastFieldAt },
     speech: { lastSpeechAt: speech.lastSpeechAt, active: speech.active, turnOpen: speech.isSpeaking, replyPending: speech.replyPending },
     isSpeaking: () => useMascot.getState().state === 'speaking',
     language: () => session().language,

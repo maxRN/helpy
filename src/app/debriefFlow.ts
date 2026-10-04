@@ -12,6 +12,8 @@ export type DebriefPhase = 'finding' | 'asking' | 'concluding' | 'building' | 't
 /** What the flow needs from the app: the server, the voice, and the screen. */
 export interface DebriefIO {
   sessionId: string
+  /** No guardrail question was asked during the task: the debrief starts with one. */
+  needGuardrail?: boolean
   log(): Promise<LogLine[]>
   post<T>(url: string, body: unknown): Promise<T>
   /** Asks out loud; resolves with the answer, or null when it was skipped or not answered. */
@@ -50,6 +52,7 @@ export async function runDebriefFlow(io: DebriefIO): Promise<DebriefOutcome> {
     const res = await io.post<GapsResult>('/api/debrief/gaps', {
       log: await io.log(),
       asked: questions.map((q) => ({ question: q.question, answered: q.status === 'answered' })),
+      needGuardrail: io.needGuardrail ?? false,
     })
     // Too little of the task was recorded: say so instead of inventing questions or a Work Map.
     if (res.notEnoughWork) return { kind: 'not_enough_work', reason: res.doneReason }

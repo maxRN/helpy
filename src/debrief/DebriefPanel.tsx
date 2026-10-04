@@ -9,7 +9,7 @@ import { emitEvent, getEventLog } from '../shared/bus'
 import { useSession } from '../shared/session'
 import type { AppEvent, Gap, Quote, WorkMap } from '../shared/types'
 import { ClipPlayer } from './ClipPlayer'
-import { toLogLines } from './sessionLog'
+import { needsGuardrailQuestion, toLogLines } from './sessionLog'
 
 const MAX_QUESTIONS = 6
 
@@ -67,6 +67,7 @@ export function DebriefPanel() {
       const res = await post<{ gaps: Gap[]; done: boolean; doneReason: string; notEnoughWork?: boolean }>('/api/debrief/gaps', {
         log: log(),
         asked: count,
+        needGuardrail: needsGuardrailQuestion(stored && stored.length > 0 ? stored : getEventLog()),
       })
       setDoneReason(res.doneReason)
       // Too little task on screen: say so honestly instead of inventing questions or a Work Map.

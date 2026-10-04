@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AppEvent } from '../shared/types'
-import { toLogLines } from './sessionLog'
+import { needsGuardrailQuestion, toLogLines } from './sessionLog'
 
 describe('toLogLines', () => {
   it('keeps screen events, speech and questions, in time order, without duplicate answers', () => {
@@ -29,5 +29,19 @@ describe('toLogLines', () => {
       { id: '6', t: 31_000, source: 'voice', kind: 'utterance', speaker: 'expert', text: 'Now the Kramer invoice.' },
     ]
     expect(toLogLines(events).map((l) => l.text)).toEqual(['Invoice 4471: cost center 4711 → 0400', 'Now the Kramer invoice.'])
+  })
+})
+
+describe('needsGuardrailQuestion', () => {
+  const q = (kind: string, phase = 'capture'): AppEvent => ({ id: kind + phase, t: 1, source: 'voice', kind: 'question_asked', text: '?', meta: { kind, phase } })
+
+  it('is true until a live guardrail question was asked', () => {
+    expect(needsGuardrailQuestion([])).toBe(true)
+    expect(needsGuardrailQuestion([q('why')])).toBe(true)
+    expect(needsGuardrailQuestion([q('why'), q('guardrail')])).toBe(false)
+  })
+
+  it('does not count debrief questions', () => {
+    expect(needsGuardrailQuestion([q('guardrail', 'debrief')])).toBe(true)
   })
 })

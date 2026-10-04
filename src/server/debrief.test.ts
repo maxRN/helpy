@@ -4,7 +4,7 @@ import type { LogLine } from './debrief'
 const generateJson = vi.fn()
 vi.mock('./anthropic', () => ({ generateJson: (...args: unknown[]) => generateJson(...args), MODELS: { deep: 'claude-opus-5-5' } }))
 
-const { buildWorkMap, clipAround, findExpertQuote, findGaps, MAX_DEBRIEF_QUESTIONS, NotEnoughWorkError } = await import('./debrief')
+const { buildWorkMap, clipAround, FALLBACK_GUARDRAIL_GAP, findExpertQuote, findGaps, MAX_DEBRIEF_QUESTIONS, NotEnoughWorkError } = await import('./debrief')
 
 const log: LogLine[] = [
   { t: 30_000, who: 'screen', text: 'Opened invoice 4471 from Neckartal Werkzeugmaschinen GmbH (€6,800.00, equipment)' },
@@ -58,6 +58,46 @@ describe('findGaps', () => {
     const res = await findGaps(log, MAX_DEBRIEF_QUESTIONS)
     expect(res.done).toBe(true)
     expect(generateJson).not.toHaveBeenCalled()
+  })
+
+  const why = (aboutT: number) => ({ question: 'Why that cost center?', kind: 'why', aboutT })
+
+  it('starts with a guardrail question when none was asked live: moves the model\'s one first', async () => {
+    generateJson.mockResolvedValueOnce({ gaps: [why(41_000), { question: 'Is there a limit?', kind: 'guardrail', aboutT: 41_000 }], done: false, doneReason: '' })
+    const res = await findGaps(log, 0, true)
+    expect(res.gaps.map((g) => g.kind).slice(0, 2)).toEqual(['guardrail', 'why'])
+    expect(res.gaps).toHaveLength(3) // three are required, so the round is filled up
+  })
+
+  it('starts with a fixed guardrail question when the model gives none', async () => {
+    generateJson.mockResolvedValueOnce({ gaps: [why(41_000)], done: false, doneReason: '' })
+    generateJson.mockResolvedValueOnce({ gaps: [], done: false, doneReason: '' }) // the retry adds nothing either
+    const res = await findGaps(log, 0, true)
+    expect(res.gaps[0].kind).toBe('guardrail')
+    expect(res.gaps.map((g) => g.id)).toEqual(['gap-1', 'gap-2', 'gap-3'])
+    // Tied to a real screen moment of the log.
+    expect([30_000, 41_000, 60_000].map((t) => clipAround(t).start)).toContain(res.gaps[0].clip.start)
+  })
+
+  it('uses the fixed guardrail question when nothing else is a guardrail question', async () => {
+    generateJson.mockResolvedValueOnce({
+      gaps: [why(41_000), { question: 'Why post it right after?', kind: 'why', aboutT: 60_000 }, { question: 'What did you check on the Neckartal invoice?', kind: 'why', aboutT: 30_000 }],
+      done: false,
+      doneReason: '',
+    })
+    const res = await findGaps(log, 0, true)
+    expect(res.gaps[0]).toMatchObject({ kind: 'guardrail', question: FALLBACK_GUARDRAIL_GAP })
+    expect(res.gaps[0].clip.start).toBe(52_000) // around the last screen change (60 s)
+    expect(res.gaps).toHaveLength(3)
+  })
+
+  it('does not stop before three debrief questions, even if the model says done', async () => {
+    generateJson.mockResolvedValueOnce({ gaps: [why(41_000)], done: true, doneReason: 'all clear' })
+    expect((await findGaps(log, 0)).done).toBe(false)
+    generateJson.mockResolvedValueOnce({ gaps: [why(41_000)], done: true, doneReason: 'all clear' })
+    expect((await findGaps(log, 2)).done).toBe(false) // only questions actually asked count
+    generateJson.mockResolvedValueOnce({ gaps: [], done: true, doneReason: 'all clear' })
+    expect(await findGaps(log, 3)).toMatchObject({ done: true, doneReason: 'all clear' })
   })
 })
 

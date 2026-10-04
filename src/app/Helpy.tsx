@@ -36,12 +36,15 @@ function RecordingLight({ startedAt }: { startedAt: number | null }) {
 /** Why a held question is not asked yet: the same signals the pause detector uses (typing, Scribe's open turn). */
 function useWaitReason() {
   const talking = useListener((s) => s.speaking)
-  const [typing, setTyping] = useState(false)
+  const [busy, setBusy] = useState<'typing' | 'mid-step' | null>(null)
   useEffect(() => {
-    const timer = setInterval(() => setTyping(Date.now() - activity.lastTypingAt() < 2500), 500)
+    const timer = setInterval(() => {
+      const now = Date.now()
+      setBusy(now - activity.lastTypingAt() < 2500 ? 'typing' : now - activity.lastFieldAt() < 4000 ? 'mid-step' : null)
+    }, 500)
     return () => clearInterval(timer)
   }, [])
-  return talking ? 'you’re talking' : typing ? 'you’re typing' : 'at your next pause'
+  return talking ? 'you’re talking' : busy === 'typing' ? 'you’re typing' : busy === 'mid-step' ? 'you’re mid-step' : 'at your next pause'
 }
 
 /** Helpy has a question but you are busy: a quiet sign above the robot that says why it waits. No sound, no blinking. */

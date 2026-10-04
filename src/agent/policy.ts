@@ -19,7 +19,7 @@ export const POLICY_LIMITS = {
   minQuestions: 3,
   maxQuestions: 5,
   minGapMs: 30_000,
-  guardrailByQuestion: 2, // if none of the first 2 was a guardrail question, the 3rd must be
+  guardrailByQuestion: 1, // the brief requires a guardrail question: if the first was not one, the second must be
 } as const;
 
 const MAX_PENDING = 40;

@@ -8,21 +8,20 @@ import { loadPiiModel, usePiiModel } from '../capture/pii'
 import { useTaskRecording } from '../capture/TaskRecorder'
 import { speech, useListener } from '../integration/listener'
 import { mascot } from '../mascot'
-import { bus } from '../shared/bus'
 import { useMascot } from '../shared/mascot'
 import { session } from '../shared/session'
-import type { AppEvent } from '../shared/types'
 import { auth } from './auth'
 import { helpyApp } from './helpy-app/store'
 import { panel } from './panel/store'
-import { titleFromAnswer, UNNAMED } from './recordName'
-import { askWaitingQuestion, setOffRecord, speak, startVoice, wrapUpLiveQuestions } from './voice'
+import { UNNAMED } from './recordName'
+import { askWaitingQuestion, setOffRecord, startVoice, wrapUpLiveQuestions } from './voice'
 
-// "Record what I do" without a window and without typing: one click starts sharing the screen and the
-// microphone, then Helpy asks out loud what you are going to show and names the process from your answer.
-// While recording, clicking the robot shows pause and "I'm done" in the bubble.
+// "Record what I do" without a window: Helpy asks in its bubble what to call the task (typed, so nothing
+// said to Helpy ends up as the name), then sharing the screen and the microphone starts. No spoken intro:
+// Helpy stays quiet until there is a real question. While recording, clicking the robot shows pause and
+// "I'm done" in the bubble.
 
-/** Recording an existing process again keeps its name; a new one is named from the spoken answer. */
+/** Recording an existing process again keeps its name; a new one gets the name typed in the bubble. */
 type Target = { projectId?: string; name?: string }
 type Step =
   | { kind: 'idle' }
@@ -47,7 +46,22 @@ export const recordFlow = {
     panel.close()
     helpyApp.close() // show the work, not Helpy's app
     mascot.pointTo(null)
-    set({ kind: 'ready', target: process ? { projectId: process.id, name: process.name } : {}, auto: true })
+    if (process) return set({ kind: 'ready', target: { projectId: process.id, name: process.name }, auto: true })
+    // A new task: ask for its name first. Submitting (Enter or the button) is a fresh user gesture,
+    // so the browser still allows screen sharing afterwards.
+    mascot.setState('idle')
+    mascot.bubble('What should I call this task?', {
+      input: {
+        placeholder: 'e.g. Supplier invoices, month-end',
+        submitLabel: 'Start',
+        suggestions: ['Supplier invoices', 'Month-end close'],
+        onSubmit: (name) => {
+          mascot.bubble(null)
+          set({ kind: 'ready', target: { name: name.slice(0, 80) }, auto: true })
+        },
+      },
+      actions: [{ label: 'Not now', onClick: notNow }],
+    })
   },
   active: () => useRecordFlow.getState().step.kind !== 'idle',
   controls() {
@@ -64,28 +78,6 @@ function notNow() {
 /** "I'm done" while Helpy still asks its owed live questions; a second "I'm done" skips them. */
 let wrapUp: { skip: boolean } | null = null
 
-const ASK_NAME = 'What are you going to show me today?'
-const ANSWER_WAIT_MS = 25_000
-
-/** The first spoken turn (Scribe) that makes a usable process name, or null after `ms`. */
-function nextTitle(ms: number): Promise<string | null> {
-  return new Promise((resolve) => {
-    const finish = (title: string | null) => {
-      clearTimeout(timer)
-      bus.off('event', onEvent)
-      resolve(title)
-    }
-    const onEvent = (e: AppEvent) => {
-      // A question to Helpy ("kannst du Deutsch?") is not the process name; Helpy answers it instead.
-      if (e.kind !== 'utterance' || e.speaker !== 'expert' || e.meta?.toHelpy) return
-      const title = titleFromAnswer(e.text ?? '')
-      if (title) finish(title)
-    }
-    const timer = setTimeout(() => finish(null), ms)
-    bus.on('event', onEvent)
-  })
-}
-
 /** Runs the dialog. Mounted once by Helpy (it needs the recorder and Convex hooks). */
 export function RecordDialog() {
   const step = useRecordFlow((s) => s.step)
@@ -94,7 +86,6 @@ export function RecordDialog() {
   const pii = usePiiModel((s) => s.state.kind)
   const { start, finish, state: recorder, error } = useTaskRecording()
   const createProject = useMutation(api.projects.create)
-  const renameProject = useMutation(api.projects.rename)
   const removeProject = useMutation(api.projects.remove)
 
   const begin = async (target: Target) => {
@@ -105,7 +96,7 @@ export function RecordDialog() {
     let created = false
     try {
       if (!projectId) {
-        projectId = await createProject({ name: UNNAMED, ...(user ? { createdBy: user.name } : {}) })
+        projectId = await createProject({ name: target.name ?? UNNAMED, ...(user ? { createdBy: user.name } : {}) })
         created = true
       }
       await start({ _id: projectId, name: target.name ?? UNNAMED }, { stay: true, ...(user ? { recordedBy: user.name } : {}) })
@@ -124,30 +115,14 @@ export function RecordDialog() {
     mascot.bubble('One moment, I’m turning on my ears…')
     await startVoice('capture')
 
-    if (target.name) {
-      const again = `Let’s record “${target.name}”. Work as usual and tell me what you do.`
-      mascot.bubble(again)
-      await speak(again)
-      mascot.setState('listening')
-      return
-    }
-    if (!speech.active()) {
-      mascot.setState('listening')
-      mascot.bubble('I can’t hear you right now, but I’m watching your screen. Just start, and click me when you’re done.')
-      return
-    }
-
-    // Everything by voice: Helpy asks, the first real answer names the process.
-    mascot.setState('speaking')
-    mascot.bubble(ASK_NAME)
-    await speak(ASK_NAME)
+    // No spoken intro: nothing to talk over. Helpy only speaks when it has a real question in a pause.
     mascot.setState('listening')
-    const title = await nextTitle(ANSWER_WAIT_MS)
-    if (title) await renameProject({ projectId: projectId!, name: title }).catch(() => undefined)
-    const go = title ? `“${title}”, got it. Work as usual and tell me what you do. Click me when you’re done.` : 'Just start. I’m watching and listening. Click me when you’re done.'
-    mascot.bubble(go)
-    if (title) await speak('Got it. Work as usual and tell me what you do.')
-    mascot.setState('listening')
+    mascot.bubble(
+      speech.active()
+        ? `Recording “${target.name ?? 'your task'}”. Work as usual and tell me what you do. I only ask in real pauses. Click me when you’re done.`
+        : 'I can’t hear you right now, but I’m watching your screen. Just start, and click me when you’re done.',
+      { topic: 'notice' },
+    )
   }
 
   useEffect(() => {

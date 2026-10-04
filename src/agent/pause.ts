@@ -17,6 +17,12 @@ export interface PauseInputs {
    */
   endpointing?: boolean;
   turnOpen?: boolean;
+  /**
+   * Last click or focus in a form control (field, dropdown, button) of the work app, epoch ms.
+   * Someone clicking into fields is mid-step ("what will you enter?" makes no sense yet): hold questions.
+   * Plain mouse movement while reading is still not an input.
+   */
+  lastFieldAt?: number;
   /** A finished turn might be addressed to Helpy and is being decided or answered right now. */
   replyPending?: boolean;
   agentSpeaking: boolean;
@@ -34,6 +40,13 @@ export const PAUSE_THRESHOLDS = {
   userSilentMs: 1200,
   /** With endpointing: an open turn without any new speech for this long is stale (e.g. a lost commit). */
   staleTurnMs: 6000,
+  /**
+   * With endpointing: silence after a finished turn before Helpy may speak. Scribe ends a turn after
+   * 0.8 s of silence, which is often just a breath between two sentences; asking right then interrupts.
+   */
+  afterTurnMs: 1500,
+  /** After a click or focus in a form control: the expert is in the middle of a step. */
+  sinceFieldMs: 4000,
 } as const;
 
 export function isPause(i: PauseInputs, th: typeof PAUSE_THRESHOLDS = PAUSE_THRESHOLDS): PauseResult {
@@ -41,8 +54,12 @@ export function isPause(i: PauseInputs, th: typeof PAUSE_THRESHOLDS = PAUSE_THRE
   const sinceTyping = i.now - i.lastTypingAt;
 
   if (sinceTyping < th.sinceTypingMs) blockers.push(`typing ${sinceTyping}ms ago`);
+  if (i.lastFieldAt !== undefined && i.now - i.lastFieldAt < th.sinceFieldMs) {
+    blockers.push(`working in a field ${i.now - i.lastFieldAt}ms ago`);
+  }
   if (i.endpointing) {
     if (i.turnOpen && i.userSilentForMs < th.staleTurnMs) blockers.push('expert speaking (turn open)');
+    else if (!i.turnOpen && i.userSilentForMs < th.afterTurnMs) blockers.push(`expert just finished a sentence ${i.userSilentForMs}ms ago`);
   } else if (i.userSilentForMs < th.userSilentMs) {
     blockers.push(`expert speaking (silent ${i.userSilentForMs}ms)`);
   }

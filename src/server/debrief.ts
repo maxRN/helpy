@@ -215,7 +215,13 @@ const describeAsked = (live: LiveQuestion[], debrief: readonly AskedGap[]) =>
  * none repeats a live question or an earlier debrief question. `asked` is the list of debrief questions so
  * far (a number is accepted from older clients and only counts).
  */
-export async function findGaps(log: LogLine[], asked: readonly AskedGap[] | number): Promise<GapsResult> {
+export const FALLBACK_GUARDRAIL_GAP = 'Is there a limit, or a case where you would stop and ask someone before doing this?'
+
+/**
+ * `needGuardrail`: no guardrail question was asked during the task (the brief requires one), so the
+ * debrief's first question must be one; if the model does not deliver it, a fixed one goes first.
+ */
+export async function findGaps(log: LogLine[], asked: readonly AskedGap[] | number, needGuardrail = false): Promise<GapsResult> {
   const debrief: AskedGap[] = typeof asked === 'number' ? Array.from({ length: asked }, () => ({ question: '', answered: true })) : [...asked]
   const live = liveQuestions(log, debrief)
   const askedSoFar = debrief.length
@@ -225,6 +231,10 @@ export async function findGaps(log: LogLine[], asked: readonly AskedGap[] | numb
     return { gaps: [], done: true, doneReason: `I asked all ${MAX_DEBRIEF_QUESTIONS} questions I had; anything still open is noted in the Work Map.`, required: 0, live }
   }
   const room = Math.min(3, MAX_DEBRIEF_QUESTIONS - askedSoFar)
+  const mustGuardrail = needGuardrail && askedSoFar === 0
+  const guardrailRule = mustGuardrail
+    ? '\nNo guardrail question was asked during the task. Your FIRST question MUST be kind "guardrail": a limit, a threshold, or when they would stop and ask someone, about the most important decision on screen.'
+    : ''
   const avoid = [...live, ...debrief.filter((d) => d.question)]
 
   const usable = (raw: { question: string; kind: Gap['kind']; aboutT: number }[], have: Gap[]) => {
@@ -245,7 +255,7 @@ export async function findGaps(log: LogLine[], asked: readonly AskedGap[] | numb
       model: MODELS.deep,
       schema: GapsSchema,
       system: GAPS_SYSTEM,
-      content: `Session log:\n${formatLog(log)}\n\n${describeAsked(live, debrief)}\n\nRequired new questions: ${required}. Questions left in the budget: ${MAX_DEBRIEF_QUESTIONS - askedSoFar}.`,
+      content: `Session log:\n${formatLog(log)}\n\n${describeAsked(live, debrief)}\n\nRequired new questions: ${required}. Questions left in the budget: ${MAX_DEBRIEF_QUESTIONS - askedSoFar}.${guardrailRule}`,
       effort: 'medium',
     })
     gaps = usable(out.gaps, []).slice(0, room)
@@ -267,6 +277,17 @@ export async function findGaps(log: LogLine[], asked: readonly AskedGap[] | numb
   }
   // Still short of the required questions (model down or repeating itself): grounded fallback questions.
   if (gaps.length < Math.min(required, room)) gaps = [...gaps, ...fallbackGaps(log, Math.min(required, room) - gaps.length, [...avoid, ...gaps], askedSoFar + gaps.length)]
+
+  // The guardrail question goes first when none came live (the model's, else a fixed one).
+  if (mustGuardrail) {
+    const g = gaps.findIndex((x) => x.kind === 'guardrail')
+    if (g > 0) gaps = [gaps[g], ...gaps.filter((_, i) => i !== g)]
+    if (g < 0 && !isDuplicateQuestion(FALLBACK_GUARDRAIL_GAP, avoid)) {
+      const lastScreen = [...log].reverse().find((l) => l.who === 'screen')
+      gaps = [{ id: '', question: FALLBACK_GUARDRAIL_GAP, kind: 'guardrail' as const, clip: clipAround(lastScreen?.t ?? 0) }, ...gaps].slice(0, room)
+    }
+    gaps = gaps.map((x, i) => ({ ...x, id: `gap-${askedSoFar + i + 1}` }))
+  }
 
   const done = required === 0 && (modelDone || gaps.length === 0)
   if (done && !doneReason) doneReason = 'I think I understand it now: the decisions I saw have their reasons, and I know when to stop and ask.'
