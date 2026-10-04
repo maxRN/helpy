@@ -57,6 +57,16 @@ describe('startTeach', () => {
     expect(session().workMap?.guardrails[0].require).toEqual(FIXTURE_WORKMAP.guardrails[0].require)
   })
 
+  it('keeps each rule’s screen moment and quote source when it compiles the conditions', async () => {
+    const moment = { t: 41_000, event: 'Invoice 4471: cost center 4711 → 0400 (capex)' }
+    const withMoments = FIXTURE_WORKMAP.guardrails.map((g) => ({ ...g, when: [], require: [], moment, quote: { ...g.quote, via: 'live_question' as const } }))
+    // The route answers with plain guardrails (no moment, quote without its source).
+    const compiled = FIXTURE_WORKMAP.guardrails.map(({ id, text, quote, stepId, when, require, severity }) => ({ id, text, quote: { text: quote.text, t: quote.t, speaker: quote.speaker }, stepId, when, require, severity }))
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ guardrails: compiled, warnings: [] })))
+    const { workMap } = await startTeach({ ...FIXTURE_WORKMAP, guardrails: withMoments })
+    expect(workMap.guardrails[0]).toMatchObject({ moment, quote: { via: 'live_question' }, require: FIXTURE_WORKMAP.guardrails[0].require })
+  })
+
   it('falls back to the Work Map as is when the compile route fails', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: 'no key' }, { status: 502 })))
     const { warnings, workMap } = await startTeach(FIXTURE_WORKMAP)
