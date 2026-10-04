@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { buildWorkMap, LogLineSchema } from '../../server/debrief'
+import { buildWorkMap, LogLineSchema, NotEnoughWorkError } from '../../server/debrief'
 
 const BodySchema = z.object({
   sessionId: z.string().min(1),
@@ -18,6 +18,7 @@ export const Route = createFileRoute('/api/workmap')({
         try {
           return Response.json(await buildWorkMap(parsed.data.sessionId, parsed.data.log, parsed.data.expert))
         } catch (err) {
+          if (err instanceof NotEnoughWorkError) return Response.json({ error: err.message }, { status: 422 })
           console.error('[workmap]', err)
           return Response.json({ error: err instanceof Error ? err.message : String(err) }, { status: 502 })
         }

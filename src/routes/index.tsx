@@ -4,7 +4,7 @@ import { Helpy } from '../app'
 import { DebriefPanel } from '../debrief/DebriefPanel'
 import { Desktop } from '../desktop/Desktop'
 import { DebugPanel } from '../erp/DebugPanel'
-import { ErpApp } from '../erp/ErpApp'
+import { ErpApp, ErpServices } from '../erp/ErpApp'
 
 // Browser-only: the session store, screen capture and Helpy need window and localStorage.
 export const Route = createFileRoute('/')({ ssr: false, component: Home })
@@ -14,6 +14,8 @@ function Home() {
   const screen = useRef<HTMLDivElement>(null)
   return (
     <>
+      {/* Database sync, saved session and tracking run even while the ERP window is closed. */}
+      <ErpServices />
       <Desktop app={<ErpApp />} />
       {/* Helpy moves anywhere on the screen except over the taskbar (h-12). */}
       <div ref={screen} className="pointer-events-none fixed inset-x-0 top-0 bottom-12" aria-hidden />

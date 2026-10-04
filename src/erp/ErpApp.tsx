@@ -35,20 +35,26 @@ function ResetDemoButton() {
   )
 }
 
-/** The mini ERP ("ProcureFlow"). Mount it once inside the app shell. */
-export function ErpApp() {
-  const openId = useErp((s) => s.openId)
-  const user = useSession((s) => (s.mode === 'teach' ? 'L. Hoffmann (new hire)' : 'S. Brandt'))
-
+/**
+ * Everything that must run whether or not the ERP window is open: the database sync (invoices,
+ * Work Maps, events), the saved session, and input/step tracking. Mount once at the app root.
+ */
+export function ErpServices() {
   useEffect(() => {
     void useSession.persist.rehydrate()
     installActivityTracker()
     installStepTracker()
   }, [])
+  return <ConvexSync />
+}
+
+/** The mini ERP ("ProcureFlow"), shown inside the desktop window. Needs <ErpServices /> at the root. */
+export function ErpApp() {
+  const openId = useErp((s) => s.openId)
+  const user = useSession((s) => (s.mode === 'teach' ? 'L. Hoffmann (new hire)' : 'S. Brandt'))
 
   return (
     <div className="flex min-h-full min-w-0 flex-col bg-[#f2f4f6] text-slate-900">
-      <ConvexSync />
       <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 bg-[#2f3e4f] px-4 py-2 text-white">
         <div className="flex items-baseline gap-3">
           <span className="text-[15px] font-semibold tracking-tight">ProcureFlow</span>

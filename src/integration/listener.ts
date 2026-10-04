@@ -6,7 +6,7 @@ import { bus, emitEvent } from '../shared/bus'
 import { useMascot } from '../shared/mascot'
 import { session, useSession } from '../shared/session'
 import type { AppEvent, Quote } from '../shared/types'
-import { recordCommand, SpeechTracker, type Utterance } from './speech'
+import { isDirectAddress, recordCommand, SpeechTracker, type Utterance } from './speech'
 
 // Words Scribe should not mishear in this demo (max 20 characters each).
 const KEYTERMS = ['capex', 'opex', 'ProcureFlow', 'cost center', 'asset number', 'Kramer', 'Brno', 'vendor master', 'Hartmann', 'Weber', 'second approval']
@@ -29,6 +29,7 @@ let connection: { close(): void; mute(): void; unmute(): void } | null = null
 let cleanups: Array<() => void> = []
 let onAnswer: ((q: Quote) => void) | null = null
 let onRecordCommand: ((cmd: 'off' | 'on') => void) | null = null
+let onDirectQuestion: ((text: string) => void) | null = null
 
 export const speech = {
   lastSpeechAt: () => tracker.lastSpeechAt(),
@@ -41,8 +42,16 @@ const rel = (at: number) => {
   return t0 === null ? undefined : Math.max(0, at - t0)
 }
 
-function logUtterance(u: Utterance) {
-  emitEvent({ source: 'voice', kind: 'utterance', speaker: 'expert', text: u.text, t: rel(u.startedAt), meta: { stt: 'scribe_v2_realtime' } })
+/** toHelpy: said to Helpy, not about the work; kept in the log but left out of the debrief and Work Map. */
+function logUtterance(u: Utterance, toHelpy = false) {
+  emitEvent({
+    source: 'voice',
+    kind: 'utterance',
+    speaker: 'expert',
+    text: u.text,
+    t: rel(u.startedAt),
+    meta: { stt: 'scribe_v2_realtime', ...(toHelpy ? { toHelpy: true } : {}) },
+  })
   if (u.answersQuestionId) {
     emitEvent({
       source: 'voice',
@@ -70,6 +79,8 @@ export interface ListenerCallbacks {
   onAnswer?: (q: Quote) => void
   /** "Off the record" / "back on the record" said aloud (the agent's own mic is muted in Capture). */
   onRecordCommand?: (cmd: 'off' | 'on') => void
+  /** The expert spoke to Helpy directly ("hörst du mich?", "Helpy, …"): Helpy should answer. */
+  onDirectQuestion?: (text: string) => void
 }
 
 /** Starts listening; resolves once Scribe confirmed the session. */
@@ -77,6 +88,7 @@ export async function startListening(callbacks: ListenerCallbacks = {}): Promise
   if (connection) return
   onAnswer = callbacks.onAnswer ?? null
   onRecordCommand = callbacks.onRecordCommand ?? null
+  onDirectQuestion = callbacks.onDirectQuestion ?? null
   useListener.setState({ status: 'connecting', error: '' })
   try {
     const res = await fetch('/api/elevenlabs/scribe-token')
@@ -114,13 +126,16 @@ export async function startListening(callbacks: ListenerCallbacks = {}): Promise
       useListener.setState({ speaking: tracker.isSpeaking(), partial: tracker.currentPartial() })
     })
     conn.on(RealtimeEvents.COMMITTED_TRANSCRIPT, (m) => {
-      const u = tracker.committed(m.text, Date.now())
+      const toHelpy = isDirectAddress(m.text)
+      const u = tracker.committed(m.text, Date.now(), !toHelpy)
       useListener.setState({ speaking: false, partial: '' })
       if (!u) return
       // Voice commands work even while off the record (that is how "back on the record" is heard); they are never logged.
       const cmd = recordCommand(u.text)
       if (cmd) return onRecordCommand?.(cmd)
-      if (!session().offRecord) logUtterance(u)
+      if (session().offRecord) return
+      logUtterance(u, toHelpy)
+      if (toHelpy) onDirectQuestion?.(u.text)
     })
     const fail = (m: unknown) => {
       const message = (m as { error?: string; message?: string })?.error ?? (m as { message?: string })?.message ?? 'Scribe error'
@@ -168,6 +183,7 @@ export function stopListening() {
   connection = null
   onAnswer = null
   onRecordCommand = null
+  onDirectQuestion = null
   tracker.dropTurn()
   conn?.close()
   useListener.setState({ status: 'off', speaking: false, partial: '', muted: false })

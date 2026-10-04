@@ -59,9 +59,16 @@ const GapsSchema = z.object({
 })
 
 const GAPS_SYSTEM = `You run the debrief after an accounts-payable expert finished a task while an apprentice watched.
-You get the session log: what changed on screen, what the expert said, the questions already asked and their answers.
+You get the session log: what changed on screen, what the expert said, the questions already asked live and their answers.
 
-Find what a new hire would still not know to do this task alone, and turn it into short spoken questions (max 18 words each):
+Only the work counts. Ignore everything that is not about doing the task: chatter with colleagues, testing or discussing the recording tool, remarks to the apprentice, jokes, swearing. Never ask about those.
+
+The live questions already covered single decisions as they happened. The debrief is for what is still missing to do the task alone, in this order:
+1. The rule behind a decision that is still unexplained, asked as a rule check ("Is that always the case, or only for …?").
+2. Exceptions: when the usual rule does not apply.
+3. Cases that did not come up but obviously could.
+4. Who decides or must be asked, and when to stop.
+Turn them into short spoken questions (max 18 words each):
 - "why": a decision on screen without a stated reason.
 - "guardrail": a limit, a threshold, or when to stop and ask someone, that is implied but not stated.
 - "exception": when the usual rule does not apply.
@@ -74,7 +81,25 @@ Rules:
 - Order by importance. At most 3 questions per round.
 - done = true when every decision has a reason and every judgment call has its guardrail (or the expert said there is none). Say why in doneReason.`
 
-export async function findGaps(log: LogLine[], askedSoFar: number): Promise<{ gaps: Gap[]; done: boolean; doneReason: string }> {
+export class NotEnoughWorkError extends Error {
+  constructor() {
+    super('I saw too little work on screen to write a Work Map. Record the task again and work through a few invoices.')
+  }
+}
+
+/** At least this many screen changes are needed before there is a process to ask about or write down. */
+export const MIN_SCREEN_LINES = 3
+
+export const hasEnoughWork = (log: LogLine[]) => log.filter((l) => l.who === 'screen').length >= MIN_SCREEN_LINES
+
+export const NOT_ENOUGH_WORK =
+  'I saw too little work on screen to ask good questions. Record the task again and work through a few invoices while you explain.'
+
+export async function findGaps(
+  log: LogLine[],
+  askedSoFar: number,
+): Promise<{ gaps: Gap[]; done: boolean; doneReason: string; notEnoughWork?: boolean }> {
+  if (!hasEnoughWork(log)) return { gaps: [], done: true, doneReason: NOT_ENOUGH_WORK, notEnoughWork: true }
   if (askedSoFar >= MAX_DEBRIEF_QUESTIONS) return { gaps: [], done: true, doneReason: `Question budget of ${MAX_DEBRIEF_QUESTIONS} used.` }
   const out = await generateJson({
     model: MODELS.deep,
@@ -117,6 +142,7 @@ const WorkMapDraftSchema = z.object({
 })
 
 const WORKMAP_SYSTEM = `You turn an apprentice's session log into a Work Map: the steps a new hire follows, in order, with the expert's reasons and guardrails.
+Only the work counts: ignore chatter with colleagues, talk about the recording tool and remarks to the apprentice.
 
 - steps: the generic procedure for one invoice, in order (not one entry per invoice). Include the judgment calls as their own steps.
   targetId: the screen element of the step, one of the listed ids, or "" if none fits.
@@ -132,6 +158,7 @@ const WORKMAP_SYSTEM = `You turn an apprentice's session log into a Work Map: th
 ${catalogForPrompt()}`
 
 export async function buildWorkMap(sessionId: string, log: LogLine[], expert = 'Sabine'): Promise<{ workMap: WorkMap; warnings: string[] }> {
+  if (!hasEnoughWork(log)) throw new NotEnoughWorkError()
   const draft = await generateJson({
     model: MODELS.deep,
     schema: WorkMapDraftSchema,

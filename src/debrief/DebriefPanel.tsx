@@ -64,8 +64,13 @@ export function DebriefPanel() {
   const findGaps = async (count = asked) => {
     setPhase({ kind: 'finding' })
     try {
-      const res = await post<{ gaps: Gap[]; done: boolean; doneReason: string }>('/api/debrief/gaps', { log: log(), asked: count })
+      const res = await post<{ gaps: Gap[]; done: boolean; doneReason: string; notEnoughWork?: boolean }>('/api/debrief/gaps', {
+        log: log(),
+        asked: count,
+      })
       setDoneReason(res.doneReason)
+      // Too little task on screen: say so honestly instead of inventing questions or a Work Map.
+      if (res.notEnoughWork) return setPhase({ kind: 'error', message: res.doneReason, retry: () => void findGaps(count) })
       if (res.done || res.gaps.length === 0 || count >= MAX_QUESTIONS) return void build()
       setPhase({ kind: 'asking', queue: res.gaps })
     } catch (err) {

@@ -29,25 +29,50 @@ export async function startVoice(mode: AgentMode) {
     await startListening({
       onAnswer: (answer) => voice.noteAnswer(answer),
       onRecordCommand: (cmd) => void setOffRecord(cmd === 'off'),
+      onDirectQuestion: (text) => void replyToExpert(text, 'capture'),
     }).catch((err) => console.warn('[helpy] Scribe not started', err))
   } else {
     stopListening()
   }
   try {
-    if (voice.isConnected()) await voice.stop()
+    if (voice.isActive()) await voice.stop()
     resetVoiceClock()
     await voice.start(mode)
     useVoice.setState({ mode, error: '' })
   } catch (err) {
     console.warn('[helpy] voice agent not started', err)
-    useVoice.setState({ mode: null, error: 'Voice is not available right now. Helpy works quietly with speech bubbles.' })
+    if (mode === 'capture') {
+      // No agent: the same pause detector and question policy still run; Helpy asks with plain TTS.
+      voice.startCaptureWithoutAgent((question) => void speak(question))
+      useVoice.setState({ mode, error: '' })
+    } else {
+      useVoice.setState({ mode: null, error: 'Voice is not available right now. Helpy works quietly with speech bubbles.' })
+    }
+  }
+}
+
+/** The expert spoke to Helpy ("hörst du mich?"): a one-sentence answer from Claude, in their language, spoken. */
+export async function replyToExpert(text: string, mode: AgentMode) {
+  mascot.setState('thinking')
+  try {
+    const res = await fetch('/api/helpy/reply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, mode }),
+    })
+    const body = (await res.json().catch(() => ({}))) as { reply?: string }
+    if (!res.ok || !body.reply) throw new Error('no reply')
+    mascot.bubble(body.reply, { ttlMs: 8000 })
+    await speak(body.reply)
+  } catch {
+    mascot.setState('listening')
   }
 }
 
 export async function stopVoice() {
   stopListening()
   const voice = await load()
-  if (voice.isConnected()) await voice.stop()
+  if (voice.isActive()) await voice.stop()
   useVoice.setState({ mode: null })
 }
 
@@ -55,7 +80,11 @@ export async function stopVoice() {
 export async function setOffRecord(on: boolean) {
   const voice = await load()
   if (voice.isConnected()) voice.setOffRecord(on, 'ui')
-  else session().setOffRecord(on)
+  else if (voice.isActive()) {
+    // Capture without an agent: the question policy must pause too, and Helpy confirms with TTS.
+    voice.setOffRecord(on, 'ui')
+    void speak(on ? 'Okay, off the record.' : 'Back on the record.')
+  } else session().setOffRecord(on)
 }
 
 /** Debrief: the agent asks out loud and returns the spoken answer; null when no agent runs. */
@@ -77,7 +106,7 @@ export async function teachBackAloud(text: string): Promise<{ confirmed: boolean
 /** Capture: ask the question Helpy is holding back (its raised hand), now. */
 export async function askWaitingQuestion() {
   const voice = await load()
-  return voice.isConnected() ? voice.askWaitingQuestion() : false
+  return voice.isActive() ? voice.askWaitingQuestion() : false
 }
 
 // Helpy's own lines outside the agent (e.g. "What do you want to show me?"), via ElevenLabs TTS.

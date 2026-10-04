@@ -11,7 +11,7 @@ import { startPauseLoop, type PauseInputs } from './pause';
 import { createQuestionPolicy, type QuestionPolicy } from './policy';
 import { buildClientTools } from './tools';
 import { createTranscript, type TranscriptHandle } from './transcript';
-import { SCREEN_EVENT_TYPES, type AppEvent, type Deps, type Mode, type Quote } from './types';
+import { SCREEN_EVENT_TYPES, type AppEvent, type Deps, type Mode, type Quote, type Speaker } from './types';
 
 export { getPauseLog } from './pause';
 
@@ -36,6 +36,25 @@ let teachback: {
 
 export const isConnected = (): boolean => conv !== null;
 
+// Capture without an agent (none configured or it failed to start): same pause detector and
+// question policy, questions spoken by plain TTS, answers heard by Scribe.
+let lite = false;
+
+/** True while live questions can be asked: with the agent, or in Capture without one. */
+export const isActive = (): boolean => conv !== null || lite;
+
+export function startCaptureWithoutAgent(say: (question: string) => void): void {
+  if (conv || lite) return;
+  const deps = getDeps();
+  mode = 'capture';
+  lite = true;
+  agentSpeaking = false;
+  offRecord = false;
+  lastUserSpeechAt = 0;
+  deps.mascot.setState('listening');
+  startCapture(deps, say);
+}
+
 function requireConn(): Session {
   if (!conv) throw new Error('[voice] not connected: call start(mode) first');
   return conv;
@@ -44,7 +63,7 @@ function requireConn(): Session {
 // ---------------------------------------------------------------- start / stop
 
 export async function start(m: Mode, opts: { workMapMarkdown?: string } = {}): Promise<void> {
-  if (conv) await stop();
+  if (conv || lite) await stop();
   const deps = getDeps();
 
   mode = m;
@@ -129,7 +148,7 @@ export async function start(m: Mode, opts: { workMapMarkdown?: string } = {}): P
   if (m === 'capture' && deps.speech?.active()) conv.setMicMuted(true);
   cleanup.push(startScreenFeed(deps));
 
-  if (m === 'capture') startCapture(deps);
+  if (m === 'capture') startCapture(deps, (q) => conv?.sendUserMessage(`[ASK] ${q}`));
   if (m === 'teach') cleanup.push(wireTutor(deps));
 }
 
@@ -151,6 +170,7 @@ export async function stop(): Promise<void> {
 
   const c = conv;
   conv = null;
+  lite = false;
   mode = null;
   agentSpeaking = false;
   try {
@@ -238,7 +258,25 @@ export function setOffRecord(on: boolean, source: 'voice' | 'ui' = 'ui'): void {
 
 // ---------------------------------------------------------------- capture mode
 
-function startCapture(deps: Deps): void {
+/** How a live question is spoken: by the agent, or (without one) by plain TTS. */
+type Deliver = (question: string) => void;
+
+function startCapture(deps: Deps, deliver: Deliver): void {
+  // What was said lately, from the shared bus: Scribe's turns (the agent's mic is muted in Capture) and the agent's lines.
+  const heard: { speaker: Speaker; text: string }[] = [];
+  cleanup.push(
+    deps.bus.on('*', (e) => {
+      if ((e.type === 'utterance' || e.type === 'question_asked') && e.text && e.meta?.toHelpy !== true) {
+        heard.push({ speaker: e.speaker ?? 'expert', text: e.text });
+        if (heard.length > 20) heard.shift();
+      }
+    }),
+  );
+  const tail = (n: number) => {
+    const own = transcript?.tail(n) ?? [];
+    return (heard.length >= own.length ? heard : own).slice(-n);
+  };
+
   const getInputs = (): PauseInputs => {
     const now = Date.now();
     // Scribe's VAD (when listening) and the agent's own VAD: whichever heard speech last.
@@ -255,8 +293,8 @@ function startCapture(deps: Deps): void {
 
   policy = createQuestionPolicy({
     getInputs,
-    tail: (n) => transcript?.tail(n) ?? [],
-    deliver: (q) => conv?.sendUserMessage(`[ASK] ${q}`),
+    tail,
+    deliver,
     noteQuestion: ({ questionEventId, eventId }) => {
       // Live answers are only logged, nobody awaits them.
       transcript?.expect({ questionId: questionEventId, eventId, timeoutMs: 45_000 }).catch(() => undefined);

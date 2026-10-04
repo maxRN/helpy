@@ -12,6 +12,8 @@ export function toLogLines(events: readonly AppEvent[]): LogLine[] {
     if ((e.source === 'dom' || (e.source === 'vision' && !e.meta?.confirms)) && SCREEN_KINDS.has(e.kind)) {
       const text = describeScreenEvent(e)
       if (text) line = { t: e.t, who: 'screen', text }
+    } else if (e.meta?.toHelpy) {
+      continue // said to Helpy ("hörst du mich?"), not about the work
     } else if (e.text && (e.kind === 'utterance' || e.kind === 'answer_given' || e.kind === 'teachback_result')) {
       line = { t: e.t, who: e.speaker === 'agent' ? 'agent' : 'expert', text: e.text }
     } else if (e.text && (e.kind === 'question_asked' || e.kind === 'teachback_given')) {

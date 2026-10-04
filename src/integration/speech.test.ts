@@ -1,5 +1,28 @@
 import { describe, expect, it } from 'vitest'
-import { ANSWER_WINDOW_MS, recordCommand, SpeechTracker } from './speech'
+import { ANSWER_WINDOW_MS, isDirectAddress, recordCommand, SpeechTracker } from './speech'
+
+describe('isDirectAddress', () => {
+  it('hears questions to Helpy in German and English', () => {
+    for (const t of ['Hörst du mich?', 'Kannst du auch auf Deutsch antworten?', 'Aber warum antwortest du nicht?', 'Helpy, bist du da?', 'Can you hear me?', "Why aren't you answering?"]) {
+      expect(isDirectAddress(t), t).toBe(true)
+    }
+  })
+
+  it('ignores narration and team chatter', () => {
+    for (const t of ['Wähl ich hier immer Equipment aus.', 'Ist das dein Whisper Flow?', 'Willst du nicht wissen, ob es funktioniert?', 'I always check the PO first.']) {
+      expect(isDirectAddress(t), t).toBe(false)
+    }
+  })
+
+  it('keeps a pending question open when the expert talks to Helpy in between', () => {
+    const s = new SpeechTracker()
+    s.questionAsked('q1', undefined, 1_000)
+    s.partial('Hörst du mich', 2_000)
+    expect(s.committed('Hörst du mich?', 2_500, false)?.answersQuestionId).toBeUndefined()
+    s.partial('Weil es über fünftausend ist', 4_000)
+    expect(s.committed('Weil es über fünftausend ist.', 5_000)?.answersQuestionId).toBe('q1')
+  })
+})
 
 describe('recordCommand', () => {
   it('hears off / back on the record in English and German', () => {

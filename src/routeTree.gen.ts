@@ -21,6 +21,7 @@ import { Route as ApiDebriefTeachbackRouteImport } from './routes/api/debrief/te
 import { Route as ApiElevenlabsScribeTokenRouteImport } from './routes/api/elevenlabs/scribe-token'
 import { Route as ApiElevenlabsSignedUrlRouteImport } from './routes/api/elevenlabs/signed-url'
 import { Route as ApiGuardrailsCompileRouteImport } from './routes/api/guardrails/compile'
+import { Route as ApiHelpyReplyRouteImport } from './routes/api/helpy/reply'
 import { Route as ProjectsProjectIdTasksTaskIdRouteImport } from './routes/projects.$projectId_.tasks.$taskId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -84,6 +85,11 @@ const ApiGuardrailsCompileRoute = ApiGuardrailsCompileRouteImport.update({
   path: '/api/guardrails/compile',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiHelpyReplyRoute = ApiHelpyReplyRouteImport.update({
+  id: '/api/helpy/reply',
+  path: '/api/helpy/reply',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProjectsProjectIdTasksTaskIdRoute =
   ProjectsProjectIdTasksTaskIdRouteImport.update({
     id: '/projects/$projectId_/tasks/$taskId',
@@ -104,6 +110,7 @@ export interface FileRoutesByFullPath {
   '/api/elevenlabs/scribe-token': typeof ApiElevenlabsScribeTokenRoute
   '/api/elevenlabs/signed-url': typeof ApiElevenlabsSignedUrlRoute
   '/api/guardrails/compile': typeof ApiGuardrailsCompileRoute
+  '/api/helpy/reply': typeof ApiHelpyReplyRoute
   '/projects/$projectId/tasks/$taskId': typeof ProjectsProjectIdTasksTaskIdRoute
 }
 export interface FileRoutesByTo {
@@ -119,6 +126,7 @@ export interface FileRoutesByTo {
   '/api/elevenlabs/scribe-token': typeof ApiElevenlabsScribeTokenRoute
   '/api/elevenlabs/signed-url': typeof ApiElevenlabsSignedUrlRoute
   '/api/guardrails/compile': typeof ApiGuardrailsCompileRoute
+  '/api/helpy/reply': typeof ApiHelpyReplyRoute
   '/projects/$projectId/tasks/$taskId': typeof ProjectsProjectIdTasksTaskIdRoute
 }
 export interface FileRoutesById {
@@ -135,6 +143,7 @@ export interface FileRoutesById {
   '/api/elevenlabs/scribe-token': typeof ApiElevenlabsScribeTokenRoute
   '/api/elevenlabs/signed-url': typeof ApiElevenlabsSignedUrlRoute
   '/api/guardrails/compile': typeof ApiGuardrailsCompileRoute
+  '/api/helpy/reply': typeof ApiHelpyReplyRoute
   '/projects/$projectId_/tasks/$taskId': typeof ProjectsProjectIdTasksTaskIdRoute
 }
 export interface FileRouteTypes {
@@ -152,6 +161,7 @@ export interface FileRouteTypes {
     | '/api/elevenlabs/scribe-token'
     | '/api/elevenlabs/signed-url'
     | '/api/guardrails/compile'
+    | '/api/helpy/reply'
     | '/projects/$projectId/tasks/$taskId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -167,6 +177,7 @@ export interface FileRouteTypes {
     | '/api/elevenlabs/scribe-token'
     | '/api/elevenlabs/signed-url'
     | '/api/guardrails/compile'
+    | '/api/helpy/reply'
     | '/projects/$projectId/tasks/$taskId'
   id:
     | '__root__'
@@ -182,6 +193,7 @@ export interface FileRouteTypes {
     | '/api/elevenlabs/scribe-token'
     | '/api/elevenlabs/signed-url'
     | '/api/guardrails/compile'
+    | '/api/helpy/reply'
     | '/projects/$projectId_/tasks/$taskId'
   fileRoutesById: FileRoutesById
 }
@@ -198,6 +210,7 @@ export interface RootRouteChildren {
   ApiElevenlabsScribeTokenRoute: typeof ApiElevenlabsScribeTokenRoute
   ApiElevenlabsSignedUrlRoute: typeof ApiElevenlabsSignedUrlRoute
   ApiGuardrailsCompileRoute: typeof ApiGuardrailsCompileRoute
+  ApiHelpyReplyRoute: typeof ApiHelpyReplyRoute
   ProjectsProjectIdTasksTaskIdRoute: typeof ProjectsProjectIdTasksTaskIdRoute
 }
 
@@ -287,6 +300,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiGuardrailsCompileRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/helpy/reply': {
+      id: '/api/helpy/reply'
+      path: '/api/helpy/reply'
+      fullPath: '/api/helpy/reply'
+      preLoaderRoute: typeof ApiHelpyReplyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/projects/$projectId_/tasks/$taskId': {
       id: '/projects/$projectId_/tasks/$taskId'
       path: '/projects/$projectId/tasks/$taskId'
@@ -310,6 +330,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiElevenlabsScribeTokenRoute: ApiElevenlabsScribeTokenRoute,
   ApiElevenlabsSignedUrlRoute: ApiElevenlabsSignedUrlRoute,
   ApiGuardrailsCompileRoute: ApiGuardrailsCompileRoute,
+  ApiHelpyReplyRoute: ApiHelpyReplyRoute,
   ProjectsProjectIdTasksTaskIdRoute: ProjectsProjectIdTasksTaskIdRoute,
 }
 export const routeTree = rootRouteImport
