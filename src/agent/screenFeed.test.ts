@@ -60,6 +60,13 @@ describe('screen feed to the agent', () => {
     expect(sent).toEqual([]);
   });
 
+  it('without a recording (Teach: events have t = 0) the stamp is the agent clock, like the screen updates', () => {
+    const feed = start();
+    feed.onEvent(dom('Opened invoice 5102', 0));
+    vi.advanceTimersByTime(500);
+    expect(sent.at(-1)).toMatch(/^\[SCREEN 01:05\] Opened invoice 5102/);
+  });
+
   it('ignores events that are not about the screen', () => {
     const feed = start();
     feed.onEvent({ id: 'u', t: 0, type: 'utterance', text: 'hello' });

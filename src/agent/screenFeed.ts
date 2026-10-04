@@ -38,7 +38,9 @@ export function startScreenFeed(o: ScreenFeedOpts) {
     if (!body) return;
     const screen = current();
     lastScreen = screen || lastScreen;
-    o.send(`[SCREEN ${mmss(events[0].t)}] ${body}${screen ? `\nNow on screen: ${screen}` : ''}`);
+    // Recording time when there is a recording; otherwise (Teach) events have t = 0: use the agent's clock.
+    const at = events[0].t > 0 ? events[0].t : o.now();
+    o.send(`[SCREEN ${mmss(at)}] ${body}${screen ? `\nNow on screen: ${screen}` : ''}`);
   };
 
   const poll = () => {
