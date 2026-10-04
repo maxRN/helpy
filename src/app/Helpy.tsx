@@ -14,6 +14,7 @@ import { HelpyPanel } from './panel/HelpyPanel'
 import { panel, usePanel } from './panel/store'
 import { askQuestions } from './panel/questions'
 import { mmss } from './panel/ui'
+import { offRecordPrompt } from './offRecordPrompt'
 import { RecordDialog, recordFlow } from './RecordDialog'
 import { tour } from './tour'
 import { VoiceDebrief, voiceDebrief } from './VoiceDebrief'
@@ -117,6 +118,8 @@ const NUDGE_AFTER_MS = 40_000
 
 /** Robot click: while recording, the controls in the bubble; otherwise the panel. */
 function onRobotClick() {
+  // A lesson paused off the record: the way back ("Continue"), whatever else was shown since.
+  if (offRecordPrompt.active()) return offRecordPrompt.show()
   // While recording or in the debrief the controls show in the bubble; a second click puts them away.
   const busy = usePanel.getState().activity?.kind === 'recording' || voiceDebrief.active()
   if (busy && mascot.resolve('prompt')) return
@@ -141,10 +144,12 @@ export function Helpy({ boundsRef }: { boundsRef?: RefObject<HTMLElement | null>
     const uninstallBubbles = installBubbleLifecycle()
     // Someone Helpy has never seen: it comes to the middle, says hello and offers a tour.
     const uninstallTour = tour.install()
+    const uninstallOffRecord = offRecordPrompt.install()
     // Dev console: helpy.mascot.pointTo('field-costCenter'), helpy.panel.show(), helpy.question('Why 0400?')
     if (import.meta.env.DEV) Object.assign(window, { helpy: { mascot, panel, question: sharedMascot.waiting } })
     return () => {
       uninstallTour()
+      uninstallOffRecord()
       setMascotClickHandler(null)
       uninstallBubbles()
     }

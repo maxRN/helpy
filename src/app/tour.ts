@@ -22,9 +22,12 @@ const LINES = {
     "Recorded processes is everything I've watched. Each recording becomes a workflow: the steps, the rules, and the reasons behind them, in the expert's own words.",
   workflow:
     "Here's an example. Every step links to the moment I saw it, so a new hire can watch exactly what the expert did. And with Teach me this, I guide them through a real invoice and stop them before they break a rule.",
+  privacy:
+    "One more thing: privacy. Whenever something is private, just say \"off the record\". While I'm recording, you can also click me and choose Pause. I stop watching and listening right away, and no audio leaves your computer until you click Continue.",
   choose: "Now it's your turn. What would you like to try first?",
   openErp: "Let's record one. First, open ProcureFlow, the company's ERP. It's right here on the desktop.",
-  record: "Now work through an invoice and talk me through it, like you would with a new colleague. I'll only ask when you pause. Ready?",
+  record:
+    "Now work through an invoice and talk me through it, like you would with a new colleague. I'll only ask when you pause. And if something is private, say \"off the record\". Ready?",
   learn: "Great choice. Click Teach me this, and I'll walk you through a real invoice, step by step, like a colleague would.",
   bye: "Have fun! I'll be down here in the corner. Click me whenever you need me.",
   later: "Sure! I'll be down here in the corner. Click me whenever you need me.",
@@ -107,7 +110,13 @@ function processes() {
 function workflow() {
   helpyApp.go({ name: 'workflow', processId: EXAMPLE_ID })
   mascot.pointTo(TOUR_TARGETS.teach)
-  void say(LINES.workflow, [next(choose), endTour], LINES.choose)
+  void say(LINES.workflow, [next(privacy), endTour], LINES.privacy)
+}
+
+/** Off the record: by voice or a click; coming back is always a click (the microphone is off meanwhile). */
+function privacy() {
+  mascot.pointTo(null)
+  void say(LINES.privacy, [next(choose), endTour], LINES.choose)
 }
 
 function choose() {

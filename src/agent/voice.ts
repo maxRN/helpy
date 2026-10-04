@@ -6,6 +6,7 @@
 // so this is a plain module, not a React hook. Call setDeps() once before start().
 
 import { emit, getDeps, nowRel } from './deps';
+import { recordCommand } from '../integration/speech';
 import { MOCK_WORK_MAP } from './mockWorkMap';
 import { startPauseLoop, type PauseInputs } from './pause';
 import { createQuestionPolicy, type DeliveryControl, type QuestionPolicy } from './policy';
@@ -125,6 +126,8 @@ export async function start(m: Mode, opts: { workMapMarkdown?: string } = {}): P
       // What Helpy says is what the bubble shows, at the same time (Teach, debrief; not the long teach-back).
       const fromAgent = msg.source === 'ai' || (msg as { role?: string }).role === 'agent';
       const text = (msg.message ?? '').trim();
+      // Teach and debrief: "off the record" said to the agent pauses at once. Coming back is a click (the mic is off).
+      if (!fromAgent && m !== 'capture' && recordCommand(text) === 'off') setOffRecord(true, 'heard');
       if (!fromAgent || !text || teachback || m === 'capture') return;
       agentLine = text;
       if (agentSpeaking) showAgentLine(deps);
@@ -188,7 +191,8 @@ export async function start(m: Mode, opts: { workMapMarkdown?: string } = {}): P
 function showAgentLine(deps: Deps): void {
   const line = agentLine;
   agentLine = null;
-  if (line) (deps.mascot.spoken ?? deps.mascot.bubble)(line);
+  // Off the record the bubble holds "Continue"; the agent's "Okay" must not replace it.
+  if (line && !offRecord) (deps.mascot.spoken ?? deps.mascot.bubble)(line);
 }
 
 export async function stop(): Promise<void> {
@@ -268,6 +272,7 @@ export async function agentQuiet(maxMs = 30_000): Promise<void> {
 
 /** Teach: Helpy's own voice says a step (TTS): the agent must not hear it as the trainee talking. */
 export function muteMic(on: boolean): void {
+  if (!on && offRecord && mode !== 'capture') return; // off the record the mic stays off until Continue
   try {
     conv?.setMicMuted(on);
   } catch (e) {
@@ -367,9 +372,24 @@ export function noteSkipped(): void {
 
 // ---------------------------------------------------------------- off the record
 
-/** source 'voice' = the agent's tool call (agent already confirmed aloud); 'ui' = P4's button. */
-export function setOffRecord(on: boolean, source: 'voice' | 'ui' = 'ui'): void {
+/**
+ * source 'voice' = the agent's tool call (agent already confirmed aloud); 'ui' = P4's button; 'heard' = the user said
+ * "off the record" to the agent (Teach, debrief), which answers that turn itself.
+ * With the agent listening (Teach, debrief), off the record turns its microphone off: no audio leaves the computer, so
+ * "back on the record" cannot be heard and coming back is always a click. In Capture Scribe does the same.
+ */
+export function setOffRecord(on: boolean, source: 'voice' | 'ui' | 'heard' = 'ui'): void {
   if (offRecord === on) return;
+  if (conv && mode !== 'capture') {
+    if (on) muteMic(true);
+    offRecord = on;
+    if (!on) muteMic(false);
+    conv.sendContextualUpdate(
+      on
+        ? '[OFF THE RECORD] The user went off the record. Your microphone is off. Do not speak until you are told they are back.'
+        : '[BACK ON THE RECORD] The user is back. Continue where you left off.',
+    );
+  }
   offRecord = on;
   emit({ type: on ? 'off_record_start' : 'off_record_end', meta: { source } });
   if (source === 'ui' && conv) {
