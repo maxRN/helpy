@@ -88,7 +88,7 @@ describe('voice bridge', () => {
 
   it('renders the Work Map as markdown with quotes and guardrails', () => {
     const md = workMapMarkdown(FIXTURE_WORKMAP)
-    expect(md).toContain('# Work Map: Process supplier invoices')
+    expect(md).toContain('# Work Map: Process Supplier Invoices')
     expect(md).toContain('[S3, target field-costCenter] Code the invoice to a cost center')
     expect(md).toContain('- G1 (stop before posting)')
   })
