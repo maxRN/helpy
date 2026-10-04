@@ -6,7 +6,7 @@ import { bus, emitEvent } from '../shared/bus'
 import { useMascot } from '../shared/mascot'
 import { session, useSession } from '../shared/session'
 import type { AppEvent, Quote } from '../shared/types'
-import { isDirectAddress, recordCommand, SpeechTracker, type Utterance } from './speech'
+import { mightBeToHelpy, recordCommand, SpeechTracker, type Utterance } from './speech'
 
 // Words Scribe should not mishear in this demo (max 20 characters each).
 const KEYTERMS = ['capex', 'opex', 'ProcureFlow', 'cost center', 'asset number', 'Kramer', 'Brno', 'vendor master', 'Hartmann', 'Weber', 'second approval']
@@ -29,7 +29,9 @@ let connection: { close(): void; mute(): void; unmute(): void } | null = null
 let cleanups: Array<() => void> = []
 let onAnswer: ((q: Quote) => void) | null = null
 let onRecordCommand: ((cmd: 'off' | 'on') => void) | null = null
-let onDirectQuestion: ((text: string) => void) | null = null
+let onMaybeToHelpy: ((text: string) => Promise<boolean>) | null = null
+
+const DECIDE_TIMEOUT_MS = 8000 // if Claude takes longer, treat the turn as narration
 
 export const speech = {
   lastSpeechAt: () => tracker.lastSpeechAt(),
@@ -65,6 +67,21 @@ function logUtterance(u: Utterance, toHelpy = false) {
   }
 }
 
+/**
+ * A finished turn: if it might be meant for Helpy, Claude decides (and Helpy answers); otherwise, or if it
+ * was about the work, it is logged as narration and may answer the agent's pending question.
+ */
+async function handleTurn(u: Utterance) {
+  let toHelpy = false
+  if (onMaybeToHelpy && mightBeToHelpy(u.text)) {
+    toHelpy = await Promise.race([
+      onMaybeToHelpy(u.text).catch(() => false),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), DECIDE_TIMEOUT_MS)),
+    ])
+  }
+  logUtterance(toHelpy ? u : tracker.claimAnswer(u), toHelpy)
+}
+
 const MAX_MUTED_MS = 30_000 // Helpy never talks this long; if its "speaking" state sticks, listen again anyway
 let muteTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -84,8 +101,8 @@ export interface ListenerCallbacks {
   onAnswer?: (q: Quote) => void
   /** "Off the record" / "back on the record" said aloud (the agent's own mic is muted in Capture). */
   onRecordCommand?: (cmd: 'off' | 'on') => void
-  /** The expert spoke to Helpy directly ("hörst du mich?", "Helpy, …"): Helpy should answer. */
-  onDirectQuestion?: (text: string) => void
+  /** Might be meant for Helpy: decide (and answer if so); resolve true when it was addressed to Helpy. */
+  onMaybeToHelpy?: (text: string) => Promise<boolean>
 }
 
 /** Starts listening; resolves once Scribe confirmed the session. */
@@ -93,7 +110,7 @@ export async function startListening(callbacks: ListenerCallbacks = {}): Promise
   if (connection) return
   onAnswer = callbacks.onAnswer ?? null
   onRecordCommand = callbacks.onRecordCommand ?? null
-  onDirectQuestion = callbacks.onDirectQuestion ?? null
+  onMaybeToHelpy = callbacks.onMaybeToHelpy ?? null
   useListener.setState({ status: 'connecting', error: '' })
   try {
     const res = await fetch('/api/elevenlabs/scribe-token', { signal: AbortSignal.timeout(8000) })
@@ -106,6 +123,9 @@ export async function startListening(callbacks: ListenerCallbacks = {}): Promise
       modelId: 'scribe_v2_realtime',
       commitStrategy: CommitStrategy.VAD,
       vadSilenceThresholdSecs: VAD_SILENCE_SECS,
+      // Only German and English: free language detection heard German narration as Polish.
+      languageCode: 'de',
+      secondaryLanguages: ['en'],
       keyterms: KEYTERMS,
       microphone: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     })
@@ -131,16 +151,14 @@ export async function startListening(callbacks: ListenerCallbacks = {}): Promise
       useListener.setState({ speaking: tracker.isSpeaking(), partial: tracker.currentPartial() })
     })
     conn.on(RealtimeEvents.COMMITTED_TRANSCRIPT, (m) => {
-      const toHelpy = isDirectAddress(m.text)
-      const u = tracker.committed(m.text, Date.now(), !toHelpy)
+      const u = tracker.committed(m.text, Date.now())
       useListener.setState({ speaking: false, partial: '' })
       if (!u) return
       // Voice commands work even while off the record (that is how "back on the record" is heard); they are never logged.
       const cmd = recordCommand(u.text)
       if (cmd) return onRecordCommand?.(cmd)
       if (session().offRecord) return
-      logUtterance(u, toHelpy)
-      if (toHelpy) onDirectQuestion?.(u.text)
+      void handleTurn(u)
     })
     const fail = (m: unknown) => {
       const message = (m as { error?: string; message?: string })?.error ?? (m as { message?: string })?.message ?? 'Scribe error'
@@ -188,7 +206,7 @@ export function stopListening() {
   connection = null
   onAnswer = null
   onRecordCommand = null
-  onDirectQuestion = null
+  onMaybeToHelpy = null
   tracker.dropTurn()
   conn?.close()
   useListener.setState({ status: 'off', speaking: false, partial: '', muted: false })

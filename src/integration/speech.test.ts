@@ -1,26 +1,26 @@
 import { describe, expect, it } from 'vitest'
-import { ANSWER_WINDOW_MS, isDirectAddress, recordCommand, SpeechTracker } from './speech'
+import { ANSWER_WINDOW_MS, mightBeToHelpy, recordCommand, SpeechTracker } from './speech'
 
-describe('isDirectAddress', () => {
-  it('hears questions to Helpy in German and English', () => {
-    for (const t of ['Hörst du mich?', 'Kannst du auch auf Deutsch antworten?', 'Aber warum antwortest du nicht?', 'Helpy, bist du da?', 'Can you hear me?', "Why aren't you answering?"]) {
-      expect(isDirectAddress(t), t).toBe(true)
+describe('mightBeToHelpy (first filter before Claude decides)', () => {
+  it('lets through everything that could be meant for Helpy', () => {
+    for (const t of [
+      'Hörst du mich?',
+      'Kannst du auch auf Deutsch antworten?',
+      'Antwortet gefälligst, wenn ich mit dir spreche.',
+      'Hast du das verstanden',
+      'Helpy, bist du da?',
+      'Can you hear me?',
+      "Why aren't you answering?",
+      'Sprich bitte Deutsch mit mir?',
+    ]) {
+      expect(mightBeToHelpy(t), t).toBe(true)
     }
   })
 
-  it('ignores narration and team chatter', () => {
-    for (const t of ['Wähl ich hier immer Equipment aus.', 'Ist das dein Whisper Flow?', 'Willst du nicht wissen, ob es funktioniert?', 'I always check the PO first.']) {
-      expect(isDirectAddress(t), t).toBe(false)
+  it('skips plain narration without asking Claude', () => {
+    for (const t of ['Okay, also hier mach ich jetzt immer raw materials.', 'Sehr wichtig.', 'I always check the PO first.', 'Post.']) {
+      expect(mightBeToHelpy(t), t).toBe(false)
     }
-  })
-
-  it('keeps a pending question open when the expert talks to Helpy in between', () => {
-    const s = new SpeechTracker()
-    s.questionAsked('q1', undefined, 1_000)
-    s.partial('Hörst du mich', 2_000)
-    expect(s.committed('Hörst du mich?', 2_500, false)?.answersQuestionId).toBeUndefined()
-    s.partial('Weil es über fünftausend ist', 4_000)
-    expect(s.committed('Weil es über fünftausend ist.', 5_000)?.answersQuestionId).toBe('q1')
   })
 })
 
@@ -56,25 +56,33 @@ describe('SpeechTracker', () => {
   })
 
   it('ignores empty commits', () => {
-    const s = new SpeechTracker()
-    expect(s.committed('  ', 1_000)).toBeNull()
+    expect(new SpeechTracker().committed('  ', 1_000)).toBeNull()
   })
 
-  it('links the next turn after a question as its answer, once', () => {
+  it('links the first turn about the work after a question as its answer, once', () => {
     const s = new SpeechTracker()
     s.questionAsked('q1', 'e7', 10_000)
     s.partial('Because', 14_000)
-    const answer = s.committed('Because it is over five thousand.', 15_000)
+    const answer = s.claimAnswer(s.committed('Because it is over five thousand.', 15_000)!)
     expect(answer).toMatchObject({ answersQuestionId: 'q1', aboutEventId: 'e7' })
     s.partial('Next one', 20_000)
-    expect(s.committed('Next one.', 21_000)?.answersQuestionId).toBeUndefined()
+    expect(s.claimAnswer(s.committed('Next one.', 21_000)!).answersQuestionId).toBeUndefined()
+  })
+
+  it('keeps the question open while the expert talks to Helpy in between', () => {
+    const s = new SpeechTracker()
+    s.questionAsked('q1', undefined, 1_000)
+    s.partial('Hörst du mich', 2_000)
+    s.committed('Hörst du mich?', 2_500) // to Helpy: not claimed
+    s.partial('Weil es über fünftausend ist', 4_000)
+    expect(s.claimAnswer(s.committed('Weil es über fünftausend ist.', 5_000)!).answersQuestionId).toBe('q1')
   })
 
   it('does not treat a turn long after the question as the answer', () => {
     const s = new SpeechTracker()
     s.questionAsked('q1', undefined, 10_000)
     s.partial('Unrelated', 10_000 + ANSWER_WINDOW_MS + 1)
-    expect(s.committed('Unrelated.', 10_000 + ANSWER_WINDOW_MS + 500)?.answersQuestionId).toBeUndefined()
+    expect(s.claimAnswer(s.committed('Unrelated.', 10_000 + ANSWER_WINDOW_MS + 500)!).answersQuestionId).toBeUndefined()
   })
 
   it('drops a half-heard turn (off the record, or while Helpy speaks)', () => {

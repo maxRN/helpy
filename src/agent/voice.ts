@@ -307,7 +307,8 @@ function startCapture(deps: Deps, deliver: Deliver): void {
       lastInputAt: deps.activity.lastInputAt(),
       lastFrameChangeAt: deps.capture.lastFrameChangeAt(),
       userSilentForMs: now - lastSpeech,
-      agentSpeaking,
+      // The agent, or Helpy's own TTS (questions, replies) when it speaks without the agent.
+      agentSpeaking: agentSpeaking || (deps.isSpeaking?.() ?? false),
       offRecord,
     };
   };

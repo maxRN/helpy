@@ -1,7 +1,9 @@
 // Starts and stops P2's voice agent from Helpy's panel (replaces P1's temporary VoicePanel).
 // Without ElevenLabs keys the agent cannot start; Helpy then keeps working silently with bubbles.
 import { create } from 'zustand'
+import { toLogLines } from '../debrief/sessionLog'
 import { resumeAudio } from '../integration/audioUnlock'
+import { getEventLog } from '../shared/bus'
 import { startListening, stopListening } from '../integration/listener'
 import { installVoiceBridge, resetVoiceClock } from '../integration/voiceBridge'
 import { mascot } from '../mascot'
@@ -56,19 +58,25 @@ export async function startVoice(mode: AgentMode) {
     installed = true
   }
   const voice = await load()
-  // Capture: Scribe v2 Realtime listens first (transcript + "is the expert talking?"), independent of the agent.
+  // Capture runs on ElevenLabs Scribe (listening, pauses) + ElevenLabs TTS (speaking), with Claude choosing
+  // the words. The agent is not used here: its mic would hear the narration, it only speaks English, and it
+  // rephrases what it is told. It is still used for the debrief and the tutor, where it holds a real dialog.
   if (mode === 'capture') {
+    if (voice.isActive()) await voice.stop()
+    resetVoiceClock()
     await withWatchdog(
       startListening({
         onAnswer: (answer) => voice.noteAnswer(answer),
         onRecordCommand: (cmd) => void setOffRecord(cmd === 'off'),
-        onDirectQuestion: (text) => void replyToExpert(text, 'capture'),
+        onMaybeToHelpy: (text) => answerIfForHelpy(text, 'capture'),
       }),
       'Listening',
     ).catch((err) => console.warn('[helpy] Scribe not started', err))
-  } else {
-    stopListening()
+    voice.startCaptureWithoutAgent((question) => void speak(question))
+    useVoice.setState({ mode, error: '' })
+    return
   }
+  stopListening()
   try {
     if (voice.isActive()) await voice.stop()
     resetVoiceClock()
@@ -77,32 +85,29 @@ export async function startVoice(mode: AgentMode) {
   } catch (err) {
     console.warn('[helpy] voice agent not started', err)
     await voice.stop().catch(() => undefined) // also closes a session that connects after we gave up
-    if (mode === 'capture') {
-      // No agent: the same pause detector and question policy still run; Helpy asks with plain TTS.
-      voice.startCaptureWithoutAgent((question) => void speak(question))
-      useVoice.setState({ mode, error: '' })
-    } else {
-      useVoice.setState({ mode: null, error: 'Voice is not available right now. Helpy works quietly with speech bubbles.' })
-    }
+    useVoice.setState({ mode: null, error: 'Voice is not available right now. Helpy works quietly with speech bubbles.' })
   }
 }
 
-/** The expert spoke to Helpy ("hörst du mich?"): a one-sentence answer from Claude, in their language, spoken. */
-export async function replyToExpert(text: string, mode: AgentMode) {
-  mascot.setState('thinking')
-  try {
-    const res = await fetch('/api/helpy/reply', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, mode }),
-    })
-    const body = (await res.json().catch(() => ({}))) as { reply?: string }
-    if (!res.ok || !body.reply) throw new Error('no reply')
-    mascot.bubble(body.reply, { ttlMs: 8000 })
-    await speak(body.reply)
-  } catch {
-    mascot.setState('listening')
-  }
+/**
+ * A turn that might be meant for Helpy ("hörst du mich?", "hast du das verstanden?", "sprich Deutsch"):
+ * Claude decides with the recent session as context. If it was for Helpy, Helpy answers out loud (in the
+ * requested language, which it keeps from then on) and this resolves true.
+ */
+export async function answerIfForHelpy(text: string, mode: AgentMode): Promise<boolean> {
+  const recent = toLogLines(getEventLog()).slice(-12)
+  const res = await fetch('/api/helpy/turn', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, recent, language: session().language, mode }),
+  })
+  if (!res.ok) return false
+  const turn = (await res.json()) as { toHelpy: boolean; reply: string; language: 'de' | 'en' | 'keep' }
+  if (turn.language !== 'keep') session().setLanguage(turn.language)
+  if (!turn.toHelpy || !turn.reply) return false
+  mascot.bubble(turn.reply, { ttlMs: 9000 })
+  void speak(turn.reply)
+  return true
 }
 
 export async function stopVoice() {

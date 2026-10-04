@@ -49,6 +49,8 @@ export interface PolicyRequest {
   history: QaRecord[];
   transcriptTail: { speaker: Speaker; text: string }[];
   budget: { questionsLeft: number; forceGuardrail: boolean };
+  /** Language Helpy speaks with the expert (they can ask for German). Default English. */
+  language?: 'de' | 'en';
 }
 
 export interface PolicyResponse {
@@ -77,6 +79,10 @@ export interface Deps {
    * When active, the agent's own mic is muted in Capture, and speech activity comes from Scribe's VAD.
    */
   speech?: { lastSpeechAt(): number; active(): boolean };
+  /** Optional: Helpy is talking outside the agent (TTS); the pause detector treats it like the agent speaking. */
+  isSpeaking?(): boolean;
+  /** Optional: the language Helpy speaks with the expert ('de' after they asked for German). */
+  language?(): 'de' | 'en';
   mascot: {
     // P4
     setState(s: 'idle' | 'listening' | 'speaking' | 'thinking'): void;

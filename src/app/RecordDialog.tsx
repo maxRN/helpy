@@ -73,7 +73,8 @@ function nextTitle(ms: number): Promise<string | null> {
       resolve(title)
     }
     const onEvent = (e: AppEvent) => {
-      if (e.kind !== 'utterance' || e.speaker !== 'expert') return
+      // A question to Helpy ("kannst du Deutsch?") is not the process name; Helpy answers it instead.
+      if (e.kind !== 'utterance' || e.speaker !== 'expert' || e.meta?.toHelpy) return
       const title = titleFromAnswer(e.text ?? '')
       if (title) finish(title)
     }
