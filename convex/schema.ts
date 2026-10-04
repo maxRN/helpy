@@ -20,6 +20,7 @@ export default defineSchema({
   tasks: defineTable({
     projectId: v.id('projects'),
     startedAt: v.number(),
+    audioStorageId: v.optional(v.id('_storage')),
     completion: v.union(v.null(), v.object({
       durationMs: v.number(),
       error: v.union(v.null(), v.string()),

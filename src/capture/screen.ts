@@ -1,5 +1,5 @@
 import { maskPii } from '../shared/pii'
-import { session } from '../shared/session'
+import { session, useSession } from '../shared/session'
 
 export type Screenshot = {
   blob: Blob
@@ -7,20 +7,28 @@ export type Screenshot = {
   offsetMs: number
 }
 
-export type RecordingResult = { durationMs: number; error: string | null }
+export type RecordingResult = { durationMs: number; error: string | null; audio: Blob | null }
 export type ScreenRecording = { finish: () => Promise<RecordingResult> }
 
 export async function openScreenCapture() {
   if (!navigator.mediaDevices?.getDisplayMedia) {
     throw new Error('Screen capture is unavailable. Use a supported desktop browser over HTTPS or localhost.')
   }
+  if (!navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
+    throw new Error('Microphone recording is unavailable in this browser.')
+  }
+  const mimeType = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus']
+    .find((type) => MediaRecorder.isTypeSupported(type))
+  if (!mimeType) throw new Error('This browser cannot record microphone audio in a supported format.')
   const stream = await navigator.mediaDevices.getDisplayMedia({
     video: { displaySurface: 'monitor' },
     audio: false,
   })
+  let microphone: MediaStream | null = null
   const video = document.createElement('video')
   const close = () => {
     stream.getTracks().forEach((track) => track.stop())
+    microphone?.getTracks().forEach((track) => track.stop())
     video.pause()
     video.srcObject = null
   }
@@ -30,6 +38,14 @@ export async function openScreenCapture() {
     if (!track || track.getSettings().displaySurface !== 'monitor') {
       throw new Error('Choose an entire screen in the sharing dialog to record your workflow.')
     }
+    try {
+      microphone = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+    } catch (failure) {
+      throw new Error(`Microphone access is required to record a task. ${failure instanceof Error ? failure.message : 'Allow microphone access and try again.'}`)
+    }
+    const microphoneTrack = microphone.getAudioTracks()[0]
+    if (!microphoneTrack || microphoneTrack.readyState !== 'live') throw new Error('The microphone is unavailable.')
+    const audioRecorder = new MediaRecorder(microphone, { mimeType })
     video.srcObject = stream
     video.muted = true
     video.playsInline = true
@@ -55,11 +71,47 @@ export async function openScreenCapture() {
         onStopped: () => void
       }): ScreenRecording {
         if (track.readyState !== 'live') throw new Error('Screen sharing has stopped.')
+        if (microphoneTrack.readyState !== 'live') throw new Error('The microphone has stopped.')
         const timer = new Worker(new URL('./screenshot-timer.worker.ts', import.meta.url), { type: 'module' })
         const pending = new Set<Promise<void>>()
         let error: string | null = null
         let finished: Promise<RecordingResult> | null = null
         let stopped = false
+        const chunks: Blob[] = []
+        const audio = new Promise<Blob | null>((resolve) => {
+          audioRecorder.ondataavailable = ({ data }) => {
+            if (data.size) chunks.push(data)
+          }
+          audioRecorder.onstop = () => {
+            const blob = new Blob(chunks, { type: audioRecorder.mimeType })
+            if (!blob.size) error ??= 'No microphone audio was recorded.'
+            resolve(blob.size ? blob : null)
+            if (!stopped) {
+              error ??= 'Microphone recording stopped unexpectedly.'
+              onStopped()
+            }
+          }
+        })
+        audioRecorder.onerror = () => {
+          error ??= 'Microphone recording failed. Any recorded audio will be saved.'
+          onStopped()
+        }
+        microphoneTrack.onended = () => {
+          error ??= 'The microphone was disconnected. Recording stopped.'
+          onStopped()
+        }
+        try {
+          audioRecorder.start(1_000)
+        } catch (failure) {
+          timer.terminate()
+          throw failure
+        }
+        const syncAudioPause = () => {
+          if (session().offRecord && audioRecorder.state === 'recording') audioRecorder.pause()
+          else if (!session().offRecord && audioRecorder.state === 'paused') audioRecorder.resume()
+        }
+        const unsubscribe = useSession.subscribe(syncAudioPause)
+        syncAudioPause()
 
         function capture() {
           if (stopped || session().offRecord) return // off the record: no screenshots
@@ -97,9 +149,12 @@ export async function openScreenCapture() {
               stopped = true
               const durationMs = Math.round(performance.now() - startTime)
               timer.terminate()
+              unsubscribe()
               track.onended = null
+              microphoneTrack.onended = null
+              if (audioRecorder.state !== 'inactive') audioRecorder.stop()
               close()
-              finished = Promise.all(pending).then(() => ({ durationMs, error }))
+              finished = Promise.all([Promise.all(pending), audio]).then(([, audio]) => ({ durationMs, error, audio }))
             }
             return finished
           },

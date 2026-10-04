@@ -47,6 +47,10 @@ Open http://localhost:3000. Projects are available at `/projects/` and support c
 
 ## Task recording
 
+Starting a task also requests microphone access and records your narration alongside the screenshots. Microphone access is required; declining it cancels startup and releases screen sharing. Click **Done** or stop screen sharing to stop both recordings. The browser uses a supported audio format through [MediaRecorder](https://developer.mozilla.org/en-US/docs/Web/API/MediaRecorder). The completed audio uploads to Convex File Storage and its ID is saved on the task. The task summary has an audio player and a link to the recording. Deleting a task or its project also deletes the audio file.
+
+**Pause (off the record)** pauses microphone recording as well as screenshot capture. Paused intervals are omitted from the audio file. The audio stays in browser memory until the task is saved, so keep the tab open and finish the task before closing or refreshing it. If uploading or finalizing fails, **Retry saving** reuses the recording. Losing the tab before saving can lose the audio. Microphone recording works independently of the ElevenLabs voice agent.
+
 Use **Text extraction model** to choose **Florence-2-base-ft** or **Tesseract.js**. The browser remembers your choice; Tesseract is the default if no choice has been saved. A previous SmolVLM selection is changed to Tesseract. Switching terminates the previous worker and loads the selected option. Finish the current task before switching. Each option runs locally in a browser worker.
 
 [Tesseract.js](https://github.com/naptha/tesseract.js) 7 recognizes English and German text. The worker script ships with the app. The WebAssembly engine downloads from jsDelivr and language data downloads from Tesseract's data CDN on first use. Tesseract caches language data in this browser's IndexedDB; clearing site data or browser eviction removes it. Tesseract does not require WebGPU. Florence requires WebGPU and downloads its pinned ONNX files from Hugging Face into this origin's Cache Storage. Later loads reuse those files; clearing site data or browser eviction removes them.

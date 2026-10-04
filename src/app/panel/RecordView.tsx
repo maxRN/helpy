@@ -97,6 +97,7 @@ export function RecordView() {
         <button type="button" className={primaryBtn} disabled={state.kind === 'starting' || state.kind === 'saving'} onClick={() => void done()}>
           {state.kind === 'saving' ? 'Saving…' : state.kind === 'save-failed' ? 'Try saving again' : 'I’m done'}
         </button>
+        {error ? <p role="alert" className="m-0 text-[14px] text-guard">{error}</p> : null}
         {voiceError ? <p className="m-0 text-[14px] text-muted">{voiceError}</p> : null}
       </div>
     )
@@ -118,13 +119,13 @@ export function RecordView() {
         <input id="helpy-process-name" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Pay supplier invoices…" className={`${field} mt-2 h-12`} />
       </div>
       <ol className="m-0 list-decimal space-y-1.5 pl-5 text-[15px] leading-snug text-muted">
-        <li>Share your entire screen when the browser asks.</li>
+        <li>Share your entire screen and allow microphone access when the browser asks.</li>
         <li>Work as usual and say what you do, and why.</li>
         <li>I only ask when you pause. You can pause me any time.</li>
       </ol>
       {error ? (
         <div role="alert" className="rounded-lg bg-guard-soft px-3 py-2">
-          <p className="m-0 text-[15px] text-guard">I could not start. If the browser asked, choose “Entire screen” and try again.</p>
+          <p className="m-0 text-[15px] text-guard">I could not start. Choose “Entire screen” and allow microphone access, then try again.</p>
           <p className="m-0 mt-1 text-[13px] text-muted">{error}</p>
         </div>
       ) : null}

@@ -27,6 +27,7 @@ export const get = query({
     return {
       ...task,
       projectName: project.name,
+      audioUrl: task.audioStorageId ? await ctx.storage.getUrl(task.audioStorageId) : null,
       screenshots: await Promise.all(screenshots.map(async (screenshot) => ({
         ...screenshot,
         url: await ctx.storage.getUrl(screenshot.storageId),
@@ -110,9 +111,10 @@ export const finish = mutation({
     taskId: v.id('tasks'),
     durationMs: v.number(),
     error: v.union(v.null(), v.string()),
+    audioStorageId: v.optional(v.string()),
   },
   returns: v.null(),
-  handler: async (ctx, { taskId, durationMs, error }) => {
+  handler: async (ctx, { taskId, durationMs, error, audioStorageId: rawAudioStorageId }) => {
     const task = await ctx.db.get('tasks', taskId)
     if (!task) throw new ConvexError('Task not found.')
     if (task.completion) return null
@@ -122,7 +124,14 @@ export const finish = mutation({
     if (lastScreenshot && durationMs < lastScreenshot.offsetMs) {
       throw new ConvexError('Task duration cannot end before its last screenshot.')
     }
-    await ctx.db.patch('tasks', taskId, { completion: { durationMs, error } })
+    const audioStorageId = rawAudioStorageId === undefined ? undefined : ctx.db.system.normalizeId('_storage', rawAudioStorageId)
+    if (audioStorageId !== undefined) {
+      const file = audioStorageId ? await ctx.db.system.get('_storage', audioStorageId) : null
+      if (!audioStorageId || !file?.size || !['audio/webm', 'audio/mp4', 'audio/ogg'].includes(file.contentType?.split(';')[0] ?? '')) {
+        throw new ConvexError('A microphone audio recording is required.')
+      }
+    }
+    await ctx.db.patch('tasks', taskId, { completion: { durationMs, error }, ...(audioStorageId ? { audioStorageId } : {}) })
     return null
   },
 })
