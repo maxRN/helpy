@@ -27,12 +27,6 @@ body:has([data-helpy]) .recording-bar {
   display: none;
 }
 
-/* Privacy shield: personal data is blurred on screen, so it never reaches a screenshot. */
-html[data-privacy-shield] [data-pii] {
-  filter: blur(5px);
-  transition: filter 150ms;
-}
-
 /* ---------- Mascot ---------- */
 
 .helpy-robot {

@@ -69,8 +69,6 @@ export function Helpy({ boundsRef }: { boundsRef?: RefObject<HTMLElement | null>
 
   useEffect(() => {
     setMascotClickHandler(onRobotClick)
-    // Personal data on screen is blurred, so it never reaches a screenshot or a model.
-    document.documentElement.setAttribute('data-privacy-shield', '')
     // Dev console: helpy.mascot.pointTo('field-costCenter'), helpy.panel.show(), helpy.question('Why 0400?')
     if (import.meta.env.DEV) Object.assign(window, { helpy: { mascot, panel, question: sharedMascot.waiting } })
     // Helpy just started on this computer: say hello and ask who is working.
@@ -83,7 +81,6 @@ export function Helpy({ boundsRef }: { boundsRef?: RefObject<HTMLElement | null>
     return () => {
       clearTimeout(hello)
       setMascotClickHandler(null)
-      document.documentElement.removeAttribute('data-privacy-shield')
     }
   }, [])
 
