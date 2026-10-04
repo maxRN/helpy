@@ -5,10 +5,8 @@ import { auth } from '../auth'
 export type View =
   | { name: 'signin' }
   | { name: 'home' }
-  | { name: 'library'; processId?: string }
-  | { name: 'process'; processId: string }
   | { name: 'learning' }
-  | { name: 'moment'; stepId: string; processId?: string }
+  | { name: 'moment'; stepId: string }
   | { name: 'report' }
 
 /** What Helpy is busy with right now; clicking the robot opens the matching view (recording: controls in the bubble). */

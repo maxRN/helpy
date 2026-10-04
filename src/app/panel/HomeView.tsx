@@ -1,5 +1,6 @@
 import { useSession } from '../../shared/session'
 import { auth, firstName, useAuth } from '../auth'
+import { helpyApp } from '../helpy-app/store'
 import { recordFlow } from '../RecordDialog'
 import { askQuestions } from './questions'
 import { panel } from './store'
@@ -36,8 +37,15 @@ export function HomeView() {
           <span className="size-3 rounded-full bg-white" aria-hidden />
           Record what I do
         </button>
-        <button type="button" onClick={() => panel.show({ name: 'library' })} className={secondaryBtn}>
-          Recorded processes
+        <button
+          type="button"
+          onClick={() => {
+            panel.close()
+            helpyApp.open()
+          }}
+          className={secondaryBtn}
+        >
+          Open Helpy
         </button>
       </div>
 
