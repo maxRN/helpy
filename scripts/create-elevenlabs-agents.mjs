@@ -21,9 +21,14 @@ if (!KEY) {
 }
 
 const API = 'https://api.elevenlabs.io/v1'
-const VOICE = process.env.ELEVENLABS_TTS_VOICE_ID || 'SAz9YHcvj6GT2YYXdXww' // River: relaxed, neutral, calm
+// Helpy's voice, the same as /api/tts uses in Capture (src/shared/helpyVoice.json).
+const HELPY_VOICE = JSON.parse(readFileSync(new URL('../src/shared/helpyVoice.json', import.meta.url), 'utf8'))
+const VOICE = process.env.ELEVENLABS_TTS_VOICE_ID || HELPY_VOICE.voiceId // River: relaxed, neutral, calm
 const LLM = process.env.ELEVENLABS_AGENT_LLM || 'claude-sonnet-5-5'
-const TTS_MODEL = 'eleven_flash_v2' // ElevenLabs requires turbo/flash v2 for English agents; lowest latency
+// English agents reject the v2.5 models ("English Agents must use turbo or flash v2"), but accept the newer
+// multilingual ones (checked against the API): eleven_v4_turbo speaks German too, so Helpy can explain a question
+// in the language it was asked in.
+const TTS_MODEL = HELPY_VOICE.model
 
 async function call(method, path, body) {
   const res = await fetch(`${API}${path}`, {
@@ -108,7 +113,7 @@ function agentBody(name, prompt, toolIds, dynamicVariables) {
         prompt: { prompt, llm: LLM, tool_ids: toolIds, built_in_tools: skipTurn },
         ...(dynamicVariables ? { dynamic_variables: { dynamic_variable_placeholders: dynamicVariables } } : {}),
       },
-      tts: { voice_id: VOICE, model_id: TTS_MODEL },
+      tts: { voice_id: VOICE, model_id: TTS_MODEL, ...HELPY_VOICE.settings },
       turn: { turn_eagerness: 'patient', turn_timeout: 30 },
       conversation: {
         max_duration_seconds: 1800,
@@ -121,7 +126,7 @@ function agentBody(name, prompt, toolIds, dynamicVariables) {
 
 const prompt = (file) => readFileSync(new URL(`../src/agent/prompts/${file}`, import.meta.url), 'utf8')
 
-console.log(`Voice ${VOICE}, LLM ${LLM}, TTS ${TTS_MODEL}`)
+console.log(`Voice ${VOICE}, LLM ${LLM}, TTS ${TTS_MODEL} ${JSON.stringify(HELPY_VOICE.settings)}`)
 
 // Reuse tools from an earlier run (same name), so re-running does not create duplicates.
 const existing = await call('GET', '/convai/tools')
@@ -166,8 +171,13 @@ const tutor = await upsert(
   }),
 )
 
-// Same check as /api/elevenlabs/signed-url
+// Read back what ElevenLabs stored (it silently keeps old values for fields it does not accept), and the same
+// check as /api/elevenlabs/signed-url.
 for (const [role, id] of [['interviewer', interviewer.agent_id], ['tutor', tutor.agent_id]]) {
+  const stored = (await call('GET', `/convai/agents/${id}`)).conversation_config.tts
+  const want = { voice_id: VOICE, model_id: TTS_MODEL, ...HELPY_VOICE.settings }
+  const wrong = Object.entries(want).filter(([k, v]) => stored[k] !== v)
+  console.log(`stored voice ${role}: ${wrong.length ? `MISMATCH ${wrong.map(([k, v]) => `${k}=${stored[k]} (want ${v})`).join(', ')}` : `ok ${JSON.stringify(want)}`}`)
   const signed = await call('GET', `/convai/conversation/get-signed-url?agent_id=${id}`)
   console.log(`signed url ${role}: ${signed.signed_url ? 'ok' : 'MISSING'}`)
 }

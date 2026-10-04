@@ -1,0 +1,6 @@
+{
+  "comment": "Helpy's voice, the same in Capture (/api/tts) and in both ElevenLabs agents (scripts/create-elevenlabs-agents.mjs). A little reserved: steadier delivery (higher stability) and slightly slower speech. Curious: an emotive multilingual model, so questions rise naturally, also when Helpy explains something in German.",
+  "voiceId": "SAz9YHcvj6GT2YYXdXww",
+  "model": "eleven_v4_turbo",
+  "settings": { "stability": 0.62, "similarity_boost": 0.8, "speed": 0.94 }
+}
