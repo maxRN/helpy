@@ -67,5 +67,5 @@ Optional honest check: 5105 (bench grinder, €1,900, equipment) may stay opex; 
 | Helpy cannot hear (Scribe) | Clicking the robot during the recording says “I can’t hear you right now …”. Without hearing there are no spoken questions and no wrap-up; finish, then use **Answer my questions** on the process page later, or switch to the example process. |
 | The debrief voice does not start | Helpy says it cannot talk right now. On the process page, **Answer my questions** starts it again. |
 | The recording is too short | Helpy says it saw too little work on screen. Record again with at least three invoice changes. |
-| Teach compile is slow or fails | Teach continues with the Work Map’s rules as they are (logged as a warning). The example process always has compiled rules. |
+| Teach compile is slow or fails | Helpy says it could not turn Sabine’s rules into checks and offers **Try again** (it does not teach without being able to stop a mistake). The example process always has checkable rules. |
 | Anything else | Use **Process Supplier Invoices** (hand-written example) for Map and Teach; it has the same rules and the same 5102 catch. |

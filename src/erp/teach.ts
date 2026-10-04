@@ -12,6 +12,8 @@ const SEED_STATUS = new Map(ALL_INVOICES.map((i) => [i.id, i.status]))
 export interface TeachStart {
   workMap: WorkMap
   warnings: string[]
+  /** Rules Helpy can check on an invoice (and stop a wrong decision with). 0 = it can only guide. */
+  checkable: number
 }
 
 async function compile(guardrails: Guardrail[]): Promise<{ guardrails: Guardrail[]; warnings: string[] }> {
@@ -77,5 +79,6 @@ export async function startTeach(workMap: WorkMap): Promise<TeachStart> {
   erp().open(null)
   resetStepTracker()
   if (warnings.length > 0) console.warn('[startTeach]', warnings)
-  return { workMap: ready, warnings }
+  const checkable = ready.guardrails.filter((g) => g.require.length > 0).length
+  return { workMap: ready, warnings, checkable }
 }
