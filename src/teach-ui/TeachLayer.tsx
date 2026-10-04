@@ -9,6 +9,12 @@ import { session } from '../shared/session'
 import type { AppEvent, Guardrail } from '../shared/types'
 import { guardrailMet } from './model'
 
+/** Still typing into a field: Helpy waits until the field is left. */
+const typing = () => {
+  const a = document.activeElement
+  return a instanceof HTMLTextAreaElement || (a instanceof HTMLInputElement && !['button', 'submit', 'checkbox', 'radio', 'range'].includes(a.type))
+}
+
 const momentAction = (stepId?: string) => (stepId ? [{ label: 'Show me Sabine’s screen', primary: true, onClick: () => shared.showExpertClip(stepId) }] : [])
 
 /**
@@ -22,13 +28,17 @@ export function TeachLayer({ onCaseDone }: { onCaseDone?: () => void }) {
     let pendingFix: { invoiceId: string; guardrail: Guardrail } | null = null
     let lastViolationAt = 0
     let guideTimer: ReturnType<typeof setTimeout> | undefined
+    // Invoices the trainee finished (post, hold, 2nd approval): known at the click, before the ERP saved the new status.
+    const done = new Set<string>()
+    const finished = (id: string) => done.has(id) || erp().invoices[id]?.status !== 'open'
 
     /** Point at the next step and say it (judgment calls: ask what Sabine would do). */
     const guide = (invoiceId: string, delay = 700) => {
       clearTimeout(guideTimer)
       guideTimer = setTimeout(() => {
         const wm = session().workMap
-        if (!wm || pendingFix || erp().openId !== invoiceId) return
+        // A posted, held or escalated invoice is done: nothing to guide (its buttons lose focus as they get disabled).
+        if (!wm || pendingFix || erp().openId !== invoiceId || finished(invoiceId) || typing()) return
         const step = getNextStep(invoiceId)
         mascot.setState('speaking')
         if (!step?.targetId) {
@@ -41,9 +51,13 @@ export function TeachLayer({ onCaseDone }: { onCaseDone?: () => void }) {
       }, delay)
     }
 
-    const onFocus = () => {
+    // Clicking into a field is not doing the step: Helpy moves on once the trainee changed something
+    // (field_changed) or leaves the field (checked it, nothing to change), never while a dropdown is open.
+    const onLeaveField = (e: FocusEvent) => {
       const id = erp().openId
-      if (id && erp().invoices[id]?.teachOnly) guide(id, 900)
+      const invoice = id ? erp().invoices[id] : undefined
+      if (!id || !invoice?.teachOnly || finished(id) || !(e.target instanceof Element) || !e.target.closest('[data-target]')) return
+      guide(id, 600)
     }
 
     const onEvent = (e: AppEvent) => {
@@ -75,6 +89,7 @@ export function TeachLayer({ onCaseDone }: { onCaseDone?: () => void }) {
       if (!invoice?.teachOnly) return
 
       if (e.kind === 'invoice_opened') {
+        if (invoice.status === 'open') done.delete(invoice.id) // practice cases are reset for every new round
         guide(invoice.id, 600)
         return
       }
@@ -95,7 +110,10 @@ export function TeachLayer({ onCaseDone }: { onCaseDone?: () => void }) {
       }
 
       if (e.kind === 'action' && e.action) {
+        done.add(invoice.id)
         clearTimeout(guideTimer)
+        // Case done: back to the corner (and the clicked button should not keep Helpy next to it).
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
         mascot.setState('speaking')
         mascot.pointTo(null)
         mascot.pose('cheer', 2200)
@@ -105,10 +123,10 @@ export function TeachLayer({ onCaseDone }: { onCaseDone?: () => void }) {
     }
 
     bus.on('event', onEvent)
-    window.addEventListener('focusin', onFocus)
+    window.addEventListener('focusout', onLeaveField)
     return () => {
       bus.off('event', onEvent)
-      window.removeEventListener('focusin', onFocus)
+      window.removeEventListener('focusout', onLeaveField)
       clearTimeout(guideTimer)
     }
   }, [onCaseDone])
