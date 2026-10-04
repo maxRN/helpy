@@ -52,6 +52,12 @@ describe('speech bubble lifecycle', () => {
     expect(bubble()).toBeNull()
   })
 
+  it("Helpy's reply to a question back stays when that question is logged after the reply started", () => {
+    mascot.bubble('Ich meine die Neckartal-Rechnung: warum Capex und nicht Wartung?')
+    emitEvent({ source: 'voice', kind: 'utterance', speaker: 'expert', text: 'Wie meinst du das?', meta: { toHelpy: true } })
+    expect(bubble()).toBe('Ich meine die Neckartal-Rechnung: warum Capex und nicht Wartung?')
+  })
+
   it('a question stays while the user works, until it is answered', () => {
     shared.bubble('Why did you hold the Kramer invoice?')
     emitEvent({ source: 'dom', kind: 'invoice_opened', invoiceId: '4473' })

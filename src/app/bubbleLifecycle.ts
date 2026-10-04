@@ -14,8 +14,9 @@ const WORK = new Set<AppEvent['kind']>(['invoice_opened', 'field_changed', 'acti
 export function topicsResolvedBy(e: AppEvent): Parameters<typeof mascot.resolve> {
   // The user works on: information Helpy gave is no longer the point.
   if (e.source === 'dom' && WORK.has(e.kind)) return ['notice']
-  // The user speaks: they responded to what Helpy said.
-  if (e.source === 'voice' && e.kind === 'utterance' && (e.speaker === 'expert' || e.speaker === 'trainee')) return ['notice']
+  // The user speaks: they responded to what Helpy said. Not when they spoke to Helpy ("Wie meinst du das?"):
+  // that line is logged once Helpy already answers it, and the answer must stay.
+  if (e.source === 'voice' && e.kind === 'utterance' && (e.speaker === 'expert' || e.speaker === 'trainee') && !e.meta?.toHelpy) return ['notice']
   return []
 }
 
