@@ -265,6 +265,17 @@ export function askWaitingQuestion(): boolean {
   return policy?.askReadyNow() ?? false;
 }
 
+/**
+ * Capture is ending: ask the live questions still owed (fewer than three, or none about a guardrail), each
+ * at a pause, about decisions still unexplained on screen. Resolves with the coverage reached.
+ */
+export async function wrapUpCapture(opts: { cancelled?: () => boolean; onStart?: (owed: number) => void } = {}) {
+  return (await policy?.wrapUp(opts)) ?? { asked: 0, hasGuardrail: false };
+}
+
+/** Live question coverage so far (null outside Capture). */
+export const captureStats = () => policy?.stats() ?? null;
+
 /** An answer heard outside the agent (Scribe in Capture): goes into the question history like the agent's own. */
 export function noteAnswer(q: Quote): void {
   getDeps().mascot.bubble(null);

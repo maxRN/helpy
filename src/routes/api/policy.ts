@@ -24,6 +24,8 @@ Rules:
 - eventId: the id of the screen event the question is about.
 - "screen" is what is visible right now: the app state is exact; a screenshot description can be outdated. Use it to understand the moment.
 - Only name invoices, suppliers and values that appear in the events or on screen. Never invent an invoice number or a value. If you cannot tell what exactly happened, ask in general words ("What did you just check there?") instead of guessing.
+- coverage: what the live questions still owe. If coverage.questionsNeeded > 0 and an unresolvedDecisions entry is not explained by the transcript, prefer asking about it over staying quiet (use its id as eventId). If coverage.guardrailNeeded, prefer a guardrail question.
+- If coverage.mustAsk is true, the task is ending and the question is owed: ask must be true, about one of the events.
 - If nothing is worth asking now, set ask to false, leave question and eventId empty, and give the reason.`;
 
 const GUARDRAIL_FALLBACK = { en: 'Is there a limit on this step?', de: 'Gibt es bei diesem Schritt eine Grenze?' };

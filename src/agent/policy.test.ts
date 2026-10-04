@@ -193,3 +193,116 @@ describe('live question timing', () => {
     expect(askedEvents()).toHaveLength(1);
   });
 });
+
+// ---- coverage: at least three live questions, one about a guardrail, never repeated, always grounded ----
+
+function decisionEvent(meta: Record<string, unknown>, text: string) {
+  const e: AppEvent = { id: `d${Math.random().toString(36).slice(2)}`, t: Date.now() % 1_000_000, type: 'dom', text, meta };
+  for (const fn of listeners) fn(e);
+  return e;
+}
+
+/** The model as a stub: `answers` in order, then declines. Records every request. */
+function stubPolicy(answers: Array<Record<string, unknown>>) {
+  const requests: Array<Record<string, any>> = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_url: string, init: { body: string }) => {
+      requests.push(JSON.parse(init.body));
+      const next = answers.shift() ?? { ask: false, reason: 'nothing new' };
+      return { ok: true, json: async () => next };
+    }),
+  );
+  return requests;
+}
+
+describe('live question coverage', () => {
+  it('tells the model which decisions are still unexplained and how many questions are owed', async () => {
+    const requests = stubPolicy([]);
+    startCaptureWithoutAgent(deliver);
+    const e = decisionEvent({ kind: 'field_changed', field: 'costCenter' }, 'Invoice 4471: cost center 4711 → 0400 (capex)');
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(requests[0].coverage.questionsNeeded).toBe(3);
+    expect(requests[0].coverage.guardrailNeeded).toBe(true);
+    expect(requests[0].coverage.unresolvedDecisions.map((d: { id: string }) => d.id)).toEqual([e.id]);
+  });
+
+  it('drops a reworded repeat of a question already asked', async () => {
+    stubPolicy([
+      { ask: true, question: 'You moved that one to capex. What made you do that?', eventId: '', kind: 'why' },
+      { ask: true, question: 'You moved this one to capex, what made you do it?', eventId: '', kind: 'why' },
+    ]);
+    startCaptureWithoutAgent(deliver);
+    decisionEvent({ kind: 'field_changed', field: 'costCenter' }, 'Invoice 4471: cost center 4711 → 0400 (capex)');
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(spoken).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(31_000); // past the minimum gap
+    decisionEvent({ kind: 'field_changed', field: 'costCenter' }, 'Invoice 4472: cost center 4711 → 0400 (capex)');
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(spoken).toHaveLength(1);
+  });
+
+  it('keeps the question tied to an event it was given, even if the model names another id', async () => {
+    stubPolicy([{ ask: true, question: 'You held the Kramer invoice. Why that one?', eventId: 'made-up', kind: 'why' }]);
+    startCaptureWithoutAgent(deliver);
+    const e = decisionEvent({ kind: 'action', action: 'hold' }, 'Invoice 4472: put on hold');
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(askedEvents()[0].meta?.eventId).toBe(e.id);
+  });
+
+  it('wrap-up: asks the owed questions at pauses, about unexplained decisions, with a guardrail among them', async () => {
+    stubPolicy([]); // the model never wants to ask during the task
+    startCaptureWithoutAgent(deliver);
+    const capex = decisionEvent({ kind: 'field_changed', field: 'costCenter' }, 'Invoice 4471: cost center 4711 → 0400 (capex)');
+    const hold = decisionEvent({ kind: 'action', action: 'hold' }, 'Invoice 4472: put on hold');
+    const second = decisionEvent({ kind: 'action', action: 'request_approval' }, 'Invoice 4473: sent for a second approval');
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(spoken).toEqual([]);
+
+    const { wrapUpCapture } = await import('./voice');
+    const onStart = vi.fn();
+    const done = wrapUpCapture({ onStart });
+    await vi.advanceTimersByTimeAsync(3 * 31_000);
+    const result = await done;
+
+    expect(onStart).toHaveBeenCalledWith(3);
+    expect(result.asked).toBe(3);
+    expect(result.hasGuardrail).toBe(true);
+    const asked = askedEvents();
+    expect(new Set(asked.map((a) => a.text)).size).toBe(3);
+    expect(asked.map((a) => a.meta?.eventId).every((id) => [capex.id, hold.id, second.id].includes(id as string))).toBe(true);
+    expect(asked[0].meta?.kind).toBe('guardrail'); // the guardrail question is owed first
+  });
+
+  it('wrap-up: never speaks while the expert types', async () => {
+    stubPolicy([]);
+    startCaptureWithoutAgent(deliver);
+    decisionEvent({ kind: 'action', action: 'hold' }, 'Invoice 4472: put on hold');
+    const { wrapUpCapture } = await import('./voice');
+    const done = wrapUpCapture();
+    await keepDoing(typeKey, 300, 6_000);
+    expect(spoken).toEqual([]);
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(spoken).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(120_000);
+    await done;
+  });
+
+  it('wrap-up: nothing is owed once three questions incl. a guardrail were asked during the task', async () => {
+    stubPolicy([
+      { ask: true, question: 'You moved that one to capex. What made you do that?', eventId: '', kind: 'why' },
+      { ask: true, question: 'Is there an amount limit for capex?', eventId: '', kind: 'guardrail' },
+      { ask: true, question: 'You held the Kramer invoice. Why that one?', eventId: '', kind: 'why' },
+    ]);
+    startCaptureWithoutAgent(deliver);
+    for (const text of ['Invoice 4471: cost center 4711 → 0400 (capex)', 'Invoice 4471: asset number → A-1', 'Invoice 4472: put on hold']) {
+      decisionEvent({ kind: 'field_changed', field: 'costCenter' }, text);
+      await vi.advanceTimersByTimeAsync(31_000);
+    }
+    expect(spoken).toHaveLength(3);
+    const { wrapUpCapture } = await import('./voice');
+    const result = await wrapUpCapture();
+    expect(result).toEqual({ asked: 3, hasGuardrail: true });
+    expect(spoken).toHaveLength(3);
+  });
+});

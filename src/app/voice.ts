@@ -166,6 +166,28 @@ export async function teachBackAloud(text: string): Promise<{ confirmed: boolean
   return voice.isConnected() ? voice.teachBack(text) : null
 }
 
+/**
+ * Capture is ending: Helpy asks the live questions it still owes (at least three, one about a guardrail),
+ * about decisions it saw but nobody explained, each at a pause. No-op without a live voice session.
+ */
+export async function wrapUpLiveQuestions(cancelled: () => boolean) {
+  const voice = await load()
+  if (!voice.isActive()) return null
+  const lang = session().language
+  return voice.wrapUpCapture({
+    cancelled,
+    onStart: (owed) => {
+      const line =
+        lang === 'de'
+          ? owed === 1 ? 'Bevor du aufhörst: noch eine kurze Frage zu dem, was ich gesehen habe.' : `Bevor du aufhörst: noch ${owed} kurze Fragen zu dem, was ich gesehen habe.`
+          : owed === 1 ? 'Before you stop: one quick question about what I saw.' : `Before you stop: ${owed} quick questions about what I saw.`
+      mascot.setState('speaking')
+      mascot.bubble(line)
+      void speak(line)
+    },
+  })
+}
+
 /** Capture: ask the question Helpy is holding back (its raised hand), now. */
 export async function askWaitingQuestion() {
   const voice = await load()
