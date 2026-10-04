@@ -1,6 +1,8 @@
 import { create } from 'zustand'
+import { auth } from '../auth'
+import { panel } from '../panel/store'
 
-// Helpy's own app window (opened from the robot's panel): company info, recorded processes,
+// Helpy's own app window (opened from the robot's panel or desktop): company info, recorded processes,
 // a process as a workflow, and one step as a concrete guide with its decision tree.
 
 export type AppPage =
@@ -21,6 +23,8 @@ export const helpyApp = {
   /** Opens the window; without a page it shows the last one (Company info the first time). */
   open(page?: AppPage) {
     useHelpyApp.setState((s) => ({ open: true, page: page ?? s.page }))
+    if (auth.user()) panel.close()
+    else panel.show({ name: 'signin' })
   },
   go(page: AppPage) {
     useHelpyApp.setState({ page })

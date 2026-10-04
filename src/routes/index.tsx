@@ -8,7 +8,7 @@ import { ErpApp, ErpServices } from '../erp/ErpApp'
 // Browser-only: the session store, screen capture and Helpy need window and localStorage.
 export const Route = createFileRoute('/')({ ssr: false, component: Home })
 
-// A mock desktop with the ERP as its only app; Helpy, the apprentice, sits on top of everything.
+// A mock desktop with the ERP and Helpy; Helpy, the apprentice, sits on top of everything.
 function Home() {
   const screen = useRef<HTMLDivElement>(null)
   return (

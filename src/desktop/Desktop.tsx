@@ -1,8 +1,10 @@
 import { Link } from '@tanstack/react-router'
 import { useEffect, useState, type ReactNode } from 'react'
+import { helpyApp } from '../app/helpy-app/store'
+import { HelpyMark } from '../mascot'
 
 // A mock desktop for the demo: it makes clear that Sabine AI sits on top of any desktop app,
-// and that the ERP is only the example app. The only thing on the desktop is the ERP icon.
+// and that the ERP is only the example app.
 
 type WindowState = 'closed' | 'open' | 'minimized'
 
@@ -83,7 +85,7 @@ function WindowFrame({
   )
 }
 
-/** Mock desktop with one app: ProcureFlow. `app` is rendered inside its window. */
+/** Mock desktop with ProcureFlow and Helpy. `app` is rendered inside ProcureFlow's window. */
 export function Desktop({ app }: { app: ReactNode }) {
   const [win, setWin] = useState<WindowState>('closed')
   const [maximized, setMaximized] = useState(false)
@@ -104,7 +106,6 @@ export function Desktop({ app }: { app: ReactNode }) {
         <path d="M0 320 C 260 260, 520 360, 760 300 S 1060 270, 1200 320 L1200 400 L0 400 Z" fill="#163742" opacity="0.9" />
       </svg>
 
-      {/* The only thing on the desktop */}
       <button
         type="button"
         onClick={open}
@@ -112,6 +113,15 @@ export function Desktop({ app }: { app: ReactNode }) {
       >
         <LedgerIcon />
         <span className="text-[12px] leading-tight [text-shadow:0_1px_2px_rgba(0,0,0,0.6)]">ProcureFlow</span>
+      </button>
+      <button
+        type="button"
+        title="Open Helpy"
+        onClick={() => helpyApp.open()}
+        className="absolute top-28 left-5 flex w-24 flex-col items-center gap-1.5 rounded-md p-2 text-center text-white outline-none hover:bg-white/15 focus:bg-white/20 focus-visible:ring-1 focus-visible:ring-white/60"
+      >
+        <span className="flex h-11 items-center"><HelpyMark size={44} /></span>
+        <span className="text-[12px] leading-tight [text-shadow:0_1px_2px_rgba(0,0,0,0.6)]">Helpy</span>
       </button>
 
       {win !== 'closed' ? (

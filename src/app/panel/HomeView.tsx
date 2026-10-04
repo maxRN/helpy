@@ -39,10 +39,7 @@ export function HomeView() {
         </button>
         <button
           type="button"
-          onClick={() => {
-            panel.close()
-            helpyApp.open()
-          }}
+          onClick={() => helpyApp.open()}
           className={secondaryBtn}
         >
           Open Helpy

@@ -73,7 +73,7 @@ function Breadcrumb({ page }: { page: AppPage }) {
 }
 
 /**
- * Helpy's app, opened from the robot ("Open Helpy"): a window as large as the ERP's. Logo top left,
+ * Helpy's app, opened from the robot ("Open Helpy") or desktop icon: a window as large as the ERP's. Logo top left,
  * pages on the left (Company info, Recorded processes), then a process as a workflow and a step as a guide.
  * The robot stays on top; "Teach me this" closes the window and the robot takes over.
  */
