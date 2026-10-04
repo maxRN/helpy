@@ -30,11 +30,54 @@ export function mightBeToHelpy(text: string): boolean {
   return MAYBE_TO_HELPY.test(text.trim())
 }
 
+/** What a turn does with the question Helpy is waiting on (decided by Claude, /api/helpy/turn). */
+export type TurnIntent = 'answer' | 'clarify' | 'skip' | 'other'
+
+export interface TurnVerdict {
+  toHelpy: boolean
+  intent: TurnIntent
+  reply: string
+  language: 'de' | 'en' | 'keep'
+}
+
+/**
+ * Keeps a verdict consistent: an answer is never a reply to Helpy, and without a question nothing is an answer.
+ * A clarification always gets a reply: at least the question again (`question`), never silence.
+ */
+export function normalizeTurn(out: TurnVerdict, question?: string): TurnVerdict {
+  const intent = question ? out.intent : 'other'
+  const toHelpy = intent === 'answer' ? false : intent === 'clarify' || intent === 'skip' ? true : out.toHelpy
+  const reply = toHelpy ? out.reply.trim() : ''
+  return { ...out, intent, toHelpy, reply: intent === 'clarify' && !reply ? question! : reply }
+}
+
+/**
+ * What to do with a finished turn while Helpy may be waiting for an answer:
+ *  answer    → it is the answer to the open question (or plain narration when none is open)
+ *  clarified → they asked back ("Wie meinst du das?"): Helpy explained, the same question stays open
+ *  skipped   → they declined it: the question is closed without an answer
+ *  toHelpy   → said to Helpy about something else: answered, the question stays open
+ *  narration → about the work but not the answer: the question stays open
+ * Without a verdict (Claude unavailable) a turn after a question counts as its answer, as before.
+ */
+export type TurnRoute = 'answer' | 'clarified' | 'skipped' | 'toHelpy' | 'narration'
+
+export function routeTurn(verdict: Pick<TurnVerdict, 'toHelpy' | 'intent'> | null, questionOpen: boolean): TurnRoute {
+  if (!verdict) return 'answer'
+  if (questionOpen) {
+    if (verdict.intent === 'answer') return 'answer'
+    if (verdict.intent === 'clarify') return 'clarified'
+    if (verdict.intent === 'skip') return 'skipped'
+  }
+  if (verdict.toHelpy) return 'toHelpy'
+  return questionOpen ? 'narration' : 'answer'
+}
+
 export class SpeechTracker {
   private lastSpeech = 0
   private turnStart: number | null = null
   private partialText = ''
-  private question: { id: string; eventId?: string; at: number } | null = null
+  private question: { id: string; eventId?: string; at: number; text?: string } | null = null
 
   /** Interim text while the expert speaks. Empty partials (noise) do not count as speech. */
   partial(text: string, now: number) {
@@ -69,8 +112,24 @@ export class SpeechTracker {
   }
 
   /** The agent asked something: the expert's next turn about the work is the answer. */
-  questionAsked(id: string, eventId: string | undefined, now: number) {
-    this.question = { id, eventId, at: now }
+  questionAsked(id: string, eventId: string | undefined, now: number, text?: string) {
+    this.question = { id, eventId, at: now, text }
+  }
+
+  /** The question still waiting for its answer (within the answer window), if any. */
+  openQuestion(now: number): { id: string; text?: string } | null {
+    const q = this.question
+    return q && now - q.at <= ANSWER_WINDOW_MS ? { id: q.id, text: q.text } : null
+  }
+
+  /** Helpy explained its question again: the answer window starts over. */
+  reopenQuestion(now: number) {
+    if (this.question) this.question = { ...this.question, at: now }
+  }
+
+  /** The expert declined the question: nothing after this is its answer. */
+  dropQuestion() {
+    this.question = null
   }
 
   /** Forget the half-heard turn, e.g. when going off the record. */

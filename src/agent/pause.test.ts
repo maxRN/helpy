@@ -114,3 +114,19 @@ describe('startPauseLoop', () => {
     stop();
   });
 });
+
+describe('isPause: in the middle of an invoice', () => {
+  it('a breath between two sentences is no pause while the expert is mid-invoice', () => {
+    const r = isPause(base({ midTask: true, lastTypingAt: 100_000 - 3_000, userSilentForMs: 2_000 }));
+    expect(r.pause).toBe(false);
+    expect(r.blockers.join()).toContain('middle of an invoice');
+  });
+
+  it('a long quiet moment mid-invoice is a pause (the expert may be stuck or thinking)', () => {
+    expect(isPause(base({ midTask: true, lastTypingAt: 100_000 - TH.midTaskQuietMs, userSilentForMs: TH.midTaskQuietMs, lastFieldAt: 100_000 - TH.midTaskQuietMs })).pause).toBe(true);
+  });
+
+  it('after the invoice is finished, a normal pause is enough', () => {
+    expect(isPause(base({ midTask: false, lastTypingAt: 100_000 - 3_000, userSilentForMs: 2_000 })).pause).toBe(true);
+  });
+});

@@ -69,5 +69,5 @@ export function fallbackQuestion(e: Pick<AppEvent, 'meta'> | undefined, kind: Qu
   }
   if (kind === 'guardrail') return de ? 'Wann würdest du bei so einer Rechnung aufhören und jemanden fragen?' : 'When would you stop on an invoice like this and ask someone?';
   if (kind === 'exception') return de ? 'Wann machst du das anders?' : 'When would you do this differently?';
-  return de ? 'Was hast du da gerade geprüft?' : 'What did you just check there?';
+  return de ? 'Was war dir an dieser Rechnung wichtig, bevor du entschieden hast?' : 'What mattered to you on that invoice before you decided?';
 }

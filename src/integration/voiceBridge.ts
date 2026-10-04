@@ -125,8 +125,25 @@ export function workMapMarkdown(w: WorkMap): string {
 
 let voiceT0: number | null = null
 
+/**
+ * Invoices the expert changed something on and has not finished (post, hold, second approval). While one of them
+ * is open, the expert is mid-task: a question then waits for the end of the invoice or a long quiet moment.
+ */
+const inProgress = new Set<string>()
+
+export function trackWorkInProgress(e: AppEvent) {
+  if (e.source !== 'dom' || !e.invoiceId) return
+  if (e.kind === 'field_changed') inProgress.add(e.invoiceId)
+  if (e.kind === 'action') inProgress.delete(e.invoiceId)
+}
+
+export function midTask(openId: string | null, status: string | undefined): boolean {
+  return !!openId && status === 'open' && inProgress.has(openId)
+}
+
 /** Call once on the client before using src/agent/voice.ts. */
 export function installVoiceBridge() {
+  bus.on('event', trackWorkInProgress)
   const deps: Deps = {
     bus: {
       emit: (a) => void fromAgentEvent(a),
@@ -147,6 +164,10 @@ export function installVoiceBridge() {
     activity: { lastTypingAt: activity.lastTypingAt, lastFieldAt: activity.lastFieldAt },
     speech: { lastSpeechAt: speech.lastSpeechAt, active: speech.active, turnOpen: speech.isSpeaking, replyPending: speech.replyPending },
     isSpeaking: () => useMascot.getState().state === 'speaking',
+    midTask: () => {
+      const openId = erp().openId
+      return midTask(openId, openId ? erp().invoices[openId]?.status : undefined)
+    },
     language: () => session().language,
     screen: (opts) => screenSummary(opts),
     ungroundedRefs: (text) => ungroundedInvoiceRefs(text),

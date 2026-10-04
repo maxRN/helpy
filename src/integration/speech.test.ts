@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ANSWER_WINDOW_MS, mightBeToHelpy, recordCommand, SpeechTracker } from './speech'
+import { ANSWER_WINDOW_MS, mightBeToHelpy, normalizeTurn, recordCommand, routeTurn, SpeechTracker } from './speech'
 
 describe('mightBeToHelpy (first filter before Claude decides)', () => {
   it('lets through everything that could be meant for Helpy', () => {
@@ -91,5 +91,59 @@ describe('SpeechTracker', () => {
     s.dropTurn()
     expect(s.isSpeaking()).toBe(false)
     expect(s.currentPartial()).toBe('')
+  })
+})
+
+describe('routeTurn: a clarification is not an answer', () => {
+  const verdict = (intent: 'answer' | 'clarify' | 'skip' | 'other', toHelpy = false) => ({ intent, toHelpy })
+
+  it('"Wie meinst du das?" after a question: Helpy explains, the same question stays open', () => {
+    expect(routeTurn(verdict('clarify', true), true)).toBe('clarified')
+  })
+
+  it('only a real answer answers the question', () => {
+    expect(routeTurn(verdict('answer'), true)).toBe('answer')
+  })
+
+  it('a skip closes the question without an answer', () => {
+    expect(routeTurn(verdict('skip', true), true)).toBe('skipped')
+  })
+
+  it('narration about something else leaves the question open', () => {
+    expect(routeTurn(verdict('other'), true)).toBe('narration')
+    expect(routeTurn(verdict('other', true), true)).toBe('toHelpy')
+  })
+
+  it('without a verdict (Claude unavailable) a turn after a question counts as the answer, as before', () => {
+    expect(routeTurn(null, true)).toBe('answer')
+  })
+
+  it('without an open question nothing is a clarification', () => {
+    expect(routeTurn(normalizeTurn({ intent: 'clarify', toHelpy: true, reply: 'x', language: 'keep' }), false)).toBe('toHelpy')
+    expect(normalizeTurn({ intent: 'answer', toHelpy: true, reply: 'Thanks', language: 'keep' }, 'Why?')).toMatchObject({ toHelpy: false, reply: '' })
+  })
+
+  it('a clarification is never met with silence: at least the question is said again', () => {
+    expect(normalizeTurn({ intent: 'clarify', toHelpy: true, reply: ' ', language: 'keep' }, 'Why capex?').reply).toBe('Why capex?')
+  })
+})
+
+describe('SpeechTracker: the open question', () => {
+  it('stays open after a clarification, with a fresh answer window, until the real answer', () => {
+    const s = new SpeechTracker()
+    s.questionAsked('q1', 'e7', 1_000, 'You moved that one to capex. What made you do that?')
+    expect(s.openQuestion(2_000)?.text).toBe('You moved that one to capex. What made you do that?')
+    s.reopenQuestion(1_000 + ANSWER_WINDOW_MS) // Helpy explained it late in the window
+    expect(s.openQuestion(1_000 + ANSWER_WINDOW_MS + 10_000)).not.toBeNull()
+    s.partial('Weil es über fünftausend ist', 1_000 + ANSWER_WINDOW_MS + 12_000)
+    const u = s.committed('Weil es über fünftausend ist.', 1_000 + ANSWER_WINDOW_MS + 13_000)!
+    expect(s.claimAnswer(u).answersQuestionId).toBe('q1')
+  })
+
+  it('is closed by a skip', () => {
+    const s = new SpeechTracker()
+    s.questionAsked('q1', undefined, 1_000, 'Why?')
+    s.dropQuestion()
+    expect(s.openQuestion(2_000)).toBeNull()
   })
 })

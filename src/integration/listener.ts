@@ -6,7 +6,7 @@ import { bus, emitEvent } from '../shared/bus'
 import { useMascot } from '../shared/mascot'
 import { session, sessionClock, useSession } from '../shared/session'
 import type { AppEvent, Quote } from '../shared/types'
-import { mightBeToHelpy, recordCommand, SpeechTracker, type Utterance } from './speech'
+import { mightBeToHelpy, recordCommand, routeTurn, SpeechTracker, type TurnVerdict, type Utterance } from './speech'
 
 // Words Scribe should not mishear in this demo (max 20 characters each).
 const KEYTERMS = ['capex', 'opex', 'ProcureFlow', 'cost center', 'asset number', 'Kramer', 'Brno', 'vendor master', 'Hartmann', 'Weber', 'second approval', 'quarter-end', 'Quartalsende']
@@ -29,7 +29,8 @@ let connection: { close(): void; mute(): void; unmute(): void } | null = null
 let cleanups: Array<() => void> = []
 let onAnswer: ((q: Quote) => void) | null = null
 let onRecordCommand: ((cmd: 'off' | 'on') => void) | null = null
-let onMaybeToHelpy: ((text: string) => Promise<boolean>) | null = null
+let onTurn: ((text: string, question?: string) => Promise<TurnVerdict | null>) | null = null
+let onQuestionSkipped: (() => void) | null = null
 
 const DECIDE_TIMEOUT_MS = 8000 // if Claude takes longer, treat the turn as narration
 
@@ -74,25 +75,44 @@ function logUtterance(u: Utterance, toHelpy = false) {
 }
 
 /**
- * A finished turn: if it might be meant for Helpy, Claude decides (and Helpy answers); otherwise, or if it
- * was about the work, it is logged as narration and may answer the agent's pending question.
+ * A finished turn. While Helpy waits for the answer to its question, or when the turn might be meant for Helpy,
+ * Claude decides what it is (and Helpy replies): the answer, a question back about Helpy's question ("Wie meinst
+ * du das?", which Helpy explains while the question stays open), a skip, or something else. Only a real answer is
+ * logged as the answer; narration that does not answer it leaves the question open.
  */
 async function handleTurn(u: Utterance) {
-  let toHelpy = false
-  if (onMaybeToHelpy && mightBeToHelpy(u.text)) {
+  const open = tracker.openQuestion(Date.now())
+  let verdict: TurnVerdict | null = null
+  if (onTurn && (open || mightBeToHelpy(u.text))) {
     deciding++
     let timer: ReturnType<typeof setTimeout> | undefined
     try {
-      toHelpy = await Promise.race([
-        onMaybeToHelpy(u.text).catch(() => false),
-        new Promise<boolean>((resolve) => (timer = setTimeout(() => resolve(false), DECIDE_TIMEOUT_MS))),
+      verdict = await Promise.race([
+        onTurn(u.text, open?.text).catch(() => null),
+        new Promise<null>((resolve) => (timer = setTimeout(() => resolve(null), DECIDE_TIMEOUT_MS))),
       ])
     } finally {
       clearTimeout(timer)
       deciding--
     }
+    // Without a verdict a turn that could only have been a remark to Helpy is still plain narration.
+    if (!verdict && !open) verdict = { toHelpy: false, intent: 'other', reply: '', language: 'keep' }
   }
-  logUtterance(toHelpy ? u : tracker.claimAnswer(u), toHelpy)
+  switch (routeTurn(verdict, !!open)) {
+    case 'answer':
+      return logUtterance(tracker.claimAnswer(u))
+    case 'clarified':
+      tracker.reopenQuestion(Date.now())
+      return logUtterance(u, true)
+    case 'skipped':
+      tracker.dropQuestion()
+      onQuestionSkipped?.()
+      return logUtterance(u, true)
+    case 'toHelpy':
+      return logUtterance(u, true)
+    case 'narration':
+      return logUtterance(u)
+  }
 }
 
 const MAX_MUTED_MS = 30_000 // Helpy never talks this long; if its "speaking" state sticks, listen again anyway
@@ -133,8 +153,13 @@ export interface ListenerCallbacks {
   onAnswer?: (q: Quote) => void
   /** "Off the record" / "back on the record" said aloud (the agent's own mic is muted in Capture). */
   onRecordCommand?: (cmd: 'off' | 'on') => void
-  /** Might be meant for Helpy: decide (and answer if so); resolve true when it was addressed to Helpy. */
-  onMaybeToHelpy?: (text: string) => Promise<boolean>
+  /**
+   * A finished turn while a question is open (`question`), or one that might be meant for Helpy: Claude decides
+   * what it is and Helpy replies if it was meant for it. null = no verdict (counts as the answer, as before).
+   */
+  onTurn?: (text: string, question?: string) => Promise<TurnVerdict | null>
+  /** The expert declined the open question ("not now"): it is closed without an answer. */
+  onQuestionSkipped?: () => void
 }
 
 /** Starts listening; resolves once Scribe confirmed the session. */
@@ -142,7 +167,8 @@ export async function startListening(callbacks: ListenerCallbacks = {}): Promise
   if (connection) return
   onAnswer = callbacks.onAnswer ?? null
   onRecordCommand = callbacks.onRecordCommand ?? null
-  onMaybeToHelpy = callbacks.onMaybeToHelpy ?? null
+  onTurn = callbacks.onTurn ?? null
+  onQuestionSkipped = callbacks.onQuestionSkipped ?? null
   useListener.setState({ status: 'connecting', error: '' })
   try {
     const res = await fetch('/api/elevenlabs/scribe-token', { signal: AbortSignal.timeout(8000) })
@@ -229,7 +255,7 @@ export async function startListening(callbacks: ListenerCallbacks = {}): Promise
     )
     // The agent's question decides which next turn counts as the answer.
     const onEvent = (e: AppEvent) => {
-      if (e.kind === 'question_asked') tracker.questionAsked(String(e.meta?.agentId ?? e.id), e.meta?.eventId as string | undefined, Date.now())
+      if (e.kind === 'question_asked') tracker.questionAsked(String(e.meta?.agentId ?? e.id), e.meta?.eventId as string | undefined, Date.now(), e.text)
     }
     bus.on('event', onEvent)
     cleanups.push(() => bus.off('event', onEvent))
@@ -252,7 +278,8 @@ export function stopListening() {
   connection = null
   onAnswer = null
   onRecordCommand = null
-  onMaybeToHelpy = null
+  onTurn = null
+  onQuestionSkipped = null
   tracker.dropTurn()
   conn?.close()
   useListener.setState({ status: 'off', speaking: false, partial: '', muted: false })

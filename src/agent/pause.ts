@@ -25,6 +25,11 @@ export interface PauseInputs {
   lastFieldAt?: number;
   /** A finished turn might be addressed to Helpy and is being decided or answered right now. */
   replyPending?: boolean;
+  /**
+   * The expert is in the middle of an invoice: they changed something on it and have not finished it yet (post,
+   * hold, second approval) nor left it. A short breath there is not a pause; only a long quiet moment is.
+   */
+  midTask?: boolean;
   agentSpeaking: boolean;
   offRecord: boolean;
 }
@@ -47,6 +52,8 @@ export const PAUSE_THRESHOLDS = {
   afterTurnMs: 1500,
   /** After a click or focus in a form control: the expert is in the middle of a step. */
   sinceFieldMs: 4000,
+  /** In the middle of an invoice: no typing, no field and no speech for this long before Helpy may ask. */
+  midTaskQuietMs: 8000,
 } as const;
 
 export function isPause(i: PauseInputs, th: typeof PAUSE_THRESHOLDS = PAUSE_THRESHOLDS): PauseResult {
@@ -62,6 +69,10 @@ export function isPause(i: PauseInputs, th: typeof PAUSE_THRESHOLDS = PAUSE_THRE
     else if (!i.turnOpen && i.userSilentForMs < th.afterTurnMs) blockers.push(`expert just finished a sentence ${i.userSilentForMs}ms ago`);
   } else if (i.userSilentForMs < th.userSilentMs) {
     blockers.push(`expert speaking (silent ${i.userSilentForMs}ms)`);
+  }
+  if (i.midTask) {
+    const quietFor = Math.min(sinceTyping, i.lastFieldAt === undefined ? Infinity : i.now - i.lastFieldAt, i.userSilentForMs);
+    if (quietFor < th.midTaskQuietMs) blockers.push(`in the middle of an invoice (quiet ${quietFor}ms)`);
   }
   if (i.replyPending) blockers.push('answering the expert');
   if (i.agentSpeaking) blockers.push('agent speaking');

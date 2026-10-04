@@ -288,6 +288,11 @@ export function noteAnswer(q: Quote): void {
   policy?.recordAnswer(q);
 }
 
+/** The expert declined the live question ("not now", heard by Scribe): it stays unanswered and is closed. */
+export function noteSkipped(): void {
+  policy?.recordSkip();
+}
+
 // ---------------------------------------------------------------- off the record
 
 /** source 'voice' = the agent's tool call (agent already confirmed aloud); 'ui' = P4's button. */
@@ -338,6 +343,7 @@ function startCapture(deps: Deps, deliver: Deliver): void {
       endpointing,
       turnOpen: endpointing ? deps.speech!.turnOpen!() : undefined,
       replyPending: deps.speech?.replyPending?.() ?? false,
+      midTask: deps.midTask?.() ?? false,
       // The agent, or Helpy's own TTS (questions, replies) when it speaks without the agent.
       agentSpeaking: agentSpeaking || (deps.isSpeaking?.() ?? false),
       offRecord,

@@ -7,6 +7,7 @@ import { getEventLog } from '../shared/bus'
 import { ungroundedInvoiceRefs } from '../shared/grounding'
 import { screenSummary } from '../shared/screen'
 import { speech, startListening, stopListening } from '../integration/listener'
+import type { TurnVerdict } from '../integration/speech'
 import { installVoiceBridge, resetVoiceClock } from '../integration/voiceBridge'
 import { mascot } from '../mascot'
 import { useMascot } from '../shared/mascot'
@@ -72,7 +73,8 @@ export async function startVoice(mode: AgentMode) {
       startListening({
         onAnswer: (answer) => voice.noteAnswer(answer),
         onRecordCommand: (cmd) => void setOffRecord(cmd === 'off'),
-        onMaybeToHelpy: (text) => answerIfForHelpy(text, 'capture'),
+        onTurn: (text, question) => replyToTurn(text, 'capture', question),
+        onQuestionSkipped: () => voice.noteSkipped(),
       }),
       'Listening',
     ).catch((err) => console.warn('[helpy] Scribe not started', err))
@@ -104,30 +106,45 @@ export async function startVoice(mode: AgentMode) {
   }
 }
 
-/**
- * A turn that might be meant for Helpy ("hörst du mich?", "hast du das verstanden?", "sprich Deutsch"):
- * Claude decides with the recent session as context. If it was for Helpy, Helpy answers out loud (in the
- * requested language, which it keeps from then on) and this resolves true.
- */
-export async function answerIfForHelpy(text: string, mode: AgentMode): Promise<boolean> {
+/** Claude's verdict on a turn (see /api/helpy/turn); null when it could not decide. Says nothing. */
+export async function classifyTurn(text: string, mode: AgentMode, question?: string): Promise<TurnVerdict | null> {
   const recent = toLogLines(getEventLog()).slice(-12)
   const res = await fetch('/api/helpy/turn', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, recent, language: session().language, mode, screen: screenSummary() }),
-  })
-  if (!res.ok) return false
-  const turn = (await res.json()) as { toHelpy: boolean; reply: string; language: 'de' | 'en' | 'keep' }
+    body: JSON.stringify({ text, recent, language: session().language, mode, screen: screenSummary(), question }),
+  }).catch(() => null)
+  if (!res?.ok) return null
+  const turn = (await res.json().catch(() => null)) as TurnVerdict | null
+  if (!turn) return null
   if (turn.language !== 'keep') session().setLanguage(turn.language)
-  if (!turn.toHelpy || !turn.reply) return false
+  return turn
+}
+
+/**
+ * A turn that might be meant for Helpy ("hörst du mich?", "sprich Deutsch"), or any turn while Helpy waits for
+ * the answer to `question`: Claude decides with the recent session as context. If it was for Helpy (e.g. "Wie
+ * meinst du das?"), Helpy answers out loud, in the language it was spoken to in, which it keeps from then on.
+ * Resolves with the verdict once Helpy starts answering (null when Claude could not decide).
+ */
+export async function replyToTurn(text: string, mode: AgentMode, question?: string): Promise<TurnVerdict | null> {
+  const turn = await classifyTurn(text, mode, question)
+  if (!turn?.toHelpy || !turn.reply) return turn
   // Grounding: never name an invoice that does not exist; ask instead.
   const unknown = ungroundedInvoiceRefs(turn.reply)
   if (unknown.length) console.warn('[helpy] reply named an invoice that does not exist:', unknown.join(', '))
   const reply = unknown.length ? (session().language === 'de' ? 'Welche Rechnung meinst du genau?' : 'Which invoice do you mean exactly?') : turn.reply
-  mascot.bubble(reply)
-  // Resolve once Helpy starts answering, so no live question slips in between (see speech.replyPending).
-  await new Promise<void>((resolve) => void speak(reply, { onStart: () => resolve() }).finally(resolve))
-  return true
+  // The bubble shows the reply when Helpy starts saying it. Resolve then, so no live question slips in between
+  // (see speech.replyPending).
+  await new Promise<void>((resolve) =>
+    void speak(reply, {
+      onStart: () => {
+        mascot.bubble(reply)
+        resolve()
+      },
+    }).finally(resolve),
+  )
+  return turn
 }
 
 export async function stopVoice() {

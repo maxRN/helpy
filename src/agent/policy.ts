@@ -1,4 +1,4 @@
-import { fallbackQuestion, isDuplicateQuestion, unresolvedDecisions } from './coverage';
+import { fallbackQuestion, isDecision, isDuplicateQuestion, unresolvedDecisions } from './coverage';
 import { emit, getDeps, nowRel } from './deps';
 import { isPause, logPause, type PauseInputs, type PauseResult } from './pause';
 import {
@@ -22,6 +22,13 @@ export const POLICY_LIMITS = {
   guardrailByQuestion: 1, // the brief requires a guardrail question: if the first was not one, the second must be
 } as const;
 
+/** After asking, Helpy waits this long for the answer before it may ask something else (a clarification keeps it waiting). */
+export const ANSWER_WAIT_MS = 45_000;
+/** A held question is checked against new narration and screen events at most this often. */
+const ANSWERED_CHECK_DEBOUNCE_MS = 300;
+/** At the pause, a check still running for the held question is awaited at most this long. */
+const ANSWERED_CHECK_WAIT_MS = 2000;
+
 const MAX_PENDING = 40;
 const MAX_SEEN = 200;
 /** Wrap-up: how long Helpy waits for a pause, and for the answer, per owed question. */
@@ -31,7 +38,7 @@ const WRAP_ANSWER_WAIT_MS = 30_000;
 // takes 1.5-2.5 s), with a slow periodic check as a fallback.
 const PREPARE_AFTER_EVENT_MS = 1200;
 const PREPARE_EVERY_MS = 8000;
-type ReadyQuestion = { question: string; kind: QuestionKind; eventId?: string };
+type ReadyQuestion = { question: string; kind: QuestionKind; eventId?: string; eventT?: number; heldAt?: number };
 
 /** What deliver() gets to say a question at the right moment. */
 export interface DeliveryControl {
@@ -55,6 +62,8 @@ export interface PolicyOpts {
   /** Tell the transcript to treat the next expert turn as the answer. */
   noteQuestion(q: { questionEventId: string; eventId?: string }): void;
   endpoint?: string; // default /api/policy
+  /** Asks Claude whether a held question was answered meanwhile (default /api/helpy/answered). */
+  answeredEndpoint?: string;
 }
 
 export function createQuestionPolicy(o: PolicyOpts) {
@@ -73,9 +82,20 @@ export function createQuestionPolicy(o: PolicyOpts) {
   let disposed = false;
   let wrapping = false; // the wrap-up asks the owed questions itself
   let answerWaiter: (() => void) | null = null;
+  // Decisions the expert explained before Helpy got to ask (a held question was withdrawn): never asked about.
+  const explained = new Set<string>();
+  let checking: Promise<void> | null = null; // is the held question answered already? (Claude)
+  let checkAgain = false;
+  let checkSoon: ReturnType<typeof setTimeout> | undefined;
 
   let prepareSoon: ReturnType<typeof setTimeout> | undefined;
   const off = deps.bus.on('*', (e) => {
+    // A held question may be answered by what the expert says (or does) before Helpy gets to ask it.
+    const expertSaid = e.type === 'utterance' && e.speaker !== 'agent' && e.meta?.toHelpy !== true;
+    if (ready && e.text && (expertSaid || SCREEN_EVENT_TYPES.has(e.type))) {
+      clearTimeout(checkSoon);
+      checkSoon = setTimeout(() => void checkHeld(), ANSWERED_CHECK_DEBOUNCE_MS);
+    }
     if (!SCREEN_EVENT_TYPES.has(e.type) || !e.text) return;
     if (o.getInputs().offRecord) return;
     pending.push(e);
@@ -113,17 +133,78 @@ export function createQuestionPolicy(o: PolicyOpts) {
   const canAsk = (now: number): string | null => {
     if (asked >= POLICY_LIMITS.maxQuestions) return 'question budget used';
     if (asked > 0 && now - lastAskedAt < POLICY_LIMITS.minGapMs) return 'too soon after last question';
+    if (awaitingAnswer(now)) return 'still waiting for the answer to the last question';
     if (!pending.length) return 'no unexplained screen events';
+    // Opening an app or an invoice, scrolling, looking: nothing was decided, so there is nothing to ask about.
+    if (!pending.some((e) => isDecision(e) && !explained.has(e.id))) return 'no finished decision to ask about';
     return null;
   };
+
+  /** The last question has neither an answer nor a skip yet, and was asked recently. */
+  const awaitingAnswer = (now: number) => {
+    const last = history[history.length - 1];
+    return !!last && last.answer === undefined && now - lastAskedAt < ANSWER_WAIT_MS;
+  };
+
+  /** Decisions on screen that nobody asked about and the expert did not explain on their own. */
+  const openDecisions = () => unresolvedDecisions(seen, history).filter((e) => !explained.has(e.id));
 
   const coverage = () => ({
     questionsNeeded: Math.max(0, POLICY_LIMITS.minQuestions - asked),
     guardrailNeeded: !hasGuardrail(),
-    unresolvedDecisions: unresolvedDecisions(seen, history)
+    unresolvedDecisions: openDecisions()
       .slice(-8)
       .map((e) => ({ id: e.id, t: e.t, text: e.text as string })),
   });
+
+  /**
+   * Was the held question answered meanwhile, in the narration or by doing it? Claude decides against the recent
+   * transcript and screen events (no keyword matching). If so, the question is withdrawn: never asked, and the
+   * decision it was about counts as explained.
+   */
+  function checkHeld(): Promise<void> {
+    if (checking) {
+      checkAgain = true;
+      return checking;
+    }
+    const q = ready;
+    if (!q || disposed) return Promise.resolve();
+    const since = (q.eventT ?? q.heldAt ?? 0) - 30_000;
+    const req = {
+      question: q.question,
+      transcriptTail: o.tail(10),
+      events: seen.filter((e) => e.t >= since).slice(-12).map((e) => ({ t: e.t, text: e.text as string })),
+      language: deps.language?.() ?? 'en',
+    };
+    const run = fetch(o.answeredEndpoint ?? '/api/helpy/answered', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req),
+      signal: AbortSignal.timeout(6000),
+    })
+      .then((res) => (res.ok ? (res.json() as Promise<{ answered?: boolean; reason?: string }>) : null))
+      .catch(() => null)
+      .then((verdict) => {
+        if (verdict?.answered && ready === q && !delivering) withdraw(q, verdict.reason || 'answered');
+      })
+      .finally(() => {
+        checking = null;
+        const again = checkAgain;
+        checkAgain = false;
+        if (again && ready && !disposed) void checkHeld();
+      });
+    checking = run;
+    return run;
+  }
+
+  function withdraw(q: ReadyQuestion, why: string): void {
+    ready = null;
+    deps.mascot.waiting?.(null);
+    // What the question was about is explained now; only newer decisions may lead to a question.
+    if (q.eventId) explained.add(q.eventId);
+    for (const e of pending) if (isDecision(e) && e.t <= (q.eventT ?? Number.POSITIVE_INFINITY)) explained.add(e.id);
+    logPause({ t: nowRel(), pause: false, blockers: [], note: `withdrawn, the expert answered it meanwhile (${why}): ${q.question}` });
+  }
 
   /**
    * One model call over screen events (default: the pending ones). null = nothing worth asking.
@@ -163,12 +244,13 @@ export function createQuestionPolicy(o: PolicyOpts) {
     }
     // The question must be about one of the events it was given (screen grounding).
     const eventId = events.some((e) => e.id === res.eventId) ? res.eventId : newest;
-    return { question: res.question, kind: res.kind ?? (force ? 'guardrail' : 'why'), eventId };
+    const eventT = events.find((e) => e.id === eventId)?.t;
+    return { question: res.question, kind: res.kind ?? (force ? 'guardrail' : 'why'), eventId, eventT };
   }
 
   /** Hold a question until the next pause; Helpy raises a hand meanwhile. */
   function hold(q: ReadyQuestion): void {
-    ready = q;
+    ready = { ...q, heldAt: q.heldAt ?? nowRel() };
     deps.mascot.waiting?.(q.question);
     logPause({ t: nowRel(), pause: false, blockers: [], note: `holding (${q.kind}): ${q.question}` });
   }
@@ -203,6 +285,11 @@ export function createQuestionPolicy(o: PolicyOpts) {
    */
   async function askNow(q: ReadyQuestion): Promise<void> {
     if (delivering) return;
+    // The expert may just have answered the held question: let that check finish (briefly) before saying it.
+    if (ready === q && checking) {
+      await Promise.race([checking, new Promise((r) => setTimeout(r, ANSWERED_CHECK_WAIT_MS))]);
+      if (ready !== q || delivering) return; // withdrawn, or already being said
+    }
     delivering = q;
     ready = null;
     let committed = false;
@@ -287,6 +374,16 @@ export function createQuestionPolicy(o: PolicyOpts) {
     }
   }
 
+  /** The expert declined the latest question ("not now"): it is closed, and Helpy may ask about something else. */
+  function recordSkip(): void {
+    const last = history[history.length - 1];
+    if (last && last.answer === undefined) {
+      last.answer = '(skipped)';
+      answerWaiter?.();
+      answerWaiter = null;
+    }
+  }
+
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
   /** Resolves when `ok()` holds (checked every 250 ms), or false after `ms` or when cancelled. */
@@ -301,8 +398,8 @@ export function createQuestionPolicy(o: PolicyOpts) {
 
   /** The next question still owed at the end of the task: the model's choice, or a grounded fallback. */
   async function owedQuestion(): Promise<ReadyQuestion | null> {
-    const open = unresolvedDecisions(seen, history);
-    const events = open.length ? open : seen.filter((e) => !history.some((h) => h.eventId === e.id));
+    const open = openDecisions();
+    const events = open.length ? open : seen.filter((e) => !history.some((h) => h.eventId === e.id) && !explained.has(e.id));
     if (!events.length) return null;
     const needGuardrail = !hasGuardrail();
     const fromModel = await think(events, true);
@@ -362,6 +459,7 @@ export function createQuestionPolicy(o: PolicyOpts) {
     onPause,
     askReadyNow,
     recordAnswer,
+    recordSkip,
     wrapUp,
     stats: () => ({ asked, hasGuardrail: hasGuardrail(), history: [...history], waiting: ready?.question ?? null, coverage: coverage() }),
     dispose: () => {
@@ -370,6 +468,7 @@ export function createQuestionPolicy(o: PolicyOpts) {
       off();
       clearInterval(prepare);
       clearTimeout(prepareSoon);
+      clearTimeout(checkSoon);
       if (ready) deps.mascot.waiting?.(null);
     },
   };

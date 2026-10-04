@@ -96,6 +96,8 @@ export interface Deps {
   speech?: { lastSpeechAt(): number; active(): boolean; turnOpen?(): boolean; replyPending?(): boolean };
   /** Optional: Helpy is talking outside the agent (TTS); the pause detector treats it like the agent speaking. */
   isSpeaking?(): boolean;
+  /** Optional: the expert changed something on the open invoice and has not finished it yet (see PauseInputs.midTask). */
+  midTask?(): boolean;
   /** Optional: the language Helpy speaks with the expert ('de' after they asked for German). */
   language?(): 'de' | 'en';
   /** Optional: invoice numbers in `text` that do not exist in the app (never say those). */

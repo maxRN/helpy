@@ -22,8 +22,9 @@ let spoken: string[];
 // The activity tracker keeps its state across tests, so every test starts later than the last one.
 let clock = 1_000_000;
 
+/** A finished decision on screen (only decisions lead to a live question). */
 function screenEvent(text = 'Invoice 4471: cost center 4711 → 0400 (capex)') {
-  const e: AppEvent = { id: `e${listeners.length}-${Date.now()}`, t: 0, type: 'dom', text };
+  const e: AppEvent = { id: `e${listeners.length}-${Date.now()}`, t: 0, type: 'dom', text, meta: { kind: 'field_changed', field: 'costCenter' } };
   for (const fn of listeners) fn(e);
 }
 
@@ -317,14 +318,112 @@ describe('live question coverage', () => {
       { ask: true, question: 'You held the Kramer invoice. Why that one?', eventId: '', kind: 'why' },
     ]);
     startCaptureWithoutAgent(deliver);
+    const { noteAnswer } = await import('./voice');
     for (const text of ['Invoice 4471: cost center 4711 → 0400 (capex)', 'Invoice 4471: asset number → A-1', 'Invoice 4472: put on hold']) {
       decisionEvent({ kind: 'field_changed', field: 'costCenter' }, text);
-      await vi.advanceTimersByTimeAsync(31_000);
+      await vi.advanceTimersByTimeAsync(5_000);
+      noteAnswer({ text: 'Because that is the rule.', t: 0, speaker: 'expert' });
+      await vi.advanceTimersByTimeAsync(26_000);
     }
     expect(spoken).toHaveLength(3);
     const { wrapUpCapture } = await import('./voice');
     const result = await wrapUpCapture();
     expect(result).toEqual({ asked: 3, hasGuardrail: true });
     expect(spoken).toHaveLength(3);
+  });
+});
+
+// ---- reserved: only finished decisions, one question at a time, and never what was already explained ----
+
+/** /api/policy answers with `question`; /api/helpy/answered with `answered`. Records the URLs called. */
+function stubRoutes(o: { question?: string; answered?: boolean }) {
+  const calls: string[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string) => {
+      calls.push(url);
+      if (url.includes('/api/helpy/answered')) return { ok: true, json: async () => ({ answered: o.answered ?? false, reason: 'test' }) };
+      return { ok: true, json: async () => ({ ask: !!o.question, question: o.question ?? '', eventId: '', kind: 'why' }) };
+    }),
+  );
+  return calls;
+}
+
+function expertSays(text: string) {
+  const e: AppEvent = { id: `u${Math.random().toString(36).slice(2)}`, t: 0, type: 'utterance', speaker: 'expert', text };
+  for (const fn of listeners) fn(e);
+}
+
+describe('reserved live questions', () => {
+  it('never asks about navigation: opening the app or an invoice is no reason to ask', async () => {
+    const calls = stubRoutes({ question: 'You have all the invoices in front of you, what do you do next?' });
+    startCaptureWithoutAgent(deliver);
+    decisionEvent({ kind: 'invoice_opened', invoiceId: '4471' }, 'Opened invoice 4471 from Neckartal (€6,800.00, equipment)');
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(calls.filter((u) => u.includes('/api/policy'))).toEqual([]); // the model is not even asked
+    expect(spoken).toEqual([]);
+  });
+
+  it('withdraws a held question once the narration answered it (Claude decides, not keywords)', async () => {
+    const calls = stubRoutes({ question: 'You moved that one to capex. What made you do that?', answered: true });
+    startCaptureWithoutAgent(deliver);
+    typeKey();
+    screenEvent();
+    await keepDoing(typeKey, 250, 3_000); // busy: the question is thought out and held (raised hand)
+    expect(getDeps().mascot.waiting).toHaveBeenLastCalledWith('You moved that one to capex. What made you do that?');
+
+    expertSays('Das geht auf Capex, weil Ausrüstung über fünftausend Euro bei uns immer aktiviert wird.');
+    await keepDoing(typeKey, 250, 1_000);
+    expect(calls.some((u) => u.includes('/api/helpy/answered'))).toBe(true);
+    expect(getDeps().mascot.waiting).toHaveBeenLastCalledWith(null);
+
+    await vi.advanceTimersByTimeAsync(20_000); // a long pause: still nothing to ask
+    expect(spoken).toEqual([]);
+    expect(askedEvents()).toHaveLength(0);
+  });
+
+  it('asks a held question at the pause when the narration did not answer it', async () => {
+    stubRoutes({ question: 'You moved that one to capex. What made you do that?', answered: false });
+    startCaptureWithoutAgent(deliver);
+    typeKey();
+    screenEvent();
+    await keepDoing(typeKey, 250, 3_000);
+    expertSays('So, und jetzt noch die Anlagennummer.');
+    await keepDoing(typeKey, 250, 1_000);
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(spoken).toEqual(['You moved that one to capex. What made you do that?']);
+  });
+
+  it('waits for the answer before asking the next question', async () => {
+    stubPolicy([
+      { ask: true, question: 'You moved that one to capex. What made you do that?', eventId: '', kind: 'why' },
+      { ask: true, question: 'You held the Kramer invoice. Why that one?', eventId: '', kind: 'why' },
+    ]);
+    startCaptureWithoutAgent(deliver);
+    decisionEvent({ kind: 'field_changed', field: 'costCenter' }, 'Invoice 4471: cost center 4711 → 0400 (capex)');
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(spoken).toHaveLength(1);
+    decisionEvent({ kind: 'action', action: 'hold' }, 'Invoice 4472: put on hold');
+    await vi.advanceTimersByTimeAsync(31_000); // past the minimum gap, but the first question is still open
+    expect(spoken).toHaveLength(1);
+    const { noteAnswer } = await import('./voice');
+    noteAnswer({ text: 'Equipment over five thousand is always capex.', t: 0, speaker: 'expert' });
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(spoken).toHaveLength(2);
+  });
+
+  it('a skipped question closes it, so Helpy may ask about the next decision', async () => {
+    stubPolicy([
+      { ask: true, question: 'You moved that one to capex. What made you do that?', eventId: '', kind: 'why' },
+      { ask: true, question: 'You held the Kramer invoice. Why that one?', eventId: '', kind: 'why' },
+    ]);
+    startCaptureWithoutAgent(deliver);
+    decisionEvent({ kind: 'field_changed', field: 'costCenter' }, 'Invoice 4471: cost center 4711 → 0400 (capex)');
+    await vi.advanceTimersByTimeAsync(5_000);
+    const { noteSkipped } = await import('./voice');
+    noteSkipped();
+    decisionEvent({ kind: 'action', action: 'hold' }, 'Invoice 4472: put on hold');
+    await vi.advanceTimersByTimeAsync(31_000);
+    expect(spoken).toHaveLength(2);
   });
 });
