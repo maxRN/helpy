@@ -65,11 +65,16 @@ function logUtterance(u: Utterance, toHelpy = false) {
   }
 }
 
+const MAX_MUTED_MS = 30_000 // Helpy never talks this long; if its "speaking" state sticks, listen again anyway
+let muteTimer: ReturnType<typeof setTimeout> | undefined
+
 function setMuted(muted: boolean) {
   if (!connection || useListener.getState().muted === muted) return
+  clearTimeout(muteTimer)
   if (muted) {
     connection.mute()
     tracker.dropTurn()
+    muteTimer = setTimeout(() => setMuted(false), MAX_MUTED_MS)
   } else connection.unmute()
   useListener.setState({ muted, speaking: false, partial: '' })
 }
@@ -91,7 +96,7 @@ export async function startListening(callbacks: ListenerCallbacks = {}): Promise
   onDirectQuestion = callbacks.onDirectQuestion ?? null
   useListener.setState({ status: 'connecting', error: '' })
   try {
-    const res = await fetch('/api/elevenlabs/scribe-token')
+    const res = await fetch('/api/elevenlabs/scribe-token', { signal: AbortSignal.timeout(8000) })
     const body = (await res.json().catch(() => ({}))) as { token?: string; error?: string }
     if (!res.ok || !body.token) throw new Error(body.error ?? `scribe-token failed (${res.status})`)
 

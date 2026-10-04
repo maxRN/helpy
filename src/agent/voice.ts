@@ -39,6 +39,8 @@ export const isConnected = (): boolean => conv !== null;
 // Capture without an agent (none configured or it failed to start): same pause detector and
 // question policy, questions spoken by plain TTS, answers heard by Scribe.
 let lite = false;
+// Bumped by stop(): a start() that finishes connecting after a stop() closes its session instead of using it.
+let startGen = 0;
 
 /** True while live questions can be asked: with the agent, or in Capture without one. */
 export const isActive = (): boolean => conv !== null || lite;
@@ -64,6 +66,7 @@ function requireConn(): Session {
 
 export async function start(m: Mode, opts: { workMapMarkdown?: string } = {}): Promise<void> {
   if (conv || lite) await stop();
+  const gen = ++startGen;
   const deps = getDeps();
 
   mode = m;
@@ -104,7 +107,7 @@ export async function start(m: Mode, opts: { workMapMarkdown?: string } = {}): P
   // Loaded lazily so TanStack Start's server render never touches browser-only SDK code.
   const { Conversation } = await import('@elevenlabs/client');
 
-  conv = await Conversation.startSession({
+  const started = await Conversation.startSession({
     signedUrl,
     connectionType: 'websocket',
     clientTools: tools,
@@ -142,6 +145,12 @@ export async function start(m: Mode, opts: { workMapMarkdown?: string } = {}): P
       if (conv) void stop();
     },
   });
+  // stop() ran while we were connecting (e.g. the app gave up waiting): close this late session.
+  if (gen !== startGen) {
+    void started.endSession().catch(() => undefined);
+    return;
+  }
+  conv = started;
 
   deps.mascot.setState('listening');
   // Capture with Scribe listening: the agent must not hear (or answer) the narration; it only speaks on [ASK].
@@ -153,6 +162,7 @@ export async function start(m: Mode, opts: { workMapMarkdown?: string } = {}): P
 }
 
 export async function stop(): Promise<void> {
+  startGen++;
   cleanup.forEach((fn) => {
     try {
       fn();

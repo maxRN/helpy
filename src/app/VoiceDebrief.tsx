@@ -133,7 +133,15 @@ async function debrief(convex: ConvexReactClient) {
   let asked = 0
   while (asked < MAX_QUESTIONS && !run?.stopped) {
     setPhase('finding')
-    const res = await post<{ gaps: Gap[]; done: boolean }>('/api/debrief/gaps', { log: await log(), asked })
+    const res = await post<{ gaps: Gap[]; done: boolean; doneReason?: string; notEnoughWork?: boolean }>('/api/debrief/gaps', { log: await log(), asked })
+    // Too little of the task was recorded: say so instead of inventing questions or a Work Map.
+    if (res.notEnoughWork) {
+      setPhase('idle')
+      mascot.setState('idle')
+      mascot.bubble(res.doneReason ?? 'I saw too little work on screen. Record the task again.', { ttlMs: 12_000 })
+      if (voice.isConnected()) void voice.say(res.doneReason ?? 'I saw too little work on screen. Please record the task again.').catch(() => undefined)
+      return
+    }
     if (res.done || res.gaps.length === 0) break
     for (const gap of res.gaps) {
       if (asked >= MAX_QUESTIONS || run?.stopped) break

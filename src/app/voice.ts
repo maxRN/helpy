@@ -1,6 +1,7 @@
 // Starts and stops P2's voice agent from Helpy's panel (replaces P1's temporary VoicePanel).
 // Without ElevenLabs keys the agent cannot start; Helpy then keeps working silently with bubbles.
 import { create } from 'zustand'
+import { resumeAudio } from '../integration/audioUnlock'
 import { startListening, stopListening } from '../integration/listener'
 import { installVoiceBridge, resetVoiceClock } from '../integration/voiceBridge'
 import { mascot } from '../mascot'
@@ -18,6 +19,37 @@ export const useVoice = create<VoiceState>()(() => ({ mode: null, error: '' }))
 let installed = false
 const load = () => import('../agent/voice')
 
+const NUDGE_AFTER_MS = 4_000
+const GIVE_UP_AFTER_MS = 20_000
+
+/**
+ * Never let a hanging start freeze Helpy. After 4 s Helpy asks for a click (Chrome may hold audio until a
+ * user gesture, see audioUnlock.ts); after 20 s it gives up so the caller can fall back.
+ */
+async function withWatchdog<T>(work: Promise<T>, what: string): Promise<T> {
+  let nudged = false
+  let giveUp: ReturnType<typeof setTimeout> | undefined
+  const nudge = setTimeout(() => {
+    nudged = true
+    mascot.setState('idle')
+    mascot.bubble('Click me once so I can turn on my ears and my voice.', {
+      actions: [{ label: 'Turn on sound', primary: true, onClick: resumeAudio }],
+    })
+  }, NUDGE_AFTER_MS)
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        giveUp = setTimeout(() => reject(new Error(`${what} did not start within ${GIVE_UP_AFTER_MS / 1000} s`)), GIVE_UP_AFTER_MS)
+      }),
+    ])
+  } finally {
+    clearTimeout(nudge)
+    clearTimeout(giveUp)
+    if (nudged) mascot.bubble(null)
+  }
+}
+
 export async function startVoice(mode: AgentMode) {
   if (!installed) {
     installVoiceBridge()
@@ -26,21 +58,25 @@ export async function startVoice(mode: AgentMode) {
   const voice = await load()
   // Capture: Scribe v2 Realtime listens first (transcript + "is the expert talking?"), independent of the agent.
   if (mode === 'capture') {
-    await startListening({
-      onAnswer: (answer) => voice.noteAnswer(answer),
-      onRecordCommand: (cmd) => void setOffRecord(cmd === 'off'),
-      onDirectQuestion: (text) => void replyToExpert(text, 'capture'),
-    }).catch((err) => console.warn('[helpy] Scribe not started', err))
+    await withWatchdog(
+      startListening({
+        onAnswer: (answer) => voice.noteAnswer(answer),
+        onRecordCommand: (cmd) => void setOffRecord(cmd === 'off'),
+        onDirectQuestion: (text) => void replyToExpert(text, 'capture'),
+      }),
+      'Listening',
+    ).catch((err) => console.warn('[helpy] Scribe not started', err))
   } else {
     stopListening()
   }
   try {
     if (voice.isActive()) await voice.stop()
     resetVoiceClock()
-    await voice.start(mode)
+    await withWatchdog(voice.start(mode), 'The voice agent')
     useVoice.setState({ mode, error: '' })
   } catch (err) {
     console.warn('[helpy] voice agent not started', err)
+    await voice.stop().catch(() => undefined) // also closes a session that connects after we gave up
     if (mode === 'capture') {
       // No agent: the same pause detector and question policy still run; Helpy asks with plain TTS.
       voice.startCaptureWithoutAgent((question) => void speak(question))

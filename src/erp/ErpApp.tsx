@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { installAudioUnlock } from '../integration/audioUnlock'
 import { installActivityTracker } from '../shared/activity'
 import { useSession } from '../shared/session'
 import { ConvexSync } from './ConvexSync'
@@ -41,6 +42,7 @@ function ResetDemoButton() {
  */
 export function ErpServices() {
   useEffect(() => {
+    installAudioUnlock() // before any voice code creates an AudioContext
     void useSession.persist.rehydrate()
     installActivityTracker()
     installStepTracker()
