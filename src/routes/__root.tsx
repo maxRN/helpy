@@ -15,8 +15,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         content: 'width=device-width, initial-scale=1',
       },
       {
-        title: 'Helpy',
+        title: 'Helpy — Learn from the expert',
       },
+      { name: 'description', content: 'Helpy learns workflows from screen activity and narration, then teaches the next person with expert reasoning and guided practice.' },
+      { property: 'og:title', content: 'Helpy — Learn from the expert' },
+      { property: 'og:description', content: 'Capture expert workflows. Build a Work Map. Teach the next person.' },
+      { property: 'og:type', content: 'website' },
     ],
     links: [
       {

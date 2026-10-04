@@ -16,3 +16,7 @@ todos.json
 data/
 
 .convex
+
+# Environment variants may contain server credentials
+.env.*
+!.env.example
