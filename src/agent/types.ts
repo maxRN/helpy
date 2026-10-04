@@ -82,6 +82,8 @@ export interface Deps {
     setState(s: 'idle' | 'listening' | 'speaking' | 'thinking'): void;
     bubble(text: string | null): void;
     pointTo(targetId: string): void;
+    /** A question is ready but the expert is busy (null = none). P4 raises a hand instead of interrupting. */
+    waiting?(question: string | null): void;
   };
   getNextStep(): { stepId: string; targetId: string; text: string } | null; // P1
   showExpertClip(stepId: string): void; // P4

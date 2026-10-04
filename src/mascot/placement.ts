@@ -32,8 +32,9 @@ const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min)
 /**
  * Tries right, left, below, above (in that order) and takes the first spot that fits inside
  * `bounds` without covering the target. If none fits, takes the one that covers it least.
+ * With a `bubble`, the speech bubble (see placeBubble) must fit too, without covering the target or the robot.
  */
-export function placeNextTo(target: Box, size: { width: number; height: number }, bounds: Box): Placement {
+export function placeNextTo(target: Box, size: { width: number; height: number }, bounds: Box, bubble: { width: number; height: number } | null = null): Placement {
   const midY = target.top + target.height / 2 - size.height / 2
   const midX = target.left + target.width / 2 - size.width / 2
   const candidates: Placement[] = [
@@ -55,11 +56,58 @@ export function placeNextTo(target: Box, size: { width: number; height: number }
       x: clamp(c.x, bounds.left + MARGIN, right(bounds) - MARGIN - size.width),
       y: clamp(c.y, bounds.top + MARGIN, bottom(bounds) - MARGIN - size.height),
     }
-    const cost = overlap({ left: p.x, top: p.y, ...size }, target)
+    const robot = { left: p.x, top: p.y, ...size }
+    let cost = overlap(robot, target)
+    if (bubble) {
+      const b = placeBubble(robot, bubble, target, bounds)
+      const box = { left: b.x, top: b.y, ...bubble }
+      cost += overlap(box, target) + overlap(box, robot)
+    }
     if (fits && cost === 0) return p
     if (!best || cost < best.cost) best = { p, cost }
   }
   return best!.p
+}
+
+const BUBBLE_GAP = 6
+
+/**
+ * Where the speech bubble goes around the robot: above or below it (stretching towards the middle of
+ * the screen first), else beside it. Takes the first spot inside `bounds` that covers neither the
+ * robot nor the target, else the one that covers the target least.
+ */
+export function placeBubble(robot: Box, bubble: { width: number; height: number }, target: Box | null, bounds: Box): { x: number; y: number } {
+  const midX = robot.left + robot.width / 2
+  const towardsLeft = midX > bounds.left + bounds.width / 2
+  const xs = [
+    towardsLeft ? right(robot) - bubble.width : robot.left,
+    midX - bubble.width / 2,
+    towardsLeft ? robot.left : right(robot) - bubble.width,
+  ]
+  const above = robot.top - BUBBLE_GAP - bubble.height
+  const below = bottom(robot) + BUBBLE_GAP
+  const besideY = robot.top + robot.height / 2 - bubble.height / 2
+  const candidates = [
+    ...xs.map((x) => ({ x, y: above })),
+    ...xs.map((x) => ({ x, y: below })),
+    { x: right(robot) + BUBBLE_GAP, y: besideY },
+    { x: robot.left - BUBBLE_GAP - bubble.width, y: besideY },
+  ]
+
+  let best: { x: number; y: number; cost: number } | null = null
+  for (const c of candidates) {
+    const fits =
+      c.x >= bounds.left + MARGIN && c.y >= bounds.top + MARGIN && c.x + bubble.width <= right(bounds) - MARGIN && c.y + bubble.height <= bottom(bounds) - MARGIN
+    const p = {
+      x: clamp(c.x, bounds.left + MARGIN, right(bounds) - MARGIN - bubble.width),
+      y: clamp(c.y, bounds.top + MARGIN, bottom(bounds) - MARGIN - bubble.height),
+    }
+    const box = { left: p.x, top: p.y, ...bubble }
+    const cost = (target ? overlap(box, target) : 0) + overlap(box, robot)
+    if (fits && cost === 0) return p
+    if (!best || cost < best.cost) best = { ...p, cost }
+  }
+  return { x: best!.x, y: best!.y }
 }
 
 /** Resting spot in the bottom-right corner of `bounds`, offset by the user's drag. */

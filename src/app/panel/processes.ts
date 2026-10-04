@@ -9,7 +9,10 @@ export interface Process {
   id: string
   name: string
   example: boolean
-  recordings: { taskId: string; startedAt: number; durationMs: number | null; finished: boolean }[]
+  /** Newest first. `recordedBy`: who was signed in (null for recordings from before the sign-in). */
+  recordings: { taskId: string; startedAt: number; durationMs: number | null; finished: boolean; recordedBy: string | null }[]
+  /** Everyone who recorded it, newest first. */
+  people: string[]
   /** Session of the Work Map, or of the newest recording while there is no map yet (session id = task id). */
   sessionId: string | null
   workMap: WorkMap | null
@@ -36,6 +39,7 @@ const EXAMPLE: Process = {
   name: FIXTURE_WORKMAP.task,
   example: true,
   recordings: [],
+  people: [FIXTURE_WORKMAP.expert],
   sessionId: FIXTURE_WORKMAP.sessionId,
   workMap: FIXTURE_WORKMAP,
 }
@@ -51,6 +55,7 @@ export function useProcesses(): Process[] | undefined {
       name: p.name,
       example: false,
       recordings: p.recordings,
+      people: [...new Set([...p.recordings.map((r) => r.recordedBy), p.createdBy].filter((n): n is string => !!n))],
       sessionId: (withMap ?? p.recordings[0])?.taskId ?? null,
       workMap: (withMap?.workMap as WorkMap | undefined) ?? null,
     }

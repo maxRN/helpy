@@ -83,6 +83,7 @@ export function TeachLayer({ onCaseDone }: { onCaseDone?: () => void }) {
         pendingFix = null
         mascot.setState('speaking')
         mascot.pointTo(null)
+        mascot.pose('cheer', 1800)
         mascot.bubble(`That’s it. ${wm.expert} would do the same.`, { ttlMs: 5000 })
         guide(invoice.id, 2500)
         return
@@ -97,6 +98,7 @@ export function TeachLayer({ onCaseDone }: { onCaseDone?: () => void }) {
         clearTimeout(guideTimer)
         mascot.setState('speaking')
         mascot.pointTo(null)
+        mascot.pose('cheer', 2200)
         mascot.bubble(`Invoice ${invoice.number} is done. Click me to see how you did.`, { ttlMs: 10_000 })
         onCaseDone?.()
       }

@@ -150,6 +150,7 @@ export function installVoiceBridge() {
       setState: (s) => mascot.setState(s),
       bubble: (text) => mascot.bubble(text),
       pointTo: (targetId) => mascot.pointTo(targetId),
+      waiting: (question) => mascot.waiting(question),
     },
     getNextStep: () => {
       const openId = erp().openId

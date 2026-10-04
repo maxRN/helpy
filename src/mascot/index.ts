@@ -3,4 +3,4 @@
 export { mascot, type BubbleOptions } from './api'
 export { MascotLayer, setMascotClickHandler, SIZE as MASCOT_SIZE, visibleBounds } from './MascotLayer'
 export { HelpyMark, Robot } from './Robot'
-export { useHelpyExtras, type BubbleAction } from './store'
+export { useHelpyExtras, type BubbleAction, type BubbleInput, type Pose } from './store'

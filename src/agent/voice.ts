@@ -213,6 +213,11 @@ function settleTeachback(r: { confirmed: boolean; correction?: string }): void {
   t.resolve(r);
 }
 
+/** Capture: the expert invited the question Helpy is holding back (raised hand). false = none waiting. */
+export function askWaitingQuestion(): boolean {
+  return policy?.askReadyNow() ?? false;
+}
+
 /** An answer heard outside the agent (Scribe in Capture): goes into the question history like the agent's own. */
 export function noteAnswer(q: Quote): void {
   getDeps().mascot.bubble(null);

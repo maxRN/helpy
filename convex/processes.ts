@@ -14,6 +14,7 @@ async function recordingsOf(ctx: QueryCtx, projectId: Id<'projects'>) {
       return {
         taskId: task._id,
         startedAt: task.startedAt,
+        recordedBy: task.recordedBy ?? null,
         durationMs: task.completion?.durationMs ?? null,
         finished: task.completion !== null,
         workMap: map?.workMap ?? null,
@@ -27,6 +28,6 @@ export const list = query({
   args: {},
   handler: async (ctx) => {
     const projects = await ctx.db.query('projects').order('desc').collect()
-    return Promise.all(projects.map(async (p) => ({ id: p._id, name: p.name, recordings: await recordingsOf(ctx, p._id) })))
+    return Promise.all(projects.map(async (p) => ({ id: p._id, name: p.name, createdBy: p.createdBy ?? null, recordings: await recordingsOf(ctx, p._id) })))
   },
 })

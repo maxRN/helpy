@@ -6,6 +6,7 @@ import {
   type PolicyRequest,
   type PolicyResponse,
   type QaRecord,
+  type QuestionKind,
   type Quote,
   type Speaker,
 } from './types';
@@ -18,7 +19,10 @@ export const POLICY_LIMITS = {
 } as const;
 
 const MAX_PENDING = 40;
+const PREPARE_EVERY_MS = 8000;
 const FALLBACK_GUARDRAIL = ['Is there a limit on this step?', 'When would you stop and ask someone?'];
+
+type ReadyQuestion = { question: string; kind: QuestionKind; eventId?: string };
 
 export interface PolicyOpts {
   getInputs(): PauseInputs;
@@ -40,6 +44,7 @@ export function createQuestionPolicy(o: PolicyOpts) {
   let lastAskedAt = 0;
   let inFlight = false;
   let lastEvaluated: string | null = null; // newest event id we already evaluated and declined
+  let ready: ReadyQuestion | null = null; // prepared while the expert was busy, asked at the next pause
 
   const off = deps.bus.on('*', (e) => {
     if (!SCREEN_EVENT_TYPES.has(e.type) || !e.text) return;
@@ -77,58 +82,103 @@ export function createQuestionPolicy(o: PolicyOpts) {
     }
   }
 
+  const canAsk = (now: number): string | null => {
+    if (asked >= POLICY_LIMITS.maxQuestions) return 'question budget used';
+    if (asked > 0 && now - lastAskedAt < POLICY_LIMITS.minGapMs) return 'too soon after last question';
+    if (!pending.length) return 'no unexplained screen events';
+    return null;
+  };
+
+  /** One model call over the pending screen events. null = nothing worth asking. */
+  async function think(): Promise<ReadyQuestion | null> {
+    const newest = pending[pending.length - 1].id;
+    const force = asked >= POLICY_LIMITS.guardrailByQuestion && !hasGuardrail();
+    const req: PolicyRequest = {
+      events: pending.map((e) => ({ id: e.id, t: e.t, text: e.text as string })),
+      history,
+      transcriptTail: o.tail(8),
+      budget: { questionsLeft: POLICY_LIMITS.maxQuestions - asked, forceGuardrail: force },
+    };
+    const res = await fetchPolicy(req);
+    if (!res.ask || !res.question) {
+      lastEvaluated = newest;
+      note(`model declined (${res.reason ?? 'no reason'})`);
+      return null;
+    }
+    return { question: res.question, kind: res.kind ?? (force ? 'guardrail' : 'why'), eventId: res.eventId };
+  }
+
+  /** Hold a question until the next pause; Helpy raises a hand meanwhile. */
+  function hold(q: ReadyQuestion): void {
+    ready = q;
+    deps.mascot.waiting?.(q.question);
+    logPause({ t: nowRel(), pause: false, blockers: [], note: `holding (${q.kind}): ${q.question}` });
+  }
+
+  function askNow(q: ReadyQuestion): void {
+    ready = null;
+    deps.mascot.waiting?.(null);
+    const qe = emit({
+      type: 'question_asked',
+      speaker: 'agent',
+      text: q.question,
+      meta: { eventId: q.eventId, kind: q.kind, phase: 'capture' },
+    });
+    history.push({ question: q.question, kind: q.kind, eventId: q.eventId, t: qe.t });
+    asked += 1;
+    lastAskedAt = Date.now();
+    pending = [];
+    lastEvaluated = null;
+
+    deps.mascot.setState('speaking');
+    deps.mascot.bubble(q.question);
+    o.noteQuestion({ questionEventId: qe.id, eventId: q.eventId });
+    o.deliver(q.question);
+    logPause({ t: qe.t, pause: true, blockers: [], note: `asked (${q.kind}): ${q.question}` });
+  }
+
   /** Called by the pause loop. Safe to call repeatedly. */
   async function onPause(_r: PauseResult): Promise<void> {
+    if (ready) return askNow(ready);
     if (inFlight) return;
-    const now = Date.now();
-    if (asked >= POLICY_LIMITS.maxQuestions) return note('question budget used');
-    if (asked > 0 && now - lastAskedAt < POLICY_LIMITS.minGapMs) return note('too soon after last question');
-    if (!pending.length) return note('no unexplained screen events');
-    const newest = pending[pending.length - 1].id;
-    if (newest === lastEvaluated) return; // nothing new since the last "no"
+    const why = canAsk(Date.now());
+    if (why) return note(why);
+    if (pending[pending.length - 1].id === lastEvaluated) return; // nothing new since the last "no"
 
     inFlight = true;
     try {
-      const force = asked >= POLICY_LIMITS.guardrailByQuestion && !hasGuardrail();
-      const req: PolicyRequest = {
-        events: pending.map((e) => ({ id: e.id, t: e.t, text: e.text as string })),
-        history,
-        transcriptTail: o.tail(8),
-        budget: { questionsLeft: POLICY_LIMITS.maxQuestions - asked, forceGuardrail: force },
-      };
-      const res = await fetchPolicy(req);
-
-      if (!res.ask || !res.question) {
-        lastEvaluated = newest;
-        return note(`model declined (${res.reason ?? 'no reason'})`);
-      }
+      const q = await think();
+      if (!q) return;
       // The expert may have started typing/talking while we waited for the model.
-      if (!isPause(o.getInputs()).pause) {
-        lastEvaluated = null;
-        return note('pause ended before the question was ready');
-      }
-
-      const kind = res.kind ?? (force ? 'guardrail' : 'why');
-      const qe = emit({
-        type: 'question_asked',
-        speaker: 'agent',
-        text: res.question,
-        meta: { eventId: res.eventId, kind, phase: 'capture' },
-      });
-      history.push({ question: res.question, kind, eventId: res.eventId, t: qe.t });
-      asked += 1;
-      lastAskedAt = Date.now();
-      pending = [];
-      lastEvaluated = null;
-
-      deps.mascot.setState('speaking');
-      deps.mascot.bubble(res.question);
-      o.noteQuestion({ questionEventId: qe.id, eventId: res.eventId });
-      o.deliver(res.question);
-      logPause({ t: qe.t, pause: true, blockers: [], note: `asked (${kind}): ${res.question}` });
+      if (!isPause(o.getInputs()).pause) return hold(q);
+      askNow(q);
     } finally {
       inFlight = false;
     }
+  }
+
+  // Think ahead while the expert is busy: a question that is ready waits for the next pause, and the
+  // raised hand tells the expert there is one, so nobody is interrupted and nobody talks on unaware.
+  const prepare = setInterval(() => {
+    if (ready || inFlight) return;
+    const inputs = o.getInputs();
+    if (inputs.offRecord || isPause(inputs).pause) return; // pauses are handled by onPause
+    if (canAsk(inputs.now) || pending[pending.length - 1].id === lastEvaluated) return;
+    inFlight = true;
+    void think()
+      .then((q) => {
+        if (q) hold(q);
+      })
+      .finally(() => {
+        inFlight = false;
+      });
+  }, PREPARE_EVERY_MS);
+
+  /** The expert said "ask me now" (clicked the raised hand). */
+  function askReadyNow(): boolean {
+    if (!ready) return false;
+    askNow(ready);
+    return true;
   }
 
   /** Attach the expert's answer to the latest question (for the next policy call). */
@@ -139,9 +189,14 @@ export function createQuestionPolicy(o: PolicyOpts) {
 
   return {
     onPause,
+    askReadyNow,
     recordAnswer,
-    stats: () => ({ asked, hasGuardrail: hasGuardrail(), history: [...history] }),
-    dispose: () => off(),
+    stats: () => ({ asked, hasGuardrail: hasGuardrail(), history: [...history], waiting: ready?.question ?? null }),
+    dispose: () => {
+      off();
+      clearInterval(prepare);
+      if (ready) deps.mascot.waiting?.(null);
+    },
   };
 }
 

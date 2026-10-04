@@ -38,12 +38,12 @@ export const get = query({
 })
 
 export const create = mutation({
-  args: { projectId: v.id('projects'), startedAt: v.number() },
+  args: { projectId: v.id('projects'), startedAt: v.number(), recordedBy: v.optional(v.string()) },
   returns: v.id('tasks'),
-  handler: async (ctx, { projectId, startedAt }) => {
+  handler: async (ctx, { projectId, startedAt, recordedBy }) => {
     if (!await ctx.db.get('projects', projectId)) throw new ConvexError('Project not found.')
     if (!Number.isFinite(startedAt) || startedAt < 0) throw new ConvexError('Invalid start time.')
-    return ctx.db.insert('tasks', { projectId, startedAt, completion: null })
+    return ctx.db.insert('tasks', { projectId, startedAt, completion: null, ...(recordedBy ? { recordedBy } : {}) })
   },
 })
 
