@@ -92,7 +92,7 @@ function useRecordingController() {
     }
   }, [finishTask])
 
-  async function start(project: Project, { stay = false }: { stay?: boolean } = {}) {
+  async function start(project: Project, { stay = false, recordedBy }: { stay?: boolean; recordedBy?: string } = {}) {
     if (busy) return
     if (useOcrModel.getState().state.kind !== 'ready') {
       setError('Wait for the local text recognition model to finish loading before starting a task.')
@@ -109,7 +109,7 @@ function useRecordingController() {
         capture.close()
         return
       }
-      taskId = await createTask({ projectId: project._id, startedAt: capture.startedAt })
+      taskId = await createTask({ projectId: project._id, startedAt: capture.startedAt, ...(recordedBy ? { recordedBy } : {}) })
       const createdTaskId = taskId
       if (!mounted.current) {
         capture.close()

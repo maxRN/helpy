@@ -5,11 +5,40 @@ import { useSession } from '../../shared/session'
 import type { Step, WorkMap } from '../../shared/types'
 import { describeGuardrailLogic } from '../../workmap/conditions'
 import { downloadWorkMapMarkdown } from '../../workmap/exportMarkdown'
+import { recordFlow } from '../RecordDialog'
 import { startLearning } from './learning'
-import { STATUS, statusOf, useProcess } from './processes'
+import { STATUS, statusOf, useProcess, type Process } from './processes'
 import { askQuestions } from './questions'
+import { Avatar } from './SignInView'
 import { panel } from './store'
 import { primaryBtn, secondaryBtn, textBtn } from './ui'
+
+const when = (t: number) => new Date(t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+const howLong = (ms: number | null) => (ms === null ? '' : ms < 60_000 ? ' · under a minute' : ` · ${Math.round(ms / 60_000)} min`)
+
+/** Who recorded it and when: one line per recording, newest first. */
+function Recordings({ process }: { process: Process }) {
+  if (!process.recordings.length) return null
+  return (
+    <div>
+      <h3 className="m-0 text-[15px] font-semibold text-ink">Recorded by</h3>
+      <ul className="m-0 mt-2 flex list-none flex-col gap-2.5 p-0">
+        {process.recordings.map((r) => (
+          <li key={r.taskId} className="flex items-center gap-3">
+            <Avatar name={r.recordedBy ?? '?'} size={34} />
+            <span className="min-w-0">
+              <span className="block text-[16px] leading-snug text-ink">{r.recordedBy ?? 'Not signed in'}</span>
+              <span className="block text-[14px] text-muted">{r.finished ? `${when(r.startedAt)}${howLong(r.durationMs)}` : 'Recording now'}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+      <button type="button" className={`${textBtn} mt-1 -ml-2`} onClick={() => recordFlow.open({ name: process.name, id: process.id })}>
+        Record it again
+      </button>
+    </div>
+  )
+}
 
 function StepItem({ wm, step, processId }: { wm: WorkMap; step: Step; processId: string }) {
   const [open, setOpen] = useState(false)
@@ -82,7 +111,7 @@ export function ProcessView({ processId }: { processId: string }) {
       </div>
 
       {status === 'not_recorded' ? (
-        <button type="button" className={primaryBtn} onClick={() => panel.show({ name: 'record' })}>
+        <button type="button" className={primaryBtn} onClick={() => recordFlow.open({ name: process.name, id: process.id })}>
           Record it
         </button>
       ) : null}
@@ -111,6 +140,8 @@ export function ProcessView({ processId }: { processId: string }) {
           ) : null}
         </div>
       ) : null}
+
+      <Recordings process={process} />
 
       {wm ? (
         <div>

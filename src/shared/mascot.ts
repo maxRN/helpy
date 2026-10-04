@@ -11,6 +11,8 @@ interface MascotStore {
   pointTarget: string | null
   /** Step whose expert clip should be replayed (P4 shows it). */
   clipRequest: { stepId: string; at: number } | null
+  /** A live question the agent holds back while the expert is busy; P4 shows a raised hand instead of interrupting. */
+  waiting: { text: string; since: number } | null
   /** P4 sets this to true when its mascot is mounted, which turns off the fallback highlight. */
   rendered: boolean
 }
@@ -20,6 +22,7 @@ export const useMascot = create<MascotStore>(() => ({
   bubble: null,
   pointTarget: null,
   clipRequest: null,
+  waiting: null,
   rendered: false,
 }))
 
@@ -45,6 +48,9 @@ export const mascot = {
   pointTo(targetId: string | null) {
     useMascot.setState({ pointTarget: targetId })
     if (targetId && !useMascot.getState().rendered) highlight(targetId)
+  },
+  waiting(text: string | null) {
+    useMascot.setState({ waiting: text ? { text, since: Date.now() } : null })
   },
   showExpertClip(stepId: string) {
     useMascot.setState({ clipRequest: { stepId, at: Date.now() } })

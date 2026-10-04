@@ -16,12 +16,12 @@ export const get = query({
 })
 
 export const create = mutation({
-  args: { name: v.string() },
+  args: { name: v.string(), createdBy: v.optional(v.string()) },
   returns: v.id('projects'),
-  handler: async (ctx, { name }) => {
+  handler: async (ctx, { name, createdBy }) => {
     const trimmedName = name.trim()
     if (!trimmedName) throw new ConvexError('Project name is required.')
-    return ctx.db.insert('projects', { name: trimmedName })
+    return ctx.db.insert('projects', { name: trimmedName, ...(createdBy ? { createdBy } : {}) })
   },
 })
 

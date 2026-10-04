@@ -1,24 +1,52 @@
-import { useCallback, useEffect, useRef, type RefObject } from 'react'
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { useTaskRecording } from '../capture/TaskRecorder'
 import { useDebriefUi } from '../debrief/DebriefPanel'
 import { mascot, MascotLayer, setMascotClickHandler } from '../mascot'
-import { useMascot } from '../shared/mascot'
+import { mascot as sharedMascot, useMascot } from '../shared/mascot'
 import { useSession } from '../shared/session'
 import { TeachLayer } from '../teach-ui/TeachLayer'
+import { auth, useAuth } from './auth'
 import { HelpyPanel } from './panel/HelpyPanel'
 import { panel, usePanel } from './panel/store'
 import { askQuestions } from './panel/questions'
-import { stopVoice, useVoice } from './voice'
+import { mmss } from './panel/ui'
+import { RecordDialog, recordFlow } from './RecordDialog'
+import { askWaitingQuestion, stopVoice, useVoice } from './voice'
 
-/** Small red light on the robot while it records. */
-function RecordingLight() {
+/** Small red light with the time on the robot while it records. */
+function RecordingLight({ startedAt }: { startedAt: number | null }) {
   const offRecord = useSession((s) => s.offRecord)
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [])
   return (
-    <span className={`flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-white shadow-soft ${offRecord ? 'bg-faint' : 'bg-[#e5484d]'}`}>
+    <span className={`flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold tracking-wide whitespace-nowrap text-white tabular-nums shadow-soft ${offRecord ? 'bg-faint' : 'bg-[#e5484d]'}`}>
       <span className={`size-1.5 rounded-full bg-white ${offRecord ? '' : 'animate-pulse'}`} aria-hidden />
-      {offRecord ? 'PAUSED' : 'REC'}
+      {offRecord ? 'PAUSED' : `REC${startedAt ? ` ${mmss(now - startedAt)}` : ''}`}
     </span>
   )
+}
+
+/** Helpy has a question but you are busy: a quiet sign above the robot, no sound, no blinking. */
+function QuestionSign() {
+  return (
+    <span className="helpy-pop flex items-center gap-1 rounded-full bg-[#f5b83d] px-2 py-0.5 text-[11px] font-bold whitespace-nowrap text-[#3d2a00] shadow-soft">
+      <span aria-hidden>?</span> Question
+    </span>
+  )
+}
+
+/** After this long with a question held back, Helpy says so quietly in its bubble (it never speaks over you). */
+const NUDGE_AFTER_MS = 40_000
+
+/** Robot click: sign in first; while recording, the controls in the bubble; otherwise the panel. */
+function onRobotClick() {
+  if (!auth.user()) return panel.toggle()
+  if (usePanel.getState().activity?.kind === 'recording') return recordFlow.controls()
+  if (recordFlow.active()) return
+  panel.toggle()
 }
 
 /**
@@ -32,12 +60,20 @@ export function Helpy({ boundsRef }: { boundsRef?: RefObject<HTMLElement | null>
   const clipRequest = useMascot((s) => s.clipRequest)
 
   useEffect(() => {
-    setMascotClickHandler(panel.toggle)
+    setMascotClickHandler(onRobotClick)
     // Personal data on screen is blurred, so it never reaches a screenshot or a model.
     document.documentElement.setAttribute('data-privacy-shield', '')
-    // Dev console: helpy.mascot.pointTo('field-costCenter'), helpy.panel.show()
-    if (import.meta.env.DEV) Object.assign(window, { helpy: { mascot, panel } })
+    // Dev console: helpy.mascot.pointTo('field-costCenter'), helpy.panel.show(), helpy.question('Why 0400?')
+    if (import.meta.env.DEV) Object.assign(window, { helpy: { mascot, panel, question: sharedMascot.waiting } })
+    // Helpy just started on this computer: say hello and ask who is working.
+    const hello = auth.user()
+      ? undefined
+      : setTimeout(() => {
+          mascot.pose('wave', 2600)
+          panel.show({ name: 'signin' })
+        }, 600)
     return () => {
+      clearTimeout(hello)
       setMascotClickHandler(null)
       document.documentElement.removeAttribute('data-privacy-shield')
     }
@@ -56,12 +92,37 @@ export function Helpy({ boundsRef }: { boundsRef?: RefObject<HTMLElement | null>
     const current = usePanel.getState().activity
     if (wasRecording.current && !recording && current?.kind === 'recording') {
       panel.setActivity(null)
+      sharedMascot.waiting(null)
       mascot.setState('speaking')
+      mascot.pose('cheer', 2200)
       mascot.bubble('Thank you! I have a few questions about what I saw.', { ttlMs: 5000 })
       void stopVoice().then(() => setTimeout(askQuestions, 1500))
     }
     wasRecording.current = recording
   }, [recorder.kind])
+
+  // A question held back for a while: say so quietly, with "Ask me now". Never out loud, never over the expert.
+  const waiting = useMascot((s) => s.waiting)
+  useEffect(() => {
+    if (!waiting || activity?.kind !== 'recording') return
+    const timer = setTimeout(
+      () => {
+        if (useMascot.getState().bubble) return // something else is being said
+        mascot.bubble('I have a question for you. No rush, I’ll ask when you pause.', {
+          ttlMs: 15_000,
+          actions: [{ label: 'Ask me now', primary: true, onClick: () => void askWaitingQuestion() }],
+        })
+      },
+      Math.max(0, waiting.since + NUDGE_AFTER_MS - Date.now()),
+    )
+    return () => clearTimeout(timer)
+  }, [waiting, activity?.kind])
+
+  // Signed out (e.g. "Sign out" in the panel): back to the sign-in.
+  const signedIn = useAuth((s) => s.user !== null)
+  useEffect(() => {
+    if (!signedIn) mascot.reset()
+  }, [signedIn])
 
   // When the debrief closes, the debrief agent is done too.
   const debriefOpen = useDebriefUi((s) => s.open)
@@ -78,8 +139,20 @@ export function Helpy({ boundsRef }: { boundsRef?: RefObject<HTMLElement | null>
 
   return (
     <>
-      <MascotLayer boundsRef={boundsRef} hideBubble={open} badge={activity?.kind === 'recording' ? <RecordingLight /> : null} />
+      <MascotLayer
+        boundsRef={boundsRef}
+        hideBubble={open}
+        badge={
+          activity?.kind === 'recording' ? (
+            <div className="flex flex-col items-center gap-1">
+              {waiting ? <QuestionSign /> : null}
+              <RecordingLight startedAt={'task' in recorder ? recorder.task.startedAt : null} />
+            </div>
+          ) : null
+        }
+      />
       <HelpyPanel boundsRef={boundsRef} />
+      <RecordDialog />
       {teaching ? <TeachLayer onCaseDone={onCaseDone} /> : null}
     </>
   )

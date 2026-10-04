@@ -1,7 +1,8 @@
 import { mascot as shared, useMascot, type MascotState } from '../shared/mascot'
-import { useHelpyExtras, type BubbleAction, type HomeOffset } from './store'
+import { useHelpyExtras, type BubbleAction, type BubbleInput, type HomeOffset, type Pose } from './store'
 
 let bubbleTimer: ReturnType<typeof setTimeout> | null = null
+let poseTimer: ReturnType<typeof setTimeout> | null = null
 const HOME_KEY = 'helpy-mascot-home'
 
 export interface BubbleOptions {
@@ -9,6 +10,7 @@ export interface BubbleOptions {
   ttlMs?: number
   tone?: 'default' | 'alert'
   actions?: BubbleAction[]
+  input?: BubbleInput
 }
 
 /**
@@ -24,12 +26,20 @@ export const mascot = {
     if (bubbleTimer) clearTimeout(bubbleTimer)
     bubbleTimer = null
     shared.bubble(text)
-    useHelpyExtras.setState({ bubbleExtras: text ? { text, tone: options.tone ?? 'default', actions: options.actions ?? [] } : null })
+    useHelpyExtras.setState({ bubbleExtras: text ? { text, tone: options.tone ?? 'default', actions: options.actions ?? [], input: options.input ?? null } : null })
     if (text && options.ttlMs) {
       bubbleTimer = setTimeout(() => {
         if (useMascot.getState().bubble === text) shared.bubble(null)
       }, options.ttlMs)
     }
+  },
+
+  /** A gesture on top of the state; with `ms` it ends by itself. */
+  pose(pose: Pose | null, ms?: number) {
+    if (poseTimer) clearTimeout(poseTimer)
+    poseTimer = null
+    useHelpyExtras.setState({ pose })
+    if (pose && ms) poseTimer = setTimeout(() => useHelpyExtras.setState({ pose: null }), ms)
   },
 
   /** Fly next to a registered element (see useTarget); null sends Helpy back to its corner. */
@@ -47,6 +57,7 @@ export const mascot = {
 
   reset() {
     mascot.bubble(null)
+    mascot.pose(null)
     mascot.pointTo(null)
     shared.setState('idle')
   },

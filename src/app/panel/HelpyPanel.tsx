@@ -3,7 +3,7 @@ import { HelpyMark, MASCOT_SIZE, useHelpyExtras, visibleBounds } from '../../mas
 import { HomeView } from './HomeView'
 import { LearningView, MomentView, ReportView } from './LearningViews'
 import { ProcessView } from './ProcessView'
-import { RecordView } from './RecordView'
+import { SignInView } from './SignInView'
 import { panel, usePanel, type View } from './store'
 
 const WIDTH = 368
@@ -13,6 +13,7 @@ const GAP = 12
 function backOf(view: View): View | null {
   switch (view.name) {
     case 'home':
+    case 'signin':
       return null
     case 'moment':
       return view.processId ? { name: 'process', processId: view.processId } : null
@@ -88,9 +89,9 @@ export function HelpyPanel({ boundsRef }: { boundsRef?: RefObject<HTMLElement | 
         </button>
       </header>
       <div className="min-h-0 overflow-y-auto overscroll-contain px-5 pb-5 pt-2">
+        {view.name === 'signin' ? <SignInView /> : null}
         {view.name === 'home' ? <HomeView /> : null}
         {view.name === 'process' ? <ProcessView processId={view.processId} /> : null}
-        {view.name === 'record' ? <RecordView /> : null}
         {view.name === 'learning' ? <LearningView /> : null}
         {view.name === 'report' ? <ReportView /> : null}
         {view.name === 'moment' ? <MomentView stepId={view.stepId} processId={view.processId} /> : null}

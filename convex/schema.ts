@@ -4,7 +4,8 @@ import { invoiceFields } from './invoiceValidators'
 import { screenshotOcr } from './ocrValidators'
 
 export default defineSchema({
-  projects: defineTable({ name: v.string() }),
+  // createdBy / recordedBy: the signed-in Helpy user (a display name; the sign-in is a mock).
+  projects: defineTable({ name: v.string(), createdBy: v.optional(v.string()) }),
 
   // ProcureFlow mini ERP: one shared demo ledger, live on every device.
   invoices: defineTable(invoiceFields).index('by_invoiceId', ['invoiceId']),
@@ -20,6 +21,7 @@ export default defineSchema({
   tasks: defineTable({
     projectId: v.id('projects'),
     startedAt: v.number(),
+    recordedBy: v.optional(v.string()),
     completion: v.union(v.null(), v.object({
       durationMs: v.number(),
       error: v.union(v.null(), v.string()),

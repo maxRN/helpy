@@ -69,28 +69,64 @@ html[data-privacy-shield] [data-pii] {
   transform-origin: center;
 }
 
+.helpy-robot .r-arm-left {
+  transform-box: view-box;
+  transform-origin: 29px 93px;
+  transform: rotate(0deg);
+  transition: transform 450ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.helpy-robot .r-head {
+  transform-box: view-box;
+  transform-origin: 60px 82px;
+  transition: transform 400ms ease;
+}
+
+/* idle: now and then Helpy glances around */
+.helpy-robot .r-gaze {
+  animation: helpy-look 9s ease-in-out infinite;
+}
+.helpy-robot:not([data-state='idle']) .r-gaze,
+.helpy-robot[data-pose] .r-gaze {
+  animation: none;
+}
+
 .helpy-robot .r-dots,
 .helpy-robot .r-ears-ring,
 .helpy-robot .r-alert-mark,
 .helpy-robot .r-zz,
-.helpy-robot .r-eyes-closed {
+.helpy-robot .r-eyes-closed,
+.helpy-robot .r-eyes-happy,
+.helpy-robot .r-chin-hand {
   opacity: 0;
   transition: opacity 200ms;
 }
 
-/* listening: eyes glance toward the work, ear rings pulse */
+/* listening: eyes glance toward the work, ear rings pulse, a slow nod */
 .helpy-robot[data-state='listening'] .r-eyes {
   transform: translateX(-3px);
+}
+.helpy-robot[data-state='listening'] .r-head {
+  animation: helpy-nod 2.6s ease-in-out infinite;
 }
 .helpy-robot[data-state='listening'] .r-ears-ring {
   opacity: 1;
   animation: helpy-pulse 1.6s ease-out infinite;
 }
 
-/* thinking: eyes look up, dots above the head */
+/* thinking: head tilted, eyes up, a hand at the chin, dots above the head */
 .helpy-robot[data-state='thinking'] .r-eyes {
   transform: translate(2px, -3px) scaleY(0.7);
   animation: none;
+}
+.helpy-robot[data-state='thinking'] .r-head {
+  transform: rotate(-7deg);
+}
+.helpy-robot[data-state='thinking'] .r-arm-left {
+  transform: rotate(-115deg);
+}
+.helpy-robot[data-state='thinking'] .r-chin-hand {
+  opacity: 1;
 }
 .helpy-robot[data-state='thinking'] .r-dots {
   opacity: 1;
@@ -105,7 +141,10 @@ html[data-privacy-shield] [data-pii] {
   animation-delay: 0.3s;
 }
 
-/* speaking: the sound wave on the chest moves */
+/* speaking: the sound wave on the chest moves, the head bobs a little */
+.helpy-robot[data-state='speaking'] .r-head {
+  animation: helpy-talk 0.45s ease-in-out infinite;
+}
 .helpy-robot[data-state='speaking'] .r-bar {
   animation: helpy-wave 0.7s ease-in-out infinite;
 }
@@ -128,9 +167,15 @@ html[data-privacy-shield] [data-pii] {
   opacity: 1;
 }
 
-/* pointing: the raised arm swings toward the target */
+/* pointing: the raised arm swings toward the target, head and eyes follow */
 .helpy-robot[data-pointing] .r-arm-raise {
   transform: rotate(-100deg);
+}
+.helpy-robot[data-pointing] .r-head {
+  transform: rotate(5deg);
+}
+.helpy-robot[data-pointing] .r-gaze {
+  transform: translateX(3px);
 }
 
 /* off the record: eyes closed, nothing goes in */
@@ -143,6 +188,41 @@ html[data-privacy-shield] [data-pii] {
 }
 .helpy-robot[data-off] .r-zz {
   animation: helpy-zz 2.4s ease-in-out infinite;
+}
+.helpy-robot[data-off] .r-head {
+  transform: rotate(-4deg) translateY(2px);
+}
+
+/* pose wave: hello, the right arm waves, happy eyes */
+.helpy-robot[data-pose='wave'] .r-arm-raise {
+  animation: helpy-wave-arm 0.42s ease-in-out infinite alternate;
+}
+.helpy-robot[data-pose='wave'] .r-eyes,
+.helpy-robot[data-pose='cheer'] .r-eyes {
+  opacity: 0;
+}
+.helpy-robot[data-pose='wave'] .r-eyes-happy,
+.helpy-robot[data-pose='cheer'] .r-eyes-happy {
+  opacity: 1;
+}
+
+/* pose cheer: both arms up and a little jump */
+.helpy-robot[data-pose='cheer'] .r-arm-raise {
+  transform: rotate(-112deg) scaleY(1.25);
+}
+.helpy-robot[data-pose='cheer'] .r-arm-left {
+  transform: rotate(112deg) scaleY(1.25);
+}
+.helpy-robot[data-pose='cheer'] .r-float {
+  animation: helpy-hop 0.7s ease-in-out infinite;
+}
+
+/* pose question: a raised hand, quiet, waiting for a pause (Helpy adds a "Question" sign above it) */
+.helpy-robot[data-pose='question'] .r-arm-left {
+  animation: helpy-hand-up 1.8s ease-in-out infinite alternate;
+}
+.helpy-robot[data-pose='question'] .r-chin-hand {
+  opacity: 0;
 }
 
 .helpy-ring {
@@ -165,6 +245,56 @@ html[data-privacy-shield] [data-pii] {
   }
   50% {
     transform: translateY(-4px);
+  }
+}
+@keyframes helpy-look {
+  0%,
+  38%,
+  88%,
+  100% {
+    transform: translateX(0);
+  }
+  44%,
+  56% {
+    transform: translateX(-3.5px);
+  }
+  64%,
+  80% {
+    transform: translateX(3.5px);
+  }
+}
+@keyframes helpy-nod {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(3deg) translateY(1px);
+  }
+}
+@keyframes helpy-talk {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-1.2px);
+  }
+}
+@keyframes helpy-wave-arm {
+  from {
+    transform: rotate(-128deg) scaleY(1.2);
+  }
+  to {
+    transform: rotate(-96deg) scaleY(1.2);
+  }
+}
+@keyframes helpy-hand-up {
+  from {
+    transform: rotate(138deg) scaleY(1.3);
+  }
+  to {
+    transform: rotate(148deg) scaleY(1.3);
   }
 }
 @keyframes helpy-hop {

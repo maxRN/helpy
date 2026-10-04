@@ -211,6 +211,11 @@ function settleTeachback(r: { confirmed: boolean; correction?: string }): void {
   t.resolve(r);
 }
 
+/** Capture: the expert invited the question Helpy is holding back (raised hand). false = none waiting. */
+export function askWaitingQuestion(): boolean {
+  return policy?.askReadyNow() ?? false;
+}
+
 // ---------------------------------------------------------------- off the record
 
 /** source 'voice' = the agent's tool call (agent already confirmed aloud); 'ui' = P4's button. */
