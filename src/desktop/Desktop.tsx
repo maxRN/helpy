@@ -1,4 +1,3 @@
-import { Link } from '@tanstack/react-router'
 import { useEffect, useState, type ReactNode } from 'react'
 import { helpyApp, useHelpyApp } from '../app/helpy-app/store'
 import { HelpyMark } from '../mascot'
@@ -126,9 +125,6 @@ export function Desktop({ app }: { app: ReactNode }) {
           ))}
         </span>
         <span className="ml-auto flex items-center gap-4 tabular-nums">
-          <Link to="/projects" className="text-white/80 hover:text-white hover:underline">
-            Helpy · Projects
-          </Link>
           <span>{clock}</span>
         </span>
       </header>
