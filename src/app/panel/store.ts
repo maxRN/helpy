@@ -5,7 +5,7 @@ import { auth } from '../auth'
 export type View =
   | { name: 'signin' }
   | { name: 'home' }
-  | { name: 'library' }
+  | { name: 'library'; processId?: string }
   | { name: 'process'; processId: string }
   | { name: 'learning' }
   | { name: 'moment'; stepId: string; processId?: string }
