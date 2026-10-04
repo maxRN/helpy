@@ -2,7 +2,8 @@
 // and that each one is spoken exactly once.
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { activity, installActivityTracker } from '../shared/activity';
-import { setDeps } from './deps';
+import { ungroundedInvoiceRefs } from '../shared/grounding';
+import { getDeps, setDeps } from './deps';
 import type { DeliveryControl } from './policy';
 import type { AppEvent, Deps } from './types';
 import { startCaptureWithoutAgent, stop } from './voice';
@@ -137,6 +138,19 @@ describe('live question timing', () => {
     await vi.advanceTimersByTimeAsync(20_000);
     expect(deliver).toHaveBeenCalledTimes(1);
     expect(askedEvents()).toHaveLength(1);
+  });
+
+  it('never asks about an invoice that does not exist (grounding)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, json: async () => ({ ask: true, question: 'You held invoice 42. Why that one?', eventId: '', kind: 'why' }) })),
+    );
+    setDeps({ ...getDeps(), ungroundedRefs: (text) => ungroundedInvoiceRefs(text, ['4471', '4472', '4473']) });
+    startCaptureWithoutAgent(deliver);
+    screenEvent('Invoice 4472: put on hold');
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(deliver).not.toHaveBeenCalled();
+    expect(askedEvents()).toHaveLength(0);
   });
 
   it('E: if the expert starts talking just before Helpy speaks, the question waits and is asked once at the next pause', async () => {

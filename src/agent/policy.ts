@@ -124,6 +124,13 @@ export function createQuestionPolicy(o: PolicyOpts) {
       note(`model declined (${res.reason ?? 'no reason'})`);
       return null;
     }
+    // Grounding: a question about an invoice that does not exist is never asked.
+    const ungrounded = deps.ungroundedRefs?.(res.question) ?? [];
+    if (ungrounded.length) {
+      lastEvaluated = newest;
+      note(`dropped, names unknown invoice ${ungrounded.join(', ')}: ${res.question}`);
+      return null;
+    }
     return { question: res.question, kind: res.kind ?? (force ? 'guardrail' : 'why'), eventId: res.eventId };
   }
 

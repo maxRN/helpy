@@ -11,6 +11,7 @@ import { erp } from '../erp/store'
 import { activity } from '../shared/activity'
 import { bus, emitEvent } from '../shared/bus'
 import { mascot, useMascot } from '../shared/mascot'
+import { ungroundedInvoiceRefs } from '../shared/grounding'
 import { screenSummary } from '../shared/screen'
 import { session } from '../shared/session'
 import type { AppEvent, Quote, WorkMap } from '../shared/types'
@@ -148,6 +149,7 @@ export function installVoiceBridge() {
     isSpeaking: () => useMascot.getState().state === 'speaking',
     language: () => session().language,
     screen: (opts) => screenSummary(opts),
+    ungroundedRefs: (text) => ungroundedInvoiceRefs(text),
     mascot: {
       setState: (s) => mascot.setState(s),
       bubble: (text) => mascot.bubble(text),

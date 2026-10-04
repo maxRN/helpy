@@ -1,3 +1,4 @@
+import { businessFacts, withoutBusinessTerms } from '../shared/grounding'
 import { analyzeScreenshot } from './ocr'
 import type { OcrResult } from './ocr-contract'
 import { detectPii } from './pii'
@@ -27,13 +28,16 @@ export async function redactScreenshot({ original, ocr }: { original: Blob; ocr:
   const { text, regions } = textPositions(ocr)
   const { items } = await detectPii(text)
   const detected = performance.now()
-  const spans: Span[] = items.map(({ start, end, label, original }) => {
+  const detectedSpans: Span[] = items.map(({ start, end, label, original }) => {
     if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end <= start || text.slice(start, end) !== original) {
       throw new Error('PII redaction returned invalid text offsets.')
     }
     if (!regions.some((region) => region.start < end && region.end > start)) throw new Error('PII text has no screenshot coordinates.')
     return { start, end, label }
   })
+  // Invoice numbers, cost centers, supplier and company names are not personal data. The model sometimes
+  // takes them for address parts; painting a synthetic value over them would change what the vision model reads.
+  const spans = withoutBusinessTerms(text, detectedSpans, businessFacts().terms)
   const edits = new Map<typeof regions[number], { start: number; end: number; text: string }[]>()
   let redactedText = text
   for (const span of [...spans].reverse()) {

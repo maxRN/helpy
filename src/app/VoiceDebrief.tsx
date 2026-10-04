@@ -7,6 +7,7 @@ import { erpSync } from '../erp/sync'
 import { mascot } from '../mascot'
 import { activity } from '../shared/activity'
 import { getEventLog } from '../shared/bus'
+import { scrubUngroundedInvoices, ungroundedInvoiceRefs } from '../shared/grounding'
 import { mascot as sharedMascot } from '../shared/mascot'
 import { session, useSession } from '../shared/session'
 import type { AppEvent, Gap, Quote, WorkMap } from '../shared/types'
@@ -145,6 +146,11 @@ async function debrief(convex: ConvexReactClient) {
     if (res.done || res.gaps.length === 0) break
     for (const gap of res.gaps) {
       if (asked >= MAX_QUESTIONS || run?.stopped) break
+      // Grounding: a question about an invoice that does not exist is never asked.
+      if (ungroundedInvoiceRefs(gap.question).length) {
+        console.warn('[helpy] skipped a debrief question about an unknown invoice:', gap.question)
+        continue
+      }
       setPhase('asking')
       mascot.bubble(null)
       mascot.setState('listening')
@@ -166,7 +172,7 @@ async function debrief(convex: ConvexReactClient) {
   let text = ''
   let confirmed = false
   for (let round = 0; round < MAX_TEACHBACK_ROUNDS && !run?.stopped; round++) {
-    text = (await post<{ text: string }>('/api/debrief/teachback', { workMap })).text
+    text = scrubUngroundedInvoices((await post<{ text: string }>('/api/debrief/teachback', { workMap })).text)
     setPhase('teachback')
     mascot.bubble('Here’s how I understood it. Tell me if something is wrong.')
     await waitForQuiet('Here’s how I understood it.')

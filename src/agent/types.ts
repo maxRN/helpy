@@ -87,6 +87,8 @@ export interface Deps {
   isSpeaking?(): boolean;
   /** Optional: the language Helpy speaks with the expert ('de' after they asked for German). */
   language?(): 'de' | 'en';
+  /** Optional: invoice numbers in `text` that do not exist in the app (never say those). */
+  ungroundedRefs?(text: string): string[];
   /** Optional: what is on the user's screen right now, for the agent's context (every mode). ages: false = stable text. */
   screen?(opts?: { ages?: boolean }): string;
   mascot: {

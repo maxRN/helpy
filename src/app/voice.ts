@@ -4,6 +4,7 @@ import { create } from 'zustand'
 import { toLogLines } from '../debrief/sessionLog'
 import { resumeAudio } from '../integration/audioUnlock'
 import { getEventLog } from '../shared/bus'
+import { ungroundedInvoiceRefs } from '../shared/grounding'
 import { screenSummary } from '../shared/screen'
 import { startListening, stopListening } from '../integration/listener'
 import { installVoiceBridge, resetVoiceClock } from '../integration/voiceBridge'
@@ -110,9 +111,13 @@ export async function answerIfForHelpy(text: string, mode: AgentMode): Promise<b
   const turn = (await res.json()) as { toHelpy: boolean; reply: string; language: 'de' | 'en' | 'keep' }
   if (turn.language !== 'keep') session().setLanguage(turn.language)
   if (!turn.toHelpy || !turn.reply) return false
-  mascot.bubble(turn.reply, { ttlMs: 9000 })
+  // Grounding: never name an invoice that does not exist; ask instead.
+  const unknown = ungroundedInvoiceRefs(turn.reply)
+  if (unknown.length) console.warn('[helpy] reply named an invoice that does not exist:', unknown.join(', '))
+  const reply = unknown.length ? (session().language === 'de' ? 'Welche Rechnung meinst du genau?' : 'Which invoice do you mean exactly?') : turn.reply
+  mascot.bubble(reply, { ttlMs: 9000 })
   // Resolve once Helpy starts answering, so no live question slips in between (see speech.replyPending).
-  await new Promise<void>((resolve) => void speak(turn.reply, { onStart: resolve }).finally(resolve))
+  await new Promise<void>((resolve) => void speak(reply, { onStart: resolve }).finally(resolve))
   return true
 }
 

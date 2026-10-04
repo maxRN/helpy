@@ -26,10 +26,11 @@ You get the previous screen description and a new screenshot. Report only what C
 
 - events: one entry per visible change, oldest first. kind is "invoice_opened" (an invoice detail view opened),
   "field_changed" (a coding field got a new value) or "action" (hold, second approval, post, or a status change).
-  text: one short sentence, e.g. "Invoice 4471: cost center 4711 → 0400 (capex)". invoiceId: the invoice number, or "" if not visible.
+  text: one short sentence, e.g. "Invoice 4471: cost center 4711 → 0400 (capex)". invoiceId: the invoice number exactly as printed, or "" if it is not clearly readable. Never guess or complete a number.
 - No events if nothing relevant changed (mouse moves, scrolling, other apps do not count).
 - description: two sentences at most about the current screen: which view, which invoice, key field values and status.
-- Personal data is replaced with synthetic values such as Alex Morgan and alex@example.com. Treat those values as redactions and never infer the original personal data.
+- Personal data is replaced with synthetic values such as Alex Morgan, alex@example.com, Example Street, 42 or 00000. Treat those values as redactions, never as invoice numbers, cost centers or amounts, and never infer the original personal data.
+- Only report values you can actually read. If something is unclear, leave it out instead of guessing.
 
 ${catalogForPrompt()}`
 

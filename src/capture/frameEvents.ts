@@ -4,6 +4,7 @@
 // waits (no backlog of obsolete screenshots, and no change is lost because a request was in flight).
 // Vision events that repeat an ERP click event (±3 s) are marked as confirmations, not sent twice.
 import { emitEvent, getEventLog } from '../shared/bus'
+import { businessFacts, scrubUngroundedInvoices } from '../shared/grounding'
 import { markScreenChanged, noteVisionScreen, resetScreen } from '../shared/screen'
 import { session } from '../shared/session'
 import type { AppEvent } from '../shared/types'
@@ -124,17 +125,22 @@ async function describe(frame: Frame): Promise<void> {
   if (!res.ok) throw new Error(`/api/frame ${res.status}`)
   const body = (await res.json()) as { description: string; events: { kind: AppEvent['kind']; invoiceId: string; text: string }[] }
   if (session().sessionId !== frame.sessionId) return
-  previousDescription = body.description
-  noteVisionScreen(body.description, frame.capturedAt)
+  // Only invoices that exist in the app: a misread or invented number is never passed on.
+  const known = businessFacts().invoiceIds
+  previousDescription = scrubUngroundedInvoices(body.description, known)
+  noteVisionScreen(previousDescription, frame.capturedAt)
   for (const ev of body.events) {
-    const dom = matchingDomEvent(getEventLog(), ev.kind, ev.invoiceId, frame.offsetMs)
+    const grounded = !ev.invoiceId || !known.length || known.includes(ev.invoiceId)
+    if (!grounded) console.warn('[frame] vision named an invoice that does not exist:', ev.invoiceId)
+    const invoiceId = grounded ? ev.invoiceId : ''
+    const dom = matchingDomEvent(getEventLog(), ev.kind, invoiceId, frame.offsetMs)
     emitEvent({
       source: 'vision',
       kind: ev.kind,
       t: frame.offsetMs,
-      invoiceId: ev.invoiceId || undefined,
-      text: ev.text,
-      meta: { ...(dom ? { confirms: dom.id } : {}), capturedAt: frame.capturedAt },
+      invoiceId: invoiceId || undefined,
+      text: scrubUngroundedInvoices(ev.text, known),
+      meta: { ...(dom ? { confirms: dom.id } : {}), capturedAt: frame.capturedAt, ...(grounded ? {} : { ungroundedInvoiceId: ev.invoiceId }) },
     })
   }
 }

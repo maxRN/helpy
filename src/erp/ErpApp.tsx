@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { installAudioUnlock } from '../integration/audioUnlock'
 import { installActivityTracker } from '../shared/activity'
+import { registerBusinessFacts } from '../shared/grounding'
 import { registry } from '../shared/registry'
 import { registerAppScreen } from '../shared/screen'
 import { useSession } from '../shared/session'
@@ -9,6 +10,7 @@ import { InvoiceDetail } from './InvoiceDetail'
 import { InvoiceInbox } from './InvoiceInbox'
 import { COMPANY_NAME } from './seed'
 import { installStepTracker, resetStepTracker } from './stepTracker'
+import { erpFacts } from './facts'
 import { describeErpScreen } from './screenSnapshot'
 import { erp, useErp } from './store'
 
@@ -57,7 +59,12 @@ export function ErpServices() {
       const { invoices, openId, blocked } = erp()
       return describeErpScreen({ invoices, openId, visible: onScreen, blockedBy: blocked?.violations.map((v) => v.guardrail.text) })
     })
-    return () => registerAppScreen(null)
+    // What exists in ProcureFlow: never redacted from screenshots, and the only invoices Helpy may name.
+    registerBusinessFacts(() => erpFacts(erp().invoices))
+    return () => {
+      registerAppScreen(null)
+      registerBusinessFacts(null)
+    }
   }, [])
   return <ConvexSync />
 }
