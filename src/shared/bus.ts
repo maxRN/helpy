@@ -1,4 +1,5 @@
 import mitt from 'mitt'
+import { isPersonText, redactText } from './privacy'
 import { session } from './session'
 import type { AppEvent } from './types'
 
@@ -17,6 +18,8 @@ export function emitEvent(partial: Omit<AppEvent, 'id' | 't'> & { t?: number }):
   const t0 = session().t0
   const event: AppEvent = {
     ...partial,
+    // Personal data in what people say or type never reaches the log, the database or a model.
+    ...(partial.text && isPersonText(partial) ? { text: redactText(partial.text) } : {}),
     id: `e${++counter}-${now.toString(36)}`,
     t: partial.t ?? (t0 === null ? 0 : now - t0),
   }
